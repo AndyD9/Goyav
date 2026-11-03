@@ -775,6 +775,14 @@ impl ProviderCredentials for ProviderCredentialService {
     }
 
     async fn mail_credentials_for(&self, account: &MailAccountConfig) -> Result<MailCredentials> {
+        // Gmail IMAP/SMTP use the Google token (mail.google.com scope)
+        // over XOAUTH2 instead of an app password.
+        if account.auth_method == "oauth-google" {
+            return Ok(MailCredentials {
+                secret: self.google_access_token(&account.id).await?,
+                use_xoauth2: true,
+            });
+        }
         if account.auth_method != "oauth-microsoft" {
             return Ok(MailCredentials {
                 secret: account.password.clone(),
@@ -1309,6 +1317,27 @@ mod tests {
 
         assert_eq!(credentials.secret, "keyring-secret");
         assert!(!credentials.use_xoauth2);
+    }
+
+    #[tokio::test]
+    async fn focused_google_mail_credentials_use_refreshed_token_over_xoauth2() {
+        let store = Arc::new(MemoryTokenStore::default());
+        store.store("mail-focused", &expired_tokens()).unwrap();
+        let service = ProviderCredentialService::new(
+            store,
+            Arc::new(FakeTokenEndpoint {
+                refreshed: refreshed_tokens(),
+                scopes: Mutex::new(Vec::new()),
+            }),
+        );
+
+        let credentials = service
+            .mail_credentials_for(&mail_account("oauth-google", ""))
+            .await
+            .unwrap();
+
+        assert_eq!(credentials.secret, "fresh-access");
+        assert!(credentials.use_xoauth2);
     }
 
     #[tokio::test]

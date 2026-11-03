@@ -62,8 +62,8 @@ The reviewer needs:
      with a Fastmail API token.
    - A Microsoft 365 account (OAuth), if the tenant permits or an
      administrator approves Chithi's delegated permissions.
-   - A Gmail account, if Google permits the OAuth consent flow. Gmail
-     mail additionally requires an app password; Calendar uses OAuth.
+   - A Gmail account, if Google permits the OAuth consent flow. Mail,
+     Calendar and Contacts all use the same OAuth sign-in.
 3. A development machine with these tools installed:
    - Rust stable toolchain (via [rustup](https://rustup.rs/)).
    - Node.js 20.19.x, or 22.12 or newer.
@@ -109,8 +109,8 @@ On first launch, choose **Skip and add an account later**, then open
   under Fastmail's **Privacy & Security → Manage API tokens** settings.
 - **Microsoft 365:** complete the Microsoft browser OAuth flow. Tenant
   policy can require administrator approval.
-- **Gmail:** enter a Gmail app password for mail and complete Google
-  browser OAuth for Calendar and Contacts. Google publisher-verification
+- **Gmail:** complete Google browser OAuth, which covers mail,
+  Calendar and Contacts. Google publisher-verification
   state can affect whether sign-in is permitted.
 
 **Expected result:** the calendar view in the sidebar shows the

@@ -834,6 +834,12 @@ export function oauthGetMsProfile(
   return invoke("oauth_get_ms_profile", { accountId });
 }
 
+export function oauthGetGoogleProfile(
+  accountId: string,
+): Promise<{ name: string; email: string }> {
+  return invoke("oauth_get_google_profile", { accountId });
+}
+
 export function searchCollectedContacts(
   query: string,
 ): Promise<Types.CollectedContact[]> {

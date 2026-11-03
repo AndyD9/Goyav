@@ -186,6 +186,40 @@ pub struct MsProfile {
     pub login_email: String,
 }
 
+/// Fetch the user's profile (display name + email) from Google's userinfo.
+#[tauri::command]
+pub async fn oauth_get_google_profile(
+    state: State<'_, AppState>,
+    account_id: String,
+) -> Result<GoogleProfile> {
+    let token = state
+        .providers
+        .credentials()
+        .google_access_token(&account_id)
+        .await?;
+    let profile = state
+        .providers
+        .transports
+        .google_http
+        .get("https://openidconnect.googleapis.com/v1/userinfo")
+        .bearer_auth(token)
+        .send()
+        .await
+        .and_then(reqwest::Response::error_for_status)
+        .map_err(|e| Error::Other(format!("Google profile request failed: {e}")))?
+        .json::<GoogleProfile>()
+        .await
+        .map_err(|e| Error::Other(format!("Google profile response invalid: {e}")))?;
+    Ok(profile)
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct GoogleProfile {
+    #[serde(default)]
+    pub name: String,
+    pub email: String,
+}
+
 /// Start the JMAP OIDC device flow.
 #[tauri::command]
 pub async fn jmap_oidc_start(

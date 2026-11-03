@@ -36,9 +36,10 @@ troubleshooting](la-suite-visio.md#troubleshooting).
 
 ## Gmail mail or calendar works, but not both
 
-Gmail mail and Google Calendar/Contacts use separate credentials. Mail
-uses a Google app password over IMAP/SMTP. Calendar and contacts use the
-browser OAuth sign-in. Edit the account and check both steps.
+Gmail mail, calendar and contacts share one Google sign-in, but each
+needs its own permission on Google's consent screen. Edit the account,
+choose **Sign in with Google** again and accept every requested
+permission.
 
 ## Microsoft says administrator approval is required
 

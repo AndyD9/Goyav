@@ -1,0 +1,7 @@
+# Copy to config.toml (git-ignored) and fill in your own Google Cloud
+# OAuth client of type "Desktop app". Cargo passes these to the build,
+# and oauth.rs uses them instead of the upstream Chithi client.
+# Restart `pnpm tauri dev` after editing.
+[env]
+CHITHI_GOOGLE_CLIENT_ID = "xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
+CHITHI_GOOGLE_CLIENT_SECRET = "GOCSPX-xxxxxxxxxxxxxxxxxxxxxxxxxxxx"

@@ -6,6 +6,8 @@ dist/
 
 # Rust
 src-tauri/target/
+# Local build-time secrets (see src-tauri/.cargo/config.toml.example)
+src-tauri/.cargo/config.toml
 
 # IDE
 .vscode/

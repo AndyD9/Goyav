@@ -46,7 +46,7 @@ const emit = defineEmits<{ signIn: []; reauth: [] }>();
       v-if="provider === 'google'"
       class="field-hint"
       data-testid="google-oauth-hint"
-    >Sign in to sync Google Calendar and Contacts. On Google's consent screen, select all requested permissions. IMAP/SMTP uses the app password above.</span>
+    >Sign in to sync Gmail, Google Calendar and Contacts. On Google's consent screen, select all requested permissions.</span>
     <span v-else class="field-hint">Sign in to access mail, calendar, and contacts via Microsoft Graph API.</span>
   </div>
 </template>

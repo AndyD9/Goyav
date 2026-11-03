@@ -18,7 +18,7 @@ security.
 
 ### Accounts
 - [x] Multi-account support with per-account folders
-- [x] Gmail with app password (auto-filled IMAP/SMTP hosts)
+- [x] Gmail over Google OAuth (IMAP/SMTP XOAUTH2, auto-filled hosts and address)
 - [x] Generic IMAP/SMTP with manual host/port configuration (TLS and STARTTLS)
 - [x] JMAP with auto-discovery (`.well-known/jmap`) or manual URL
 - [x] Google OAuth2 with PKCE for calendar and contacts access (no client secret)

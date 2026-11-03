@@ -533,6 +533,15 @@ async function saveAccount() {
         );
       }
     }
+    // Gmail mail, calendar and contacts all ride on the Google sign-in;
+    // without it IMAP would log in with empty credentials.
+    if (
+      accountType.value === "gmail"
+      && !editingAccountId.value
+      && !form.value.password.startsWith("oauth2:")
+    ) {
+      throw new Error("Sign in with Google before saving the account.");
+    }
     // Default username to email if not set (Gmail and most IMAP servers use email as username)
     if (!form.value.username.trim()) {
       form.value.username = form.value.email;
@@ -636,6 +645,18 @@ async function startGoogleOAuth() {
 
     // Wait for callback (this blocks until user completes in browser)
     await api.oauthComplete("google", port, tempAccountId);
+
+    // Auto-fill name and address; the address is also the XOAUTH2 login
+    try {
+      const profile = await api.oauthGetGoogleProfile(tempAccountId);
+      if (profile.name && !form.value.display_name) form.value.display_name = profile.name;
+      if (profile.email) {
+        form.value.email = profile.email;
+        form.value.username = profile.email;
+      }
+    } catch (e) {
+      console.error("Failed to fetch Google profile:", e);
+    }
 
     // Store the temp ID so saveAccount can use it
     form.value.password = `oauth2:${tempAccountId}`;
@@ -1007,11 +1028,11 @@ async function signInWithVisio() {
         Login name for the {{ accountType === 'carddav' ? 'CardDAV' : 'CalDAV' }} server.
       </span>
     </div>
-    <div v-if="accountType !== 'o365' && !(accountType === 'jmap' && form.jmap_auth_method === 'oidc') && !isMeetTab" class="form-group">
-      <label>{{ accountType === 'fastmail' ? 'API token' : (accountType === 'gmail' ? 'App Password' : 'Password') }}</label>
+    <div v-if="accountType !== 'o365' && accountType !== 'gmail' && !(accountType === 'jmap' && form.jmap_auth_method === 'oidc') && !isMeetTab" class="form-group">
+      <label>{{ accountType === 'fastmail' ? 'API token' : 'Password' }}</label>
       <PasswordInput
         v-model="form.password"
-        :placeholder="editingAccountId ? (accountType === 'fastmail' ? 'Leave empty to keep current token' : 'Leave empty to keep current password') : (accountType === 'fastmail' ? 'Paste your Fastmail API token' : (accountType === 'gmail' ? 'Gmail app password (for IMAP/SMTP)' : '••••••••'))"
+        :placeholder="editingAccountId ? (accountType === 'fastmail' ? 'Leave empty to keep current token' : 'Leave empty to keep current password') : (accountType === 'fastmail' ? 'Paste your Fastmail API token' : '••••••••')"
       />
       <span v-if="accountType === 'fastmail'" class="field-hint">Generate at Fastmail Settings → Privacy &amp; Security → Manage API tokens. Stored in your OS keyring.</span>
       <span v-else class="field-hint">Passwords are stored securely in your OS keyring</span>
@@ -1080,7 +1101,7 @@ async function signInWithVisio() {
     />
 
     <template v-if="accountType === 'gmail' && !editingAccountId">
-      <div class="info-box">Gmail uses IMAP (imap.gmail.com:993) and SMTP (smtp.gmail.com:587). Sign in with Google above to authorize access.</div>
+      <div class="info-box">Gmail uses IMAP (imap.gmail.com:993) and SMTP (smtp.gmail.com:587) with your Google sign-in, along with Calendar and Contacts. Sign in with Google above.</div>
     </template>
 
     <div v-if="!isMeetTab" class="form-group">

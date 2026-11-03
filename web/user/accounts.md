@@ -12,20 +12,15 @@ builds.
 
 ## Gmail
 
-Gmail setup has two independent credential steps:
+Choose **Sign in with Google** in the account form and accept every
+requested permission, then save the account. The single browser OAuth
+sign-in covers IMAP mail at `imap.gmail.com:993` and SMTP submission at
+`smtp.gmail.com:587` (both over XOAUTH2), Google Calendar and Contacts.
+Your Gmail address and name are filled in from your Google profile; no
+app password is needed.
 
-1. Enter your Gmail address and a Google **app password**. Chithi uses
-   it for IMAP mail at `imap.gmail.com:993` and SMTP submission at
-   `smtp.gmail.com:587`.
-2. Choose **Sign in with Google** in the account form. Browser OAuth
-   grants access to Google Calendar and Contacts.
-3. Complete both steps and save the account.
-
-An ordinary Google password is not an app password. Google generally
-requires two-step verification before an app password can be created,
-and managed organizations can disable app passwords. If only one of the
-two credential steps succeeds, mail and Google Calendar/Contacts can
-have different working states.
+Accounts created before Gmail mail moved to OAuth lack the mail
+permission: edit the account and choose **Sign in with Google** again.
 
 ## Microsoft 365
 

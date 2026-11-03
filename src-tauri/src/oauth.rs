@@ -62,13 +62,30 @@ pub struct OAuthProvider {
 
 pub const GOOGLE: OAuthProvider = OAuthProvider {
     name: "google",
-    client_id: "96507156934-tb0mgeovj7dhpaabjc4ipm5lukhmebmg.apps.googleusercontent.com",
-    client_secret: "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", // Desktop app — not truly confidential per Google docs
+    // Build-time override via `CHITHI_GOOGLE_CLIENT_ID` and
+    // `CHITHI_GOOGLE_CLIENT_SECRET`. The baked-in default is the
+    // upstream Chithi registration; forks register their own
+    // "Desktop app" client in Google Cloud and pass it through the
+    // env at build time (e.g. `src-tauri/.cargo/config.toml`).
+    client_id: match option_env!("CHITHI_GOOGLE_CLIENT_ID") {
+        Some(s) => s,
+        None => "96507156934-tb0mgeovj7dhpaabjc4ipm5lukhmebmg.apps.googleusercontent.com",
+    },
+    // Desktop app — not truly confidential per Google docs
+    client_secret: match option_env!("CHITHI_GOOGLE_CLIENT_SECRET") {
+        Some(s) => s,
+        None => "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",
+    },
     auth_url: "https://accounts.google.com/o/oauth2/v2/auth",
     token_url: "https://oauth2.googleapis.com/token",
+    // `mail.google.com` covers IMAP/SMTP over XOAUTH2; `email`/`profile`
+    // let the account form fill in the address after sign-in.
     scopes: &[
+        "https://mail.google.com/",
         "https://www.googleapis.com/auth/calendar",
         "https://www.googleapis.com/auth/contacts",
+        "email",
+        "profile",
     ],
     token_exchange_scope: None,
     use_pkce: true,
@@ -1905,6 +1922,16 @@ mod tests {
         assert!(GOOGLE.use_pkce);
         // Google Desktop app clients have a secret (not truly confidential)
         assert!(!GOOGLE.client_secret.is_empty());
+    }
+
+    #[test]
+    fn test_google_client_follows_build_env() {
+        if let Some(id) = option_env!("CHITHI_GOOGLE_CLIENT_ID") {
+            assert_eq!(GOOGLE.client_id, id);
+        }
+        if let Some(secret) = option_env!("CHITHI_GOOGLE_CLIENT_SECRET") {
+            assert_eq!(GOOGLE.client_secret, secret);
+        }
     }
 
     #[test]
