@@ -245,7 +245,7 @@ function eventBlockStyle(seg: EventSegment): Record<string, string> {
     left: `calc(${leftPct}% + 1px)`,
     width: `calc(${widthPct}% - 2px)`,
     zIndex: "2",
-    backgroundColor: getEventColor(seg.event),
+    "--ev": getEventColor(seg.event),
   };
 
   Object.assign(style, getEventStyle(seg.event));
@@ -275,7 +275,7 @@ function getEventStyle(event: { my_status: string | null }): Record<string, stri
     return { opacity: "0.4", textDecoration: "line-through" };
   }
   if (event.my_status === "tentative") {
-    return { borderLeft: "3px dashed rgba(255,255,255,0.6)" };
+    return { borderLeftStyle: "dashed" };
   }
   return {};
 }
@@ -466,7 +466,7 @@ onUnmounted(() => {
           :key="event.id"
           class="all-day-event"
           :data-testid="`cal-event-${event.id}`"
-          :style="{ backgroundColor: getEventColor(event), ...getEventStyle(event) }"
+          :style="{ '--ev': getEventColor(event), ...getEventStyle(event) }"
           @click="emit('eventClick', event.id)"
         >
           {{ event.title || '(No title)' }}
@@ -534,7 +534,7 @@ onUnmounted(() => {
         >
           <span class="event-title">{{ seg.event.title || '(No title)' }}</span>
           <span class="event-time">
-            {{ formatInTimezone(seg.segStart.toISOString(), uiStore.displayTimezone, { hour: 'numeric', minute: '2-digit', hour12: uiStore.hour12 }) }}
+            {{ formatInTimezone(seg.segStart.toISOString(), uiStore.displayTimezone, { weekday: undefined, month: undefined, day: undefined, year: undefined, hour: 'numeric', minute: '2-digit', hour12: uiStore.hour12 }) }}
           </span>
         </div>
       </div>
@@ -580,14 +580,18 @@ onUnmounted(() => {
 }
 
 .all-day-cell.today {
-  background: rgba(66, 133, 244, 0.04);
+  background: color-mix(in srgb, var(--color-accent) 5%, transparent);
 }
 
+/* Events: tinted surface + solid left bar in the calendar colour
+   (--ev, set inline), matching the accent cards used in mail. */
 .all-day-event {
   font-size: 11px;
-  color: white;
+  background: color-mix(in srgb, var(--ev) 20%, var(--color-bg));
+  border-left: 3px solid var(--ev);
+  color: color-mix(in srgb, var(--ev) 40%, var(--color-text));
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -631,8 +635,8 @@ onUnmounted(() => {
 }
 
 .day-num {
-  font-size: 22px;
-  font-weight: 300;
+  font-size: 20px;
+  font-weight: 400;
   color: var(--color-text-secondary);
   line-height: 1;
 }
@@ -640,9 +644,9 @@ onUnmounted(() => {
 .day-num.today-badge {
   background: var(--color-accent);
   color: white;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -677,7 +681,7 @@ onUnmounted(() => {
 }
 
 .hour-label.current-hour {
-  color: #ea4335;
+  color: var(--color-accent);
   font-weight: 700;
 }
 
@@ -712,11 +716,11 @@ onUnmounted(() => {
 }
 
 .day-column.today {
-  background-color: rgba(66, 133, 244, 0.03);
+  background-color: color-mix(in srgb, var(--color-accent) 4%, var(--color-bg));
 }
 
 .day-column.today:hover {
-  background-color: rgba(66, 133, 244, 0.07);
+  background-color: color-mix(in srgb, var(--color-accent) 8%, var(--color-bg));
 }
 
 .day-column.weekend {
@@ -748,7 +752,7 @@ onUnmounted(() => {
   position: absolute;
   left: 0;
   right: 0;
-  background: rgba(66, 133, 244, 0.15);
+  background: var(--color-accent-light);
   outline: 1px dashed var(--color-accent);
   outline-offset: -1px;
   pointer-events: none;
@@ -758,19 +762,21 @@ onUnmounted(() => {
 .event-block {
   position: absolute;
   font-size: 11px;
-  color: #fff;
+  background: color-mix(in srgb, var(--ev) 20%, var(--color-bg));
+  border-left: 3px solid var(--ev);
+  color: color-mix(in srgb, var(--ev) 40%, var(--color-text));
   padding: 3px 6px;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   overflow: hidden;
   line-height: 1.3;
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.15);
   transition: box-shadow 0.15s, transform 0.1s;
   box-sizing: border-box;
 }
 
 .event-block:hover {
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.15), 0 2px 6px rgba(30,20,10,0.18);
+  background: color-mix(in srgb, var(--ev) 28%, var(--color-bg));
+  box-shadow: var(--shadow-sm);
   transform: translateY(-1px);
 }
 
@@ -781,7 +787,7 @@ onUnmounted(() => {
 
 .event-time {
   font-size: 10px;
-  opacity: 0.85;
+  opacity: 0.75;
   font-weight: 500;
 }
 

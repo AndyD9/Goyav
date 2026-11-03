@@ -5,12 +5,14 @@ import * as api from "@/lib/tauri";
 
 const MESSAGE_VIEW_MODES = ["right", "bottom", "tab", "none"] as const;
 const CONTACT_VIEW_MODES = ["right", "bottom"] as const;
+const MESSAGE_LIST_LAYOUTS = ["cards", "table"] as const;
 const THEMES = ["system", "light", "dark"] as const;
 const TIME_FORMATS = ["auto", "12", "24"] as const;
 const VALID_WEEK_STARTS = [0, 1, 6];
 
 export type MessageViewMode = (typeof MESSAGE_VIEW_MODES)[number];
 export type ContactViewMode = (typeof CONTACT_VIEW_MODES)[number];
+export type MessageListLayout = (typeof MESSAGE_LIST_LAYOUTS)[number];
 export type Theme = (typeof THEMES)[number];
 export type TimeFormat = (typeof TIME_FORMATS)[number];
 type ComposeKind = "new" | "reply" | "reply-all" | "forward";
@@ -36,6 +38,10 @@ export const useUiStore = defineStore("ui", () => {
   );
   const contactViewMode = ref<ContactViewMode>(
     storedOption("chithi-contact-view-mode", CONTACT_VIEW_MODES, "right"),
+  );
+  // Desktop message rows: two-line cards with avatar, or the dense table.
+  const messageListLayout = ref<MessageListLayout>(
+    storedOption("chithi-message-list-layout", MESSAGE_LIST_LAYOUTS, "cards"),
   );
   const theme = ref<Theme>(
     storedOption("chithi-theme", THEMES, "system"),
@@ -115,6 +121,11 @@ export const useUiStore = defineStore("ui", () => {
   function setContactViewMode(mode: ContactViewMode) {
     contactViewMode.value = mode;
     localStorage.setItem("chithi-contact-view-mode", mode);
+  }
+
+  function setMessageListLayout(layout: MessageListLayout) {
+    messageListLayout.value = layout;
+    localStorage.setItem("chithi-message-list-layout", layout);
   }
 
   function setTheme(nextTheme: Theme) {
@@ -252,12 +263,14 @@ export const useUiStore = defineStore("ui", () => {
     readerVisible,
     messageViewMode,
     contactViewMode,
+    messageListLayout,
     theme,
     resolvedTheme,
     showReader,
     hideReader,
     setMessageViewMode,
     setContactViewMode,
+    setMessageListLayout,
     setTheme,
     setThreading,
     initTheme,

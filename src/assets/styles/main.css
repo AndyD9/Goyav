@@ -31,54 +31,61 @@
   src: url("../fonts/LiberationMono-Regular.ttf") format("truetype");
 }
 
-/* === Light theme (warm-amber redesign — see PATCHES.md §1) === */
+/* === Goyav theme ===
+   Floating-panel layout: views sit as rounded panels on a darker
+   "ground" (rail, menu bar, status bar), one teal accent shared by
+   mail and calendar. Light and dark define the same token set. */
 :root,
 [data-theme="light"] {
-  --color-bg: #faf7f2;              /* warm off-white ground */
-  --color-bg-secondary: #f4efe6;    /* sidebar ground, amber-tint */
-  --color-bg-tertiary: #ede6d8;     /* rail, slightly deeper */
-  --color-bg-hover: #fdf4e7;        /* row hover */
-  --color-bg-active: #fbe7cf;       /* selected row / active folder */
-  --color-text: #1f1914;            /* near-black warm */
-  --color-text-secondary: #5b4e3d;
-  --color-text-muted: #8a7a64;
-  --color-border: #d9cdb5;          /* assertive warm border */
-  --color-accent: #b54708;          /* deep amber */
-  --color-accent-hover: #9a3c06;
-  --color-accent-light: #fbe7cf;
-  --color-unread: #1f1914;
-  --color-danger: #fb2c36;
-  --color-danger-text: #e7000b;
-  --color-success: #00a63e;
-  --color-warning: #e17100;
-  --color-warning-text: #9a3c06;
+  --color-ground: #e9ecea;          /* behind panels: rail, menu, status */
+  --color-bg: #ffffff;              /* panel surface */
+  --color-bg-secondary: #fafbfa;    /* panel headers, side panels */
+  --color-bg-tertiary: #f0f2f1;     /* inputs, segmented controls */
+  --color-bg-hover: #f2f5f4;
+  --color-bg-active: #e3f3ef;       /* selected row / active folder */
+  --color-text: #151917;
+  --color-text-secondary: #4b5450;
+  --color-text-muted: #7f8984;
+  --color-border: #e2e6e4;
+  --color-accent: #14806f;          /* Goyav teal */
+  --color-accent-hover: #0f6c5e;
+  --color-accent-light: #dff2ee;
+  --color-unread: #0d110f;
+  --color-danger: #e5484d;
+  --color-danger-text: #ce2c31;
+  --color-success: #2f9e5b;
+  --color-warning: #e2861c;
+  --color-warning-text: #9a5b0b;
   --color-email-body-bg: #ffffff;
   --color-email-body-text: #1a1a1a;
-  --color-status-dot: #6ca04f;      /* sync green */
+  --color-status-dot: #2f9e5b;
   --color-reader-bg: #ffffff;
 
-  --color-border-heavy: #a6927a;
-  --color-divider:      #e9e0cd;
-  --color-star-flag:    #c2410c;
-  --color-sync-green:   #6ca04f;
+  --color-border-heavy: #b9c1bd;
+  --color-divider:      #eceeed;
+  --color-star-flag:    #e2861c;
+  --color-sync-green:   #2f9e5b;
 
   /* Per-account palette — picked deterministically by UID hash
    * (NOT by provider type, since users can have N accounts on the
-   * same provider). 7 warm-palette entries, rotated by index. */
-  --acct-1: #b54708; --acct-1-soft: #fef3e2;  /* amber */
-  --acct-2: #6d8a3a; --acct-2-soft: #eef2dc;  /* olive */
-  --acct-3: #b8404d; --acct-3-soft: #fbe0e3;  /* rose */
-  --acct-4: #8a6a3a; --acct-4-soft: #f3ead7;  /* clay */
-  --acct-5: #2c7a7b; --acct-5-soft: #d8eeee;  /* teal */
-  --acct-6: #7a3a7a; --acct-6-soft: #f0e0f0;  /* plum */
-  --acct-7: #3a5a8a; --acct-7-soft: #dbe5f0;  /* indigo */
+   * same provider). 7 entries, rotated by index. */
+  --acct-1: #14806f; --acct-1-soft: #dff2ee;  /* teal */
+  --acct-2: #6f5fe0; --acct-2-soft: #ebe8fc;  /* violet */
+  --acct-3: #d04a66; --acct-3-soft: #fbe4ea;  /* rose */
+  --acct-4: #c7751f; --acct-4-soft: #fbeedd;  /* amber */
+  --acct-5: #2f6fdb; --acct-5-soft: #e1ebfb;  /* blue */
+  --acct-6: #4d8f3a; --acct-6-soft: #e4f1df;  /* green */
+  --acct-7: #6b7682; --acct-7-soft: #e8ebee;  /* slate */
 
   /* Calendar-only accent (e.g. seeded "Holidays" calendar) */
-  --acct-holidays: #8a6a3a;
+  --acct-holidays: #c7751f;
 
-  --radius: 6px;
-  --shadow-sm:  0 1px 2px rgba(30,20,10,0.06);
-  --shadow-mdl: 0 16px 48px rgba(30,20,10,0.24);
+  --radius: 8px;
+  --radius-panel: 12px;
+  --panel-gap: 8px;
+  --shadow-sm:  0 1px 2px rgba(16, 24, 20, 0.06);
+  --shadow-mdl: 0 16px 48px rgba(16, 24, 20, 0.22);
+  --shadow-panel: 0 1px 2px rgba(16, 24, 20, 0.05);
 
   --sidebar-width: 56px;
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
@@ -94,36 +101,68 @@
 
   --radius-sheet: 16px;
   --radius-card-mobile: 12px;
-  --shadow-fab: 0 8px 20px rgba(181, 71, 8, 0.35),
-    0 2px 4px rgba(181, 71, 8, 0.25);
-  --shadow-sheet: 0 -12px 30px rgba(30, 20, 10, 0.18);
+  --shadow-fab: 0 8px 20px rgba(20, 128, 111, 0.32),
+    0 2px 4px rgba(20, 128, 111, 0.22);
+  --shadow-sheet: 0 -12px 30px rgba(16, 24, 20, 0.18);
 }
 
-/* === Dark theme (from Figma design tokens) === */
 [data-theme="dark"] {
-  --color-bg: #0a0a0a;
-  --color-bg-secondary: #171717;
+  --color-ground: #121212;
+  --color-bg: #1b1b1b;
+  --color-bg-secondary: #1e1e1e;
   --color-bg-tertiary: #262626;
-  --color-bg-hover: #262626;
-  --color-bg-active: #262626;
-  --color-text: #e5e5e5;
-  --color-text-secondary: #a1a1a1;
-  --color-text-muted: #737373;
-  --color-border: #262626;
-  --color-accent: #155dfc;
-  --color-accent-hover: #2b7fff;
-  --color-accent-light: rgba(21, 93, 252, 0.12);
-  --color-unread: #f5f5f5;
-  --color-danger: #fb2c36;
-  --color-danger-text: #e7000b;
-  --color-success: #00a63e;
-  --color-warning: #e17100;
-  --color-warning-text: #f59e0b;
-  --color-email-body-bg: #171717;
+  --color-bg-hover: #242424;
+  --color-bg-active: #16332e;
+  --color-text: #ececec;
+  --color-text-secondary: #a8a8a8;
+  --color-text-muted: #727272;
+  --color-border: #2a2a2a;
+  --color-accent: #1f9180;
+  --color-accent-hover: #27a592;
+  --color-accent-light: rgba(31, 145, 128, 0.16);
+  --color-unread: #f7f7f7;
+  --color-danger: #e5484d;
+  --color-danger-text: #ff6369;
+  --color-success: #3fb26e;
+  --color-warning: #e2861c;
+  --color-warning-text: #f1a10d;
+  --color-email-body-bg: #1b1b1b;
   --color-email-body-text: #e5e5e5;
-  --color-status-dot: #00c950;
-  --color-reader-bg: #171717;
+  --color-status-dot: #3fb26e;
+  --color-reader-bg: #1b1b1b;
+
+  --color-border-heavy: #3d3d3d;
+  --color-divider:      #242424;
+  --color-star-flag:    #f1a10d;
+  --color-sync-green:   #3fb26e;
+
+  --acct-1: #2bb39e; --acct-1-soft: rgba(43, 179, 158, 0.16);
+  --acct-2: #8b7ef0; --acct-2-soft: rgba(139, 126, 240, 0.16);
+  --acct-3: #e8708a; --acct-3-soft: rgba(232, 112, 138, 0.16);
+  --acct-4: #e79a45; --acct-4-soft: rgba(231, 154, 69, 0.16);
+  --acct-5: #5b93ee; --acct-5-soft: rgba(91, 147, 238, 0.16);
+  --acct-6: #78b865; --acct-6-soft: rgba(120, 184, 101, 0.16);
+  --acct-7: #95a0ab; --acct-7-soft: rgba(149, 160, 171, 0.16);
+  --acct-holidays: #e79a45;
+
+  --shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-mdl: 0 16px 48px rgba(0, 0, 0, 0.55);
+  --shadow-panel: none;
+  --shadow-fab: 0 8px 20px rgba(0, 0, 0, 0.45);
+  --shadow-sheet: 0 -12px 30px rgba(0, 0, 0, 0.5);
   color-scheme: dark;
+}
+
+/* A rounded surface sitting on the ground. Views wrap each column
+   (navigation, list, reader, calendar grid) in one of these. */
+.app-panel {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
 }
 
 * {
@@ -136,7 +175,7 @@ body {
   font-family: var(--font-sans);
   font-size: 14px;
   color: var(--color-text);
-  background-color: var(--color-bg);
+  background-color: var(--color-ground);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
@@ -207,6 +246,196 @@ select {
   position: sticky;
   top: 0;
   z-index: 1;
+}
+
+/* === Message list: card rows ===
+   Shared by MessageListItem and ThreadRow in the "cards" layout.
+   The avatar turns into a checkbox on hover or while several rows
+   are selected (.multi-select on the list). */
+.mail-card {
+  display: flex;
+  gap: 12px;
+  padding: 10px 14px 10px 12px;
+  border-bottom: 1px solid var(--color-divider);
+  cursor: default;
+  user-select: none;
+  transition: background 0.1s;
+}
+
+.mail-card:hover {
+  background: var(--color-bg-hover);
+}
+
+.mail-card.active,
+.mail-card.selected,
+.mail-card.selected:hover {
+  background: var(--color-bg-active);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+.mail-card-lead {
+  position: relative;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+}
+
+.mail-card-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.mail-card-check {
+  display: none;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--color-accent);
+}
+
+.mail-card-lead:hover .mail-card-avatar,
+.multi-select .mail-card .mail-card-avatar {
+  visibility: hidden;
+}
+
+.mail-card-lead:hover .mail-card-check,
+.multi-select .mail-card .mail-card-check {
+  display: block;
+}
+
+.mail-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mail-card-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mail-card-unread {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.mail-card-from {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mail-card.unread .mail-card-from {
+  font-weight: 700;
+}
+
+.mail-card-count {
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-tertiary);
+}
+
+.mail-card-count:hover,
+.mail-card-count.expanded {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.mail-card-date {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.mail-card.unread .mail-card-date {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.mail-card-line.col-subject {
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
+}
+
+.mail-card-line.col-subject.bold {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.mail-card-reply {
+  flex-shrink: 0;
+  color: var(--color-accent);
+}
+
+.mail-card-subject {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mail-card-clip {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  color: var(--color-text-muted);
+}
+
+.mail-card-star {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  visibility: hidden;
+}
+
+.mail-card:hover .mail-card-star,
+.mail-card-star.starred {
+  visibility: visible;
+}
+
+.mail-card-star.starred {
+  color: var(--color-star-flag);
+}
+
+.mail-card-snippet {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* === Mobile overrides (<= 720px) === */

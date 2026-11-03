@@ -736,14 +736,9 @@ async function doDeleteFolder() {
 
 .folder-svg { flex-shrink: 0; }
 
-.folder-svg--inbox    { color: #b54708; }
-.folder-svg--drafts   { color: #9f5a00; }
-.folder-svg--sent     { color: #7a5c0f; }
-.folder-svg--spam     { color: #a03912; }
-.folder-svg--trash    { color: #8a3a24; }
-.folder-svg--archive  { color: #6b4226; }
-.folder-svg--outbox   { color: #b8404d; }
-.folder-svg--folder   { color: #8a8079; }
+/* Monochrome icons; the active row tints its icon with the accent. */
+.folder-svg { color: var(--color-text-muted); }
+.folder-item.active .folder-svg { color: var(--color-accent); }
 
 .folder-name {
   flex: 1;

@@ -548,7 +548,7 @@ async function handleDelete() {
 
 .detail-error {
   padding: 8px 16px;
-  background: rgba(243, 139, 168, 0.1);
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
   color: var(--color-danger);
   font-size: 12px;
 }
@@ -657,7 +657,7 @@ async function handleDelete() {
   font-size: 12px;
 }
 
-.btn-edit:hover { background: rgba(137, 180, 250, 0.1); }
+.btn-edit:hover { background: var(--color-accent-light); }
 
 .btn-save {
   padding: 6px 16px;
@@ -685,5 +685,5 @@ async function handleDelete() {
   font-size: 12px;
 }
 
-.btn-danger:hover { background: rgba(243, 139, 168, 0.1); }
+.btn-danger:hover { background: color-mix(in srgb, var(--color-danger) 10%, transparent); }
 </style>

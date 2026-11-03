@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import logoUrl from "@/assets/goyav-logo.png";
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
@@ -40,7 +41,10 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
     >
       <div class="about-modal" role="dialog" aria-modal="true" aria-labelledby="about-title">
         <header class="about-header">
-          <h2 id="about-title">Chithi</h2>
+          <h2 id="about-title" class="about-title">
+            <img :src="logoUrl" alt="" class="about-logo" />
+            Chithi
+          </h2>
           <button
             class="about-close"
             data-testid="about-close"
@@ -110,6 +114,17 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+}
+
+.about-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.about-logo {
+  width: 32px;
+  height: 32px;
 }
 
 .about-close {

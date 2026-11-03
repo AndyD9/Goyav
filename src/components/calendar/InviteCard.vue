@@ -62,7 +62,7 @@ async function respond(response: string) {
   <div class="invite-card">
     <div class="invite-top">
       <div class="invite-icon-box">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#155dfc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="4" width="18" height="18" rx="2" />
           <path d="M16 2v4M8 2v4M3 10h18" />
         </svg>
@@ -155,7 +155,8 @@ async function respond(response: string) {
   width: 40px;
   height: 40px;
   border-radius: 4px;
-  background: rgba(21, 93, 252, 0.2);
+  background: var(--color-accent-light);
+  color: var(--color-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -185,7 +186,7 @@ async function respond(response: string) {
 .invite-description {
   font-size: 14px;
   line-height: 20px;
-  color: #404040;
+  color: var(--color-text-secondary);
   padding-left: 52px;
 }
 
@@ -238,19 +239,19 @@ async function respond(response: string) {
 }
 
 .btn-accept {
-  background: #00a63e;
+  background: var(--color-accent);
   color: white;
 }
 
 .btn-maybe {
-  background: #e17100;
+  background: var(--color-warning);
   color: white;
 }
 
 .btn-decline {
   background: transparent;
-  border: 0.8px solid #fb2c36;
-  color: #e7000b;
+  border: 0.8px solid var(--color-danger);
+  color: var(--color-danger-text);
 }
 
 .btn-accept:disabled,

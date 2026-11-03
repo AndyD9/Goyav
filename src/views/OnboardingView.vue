@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from "vue-router";
+import logoUrl from "@/assets/goyav-logo.png";
 
 const router = useRouter();
 
@@ -63,7 +64,7 @@ function skipForNow() {
 <template>
   <div class="onboarding-view">
     <div class="brand-pill">
-      <span class="brand-tile">C</span>
+      <img :src="logoUrl" alt="" class="brand-tile" />
       <span class="brand-name">Chithi</span>
     </div>
     <h1 class="hero">Your mail, your calendar, on your device.</h1>
@@ -138,14 +139,6 @@ function skipForNow() {
 .brand-tile {
   width: 24px;
   height: 24px;
-  border-radius: 6px;
-  background: var(--color-accent);
-  color: #fff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 14px;
 }
 
 .brand-name {

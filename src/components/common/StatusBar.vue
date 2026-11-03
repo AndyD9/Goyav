@@ -141,8 +141,7 @@ async function syncAll() {
 <style scoped>
 .status-bar {
   height: 32px;
-  background: var(--color-bg);
-  border-top: 1px solid var(--color-border);
+  background: var(--color-ground);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -193,7 +192,7 @@ async function syncAll() {
   height: 6px;
   border-radius: 50%;
   background: var(--color-sync-green);
-  box-shadow: 0 0 0 2px rgba(108, 160, 79, 0.2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-sync-green) 22%, transparent);
   flex-shrink: 0;
 }
 

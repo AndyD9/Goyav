@@ -119,7 +119,7 @@ interface PositionedEvent {
 
 function calendarColor(event: CalendarEvent): string {
   return (
-    calendarStore.calendars.find((c) => c.id === event.calendar_id)?.color ?? "#b54708"
+    calendarStore.calendars.find((c) => c.id === event.calendar_id)?.color ?? "#4285f4"
   );
 }
 
@@ -710,10 +710,10 @@ onMounted(() => {
 
   <!-- Desktop -->
   <div v-else class="calendar-view">
-    <div class="calendar-sidebar-pane">
+    <div class="calendar-sidebar-pane app-panel">
       <CalendarSidebar @calendar-drop="onCalendarDrop" />
     </div>
-    <div class="calendar-main">
+    <div class="calendar-main app-panel">
       <!-- Toolbar -->
       <div class="calendar-toolbar">
         <div class="toolbar-left">
@@ -812,14 +812,15 @@ onMounted(() => {
 <style scoped>
 .calendar-view {
   display: flex;
+  gap: var(--panel-gap);
   height: 100%;
   width: 100%;
+  padding-bottom: var(--panel-gap);
 }
 
 .calendar-sidebar-pane {
-  width: 200px;
+  width: 220px;
   flex-shrink: 0;
-  border-right: 0.8px solid var(--color-border);
   background: var(--color-bg-secondary);
 }
 
@@ -861,8 +862,8 @@ onMounted(() => {
   padding: 6px 16px;
   background: var(--color-accent);
   color: white;
-  border-radius: 999px;
-  font-size: 14px;
+  border-radius: 18px;
+  font-size: 13px;
   font-weight: 500;
   transition: background 0.12s;
 }
@@ -873,21 +874,22 @@ onMounted(() => {
 
 .btn-today {
   padding: 5px 14px;
-  background: var(--color-bg-tertiary);
-  border-radius: 4px;
-  font-size: 14px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 13px;
   font-weight: 500;
   color: var(--color-text);
 }
 
 .btn-today:hover {
-  background: var(--color-border);
+  background: var(--color-bg-hover);
 }
 
 .btn-nav {
   width: 32px;
   height: 32px;
-  border-radius: 4px;
+  border-radius: var(--radius);
   color: var(--color-text-muted);
   display: flex;
   align-items: center;
@@ -901,7 +903,7 @@ onMounted(() => {
 }
 
 .current-date {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 500;
   color: var(--color-text);
   margin-left: 4px;
@@ -910,26 +912,28 @@ onMounted(() => {
 .view-toggle {
   display: flex;
   background: var(--color-bg-tertiary);
-  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
   padding: 2px;
 }
 
 .view-btn {
   padding: 3px 14px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  color: var(--color-text);
-  border-radius: 999px;
+  color: var(--color-text-secondary);
+  border-radius: 6px;
   transition: all 0.12s;
 }
 
 .view-btn:hover {
-  background: var(--color-border);
+  color: var(--color-text);
 }
 
 .view-btn.active {
-  background: var(--color-accent);
-  color: white;
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm);
 }
 
 .calendar-content {
@@ -984,7 +988,7 @@ onMounted(() => {
   gap: 4px;
   padding: 6px 12px;
   background: var(--color-bg);
-  border-bottom: 1px solid var(--color-divider, #e9e0cd);
+  border-bottom: 1px solid var(--color-divider);
 }
 
 .seg-btn {
@@ -1021,7 +1025,7 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 4px;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--color-divider, #e9e0cd);
+  border-bottom: 1px solid var(--color-divider);
   background: var(--color-bg-secondary);
 }
 
@@ -1143,7 +1147,7 @@ onMounted(() => {
   justify-content: space-between;
   padding: 8px 12px;
   background: var(--color-bg);
-  border-bottom: 1px solid var(--color-divider, #e9e0cd);
+  border-bottom: 1px solid var(--color-divider);
 }
 
 .week-day {
@@ -1200,7 +1204,7 @@ onMounted(() => {
 }
 
 .week-day-column.today {
-  background: #fdf4e7;
+  background: color-mix(in srgb, var(--color-accent) 5%, var(--color-bg));
 }
 
 .week-event {
@@ -1245,7 +1249,7 @@ onMounted(() => {
   font-weight: 600;
   text-align: center;
   color: var(--color-text-muted);
-  border-bottom: 1px solid var(--color-divider, #e9e0cd);
+  border-bottom: 1px solid var(--color-divider);
 }
 
 .month-grid {
@@ -1306,7 +1310,7 @@ onMounted(() => {
 .month-today {
   flex-shrink: 0;
   padding: 10px 14px 16px;
-  border-top: 1px solid var(--color-divider, #e9e0cd);
+  border-top: 1px solid var(--color-divider);
 }
 
 .month-today-label {

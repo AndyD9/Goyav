@@ -33,6 +33,9 @@ const acct = computed(() =>
   acctColor(props.accountId ?? accountsStore.activeAccountId ?? ""),
 );
 
+// Card rows colour the avatar per sender, reusing the account palette.
+const senderColor = computed(() => acctColor(props.message.from_email));
+
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
@@ -126,9 +129,68 @@ function onPointerUp() {
 </script>
 
 <template>
-  <!-- Desktop: unchanged 5-column row -->
+  <!-- Desktop, cards layout: avatar + sender / subject / preview -->
   <div
-    v-if="resolvedMode === 'desktop'"
+    v-if="resolvedMode === 'desktop' && uiStore.messageListLayout === 'cards'"
+    class="mail-card"
+    :class="{ active, selected, unread: isUnread(message.flags) }"
+    @dblclick="emit('open')"
+  >
+    <div class="mail-card-lead" data-testid="msg-check-cell" @click.stop="emit('toggle')">
+      <span
+        class="mail-card-avatar"
+        :style="{ background: senderColor.soft, color: senderColor.fill }"
+      >{{ senderInitial(message) }}</span>
+      <input
+        type="checkbox"
+        class="mail-card-check"
+        :checked="selected"
+        @click.stop="emit('toggle')"
+      />
+    </div>
+    <div class="mail-card-body">
+      <div class="mail-card-line">
+        <span
+          v-if="isUnread(message.flags)"
+          class="mail-card-unread"
+          data-testid="msg-unread-dot"
+        />
+        <span class="mail-card-from" data-testid="msg-from">
+          {{ message.from_name || message.from_email }}
+        </span>
+        <span class="mail-card-date" data-testid="msg-date">{{ formatDate(message.date) }}</span>
+      </div>
+      <div class="mail-card-line col-subject" :class="{ bold: isUnread(message.flags) }">
+        <span v-if="isReply(message.subject, message.flags)" class="mail-card-reply">&hookleftarrow;</span>
+        <span class="mail-card-subject" data-testid="msg-subject">{{ message.subject || "(no subject)" }}</span>
+        <svg
+          v-if="message.has_attachments"
+          class="mail-card-clip"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-label="Has attachments"
+        >
+          <path d="M21.44 11.05l-9.19 9.19a6 6 0 1 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+        </svg>
+        <span
+          class="mail-card-star"
+          :class="{ starred: isStarred(message.flags) }"
+          data-testid="msg-star"
+          :data-starred="isStarred(message.flags)"
+          @click.stop="emit('toggleStar')"
+        >{{ isStarred(message.flags) ? '\u2605' : '\u2606' }}</span>
+      </div>
+      <div v-if="message.snippet" class="mail-card-snippet">{{ message.snippet }}</div>
+    </div>
+  </div>
+
+  <!-- Desktop, table layout: 5-column row -->
+  <div
+    v-else-if="resolvedMode === 'desktop'"
     class="message-row"
     :class="{ active, selected, unread: isUnread(message.flags) }"
     @dblclick="emit('open')"
@@ -567,11 +629,11 @@ function onPointerUp() {
 
 .swipe-archive {
   left: 0;
-  background: #8b9d62;
+  background: var(--color-success);
 }
 
 .swipe-delete {
   right: 0;
-  background: #c36b4b;
+  background: var(--color-danger);
 }
 </style>

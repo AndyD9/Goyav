@@ -13,6 +13,12 @@ const route = useRoute();
 const isStandaloneWindow = computed(
   () => route.name === "compose" || route.name === "reader",
 );
+
+// Mail and Calendar split themselves into several panels; every other
+// view is shown inside a single panel.
+const viewHasOwnPanels = computed(
+  () => route.name === "mail" || route.name === "calendar",
+);
 </script>
 
 <template>
@@ -25,7 +31,7 @@ const isStandaloneWindow = computed(
     <Sidebar />
     <div class="app-main">
       <MenuBar />
-      <main class="app-content">
+      <main class="app-content" :class="{ 'app-panel': !viewHasOwnPanels }">
         <router-view v-slot="{ Component }">
           <!-- Only CalendarView is kept alive — its WeekView subtree is
                the heavy one (see #72) and cold-mount is ~400ms. Other
@@ -62,6 +68,11 @@ const isStandaloneWindow = computed(
 .app-content {
   flex: 1;
   overflow: hidden;
+  margin-right: var(--panel-gap);
+}
+
+.app-content.app-panel {
+  margin-bottom: var(--panel-gap);
 }
 
 .standalone-shell {

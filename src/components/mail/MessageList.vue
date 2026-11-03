@@ -24,7 +24,7 @@ const emit = defineEmits<{
   openMessage: [messageId: string];
 }>();
 
-withDefaults(
+const props = withDefaults(
   defineProps<{ mode?: "desktop" | "mobile" }>(),
   { mode: "desktop" },
 );
@@ -155,7 +155,7 @@ function onDragMouseDown(event: MouseEvent, messageId: string) {
       // Keep the non-interactive badge away from drop targets.
       const ghost = document.createElement("div");
       ghost.textContent = `${dragMessageIds.value.length} message(s)`;
-      ghost.style.cssText = "position:fixed;z-index:99999;padding:4px 10px;background:#3366cc;color:white;border-radius:4px;font-size:12px;font-weight:500;white-space:nowrap;pointer-events:none;";
+      ghost.style.cssText = "position:fixed;z-index:99999;padding:4px 10px;background:var(--color-accent);color:white;border-radius:4px;font-size:12px;font-weight:500;white-space:nowrap;pointer-events:none;";
       document.body.appendChild(ghost);
       dragGhost.value = ghost;
       document.body.classList.add("dragging-messages");
@@ -207,6 +207,16 @@ function onThreadOpen(thread: { thread_id: string; message_ids: string[] }) {
   }
   emit("openMessage", thread.message_ids[0]);
 }
+
+const cardsLayout = computed(
+  () => props.mode === "desktop" && uiStore.messageListLayout === "cards",
+);
+
+const SORT_OPTIONS: { column: SortColumn; label: string }[] = [
+  { column: "date", label: "Date" },
+  { column: "from", label: "Sender" },
+  { column: "subject", label: "Subject" },
+];
 
 function sortIndicator(column: SortColumn): string {
   if (messagesStore.sortColumn !== column) return "";
@@ -526,7 +536,7 @@ function resolveFolderName(path: string): string {
 <template>
   <div class="message-list" data-testid="message-list" @click.left="closeContextMenu">
     <QuickFilterBar v-if="messagesStore.quickFilterVisible" />
-    <div class="column-headers">
+    <div class="column-headers" :class="{ cards: cardsLayout }">
       <div
         class="col col-check"
         data-testid="select-all-cell"
@@ -540,6 +550,17 @@ function resolveFolderName(path: string): string {
           @click.stop="toggleSelectAll"
         />
       </div>
+      <template v-if="cardsLayout">
+        <span class="sort-label">Sort by</span>
+        <button
+          v-for="option in SORT_OPTIONS"
+          :key="option.column"
+          class="sort-chip sortable"
+          :class="{ active: messagesStore.sortColumn === option.column }"
+          @click="messagesStore.setSort(option.column)"
+        >{{ option.label }}{{ sortIndicator(option.column) }}</button>
+      </template>
+      <template v-else>
       <div class="col col-icons">
         <span class="col-icon" title="Read/Star">&#x2606;</span>
       </div>
@@ -564,6 +585,7 @@ function resolveFolderName(path: string): string {
       >
         Date{{ sortIndicator('date') }}
       </button>
+      </template>
     </div>
     <div
       v-if="messagesStore.loading && messagesStore.messages.length === 0 && messagesStore.threads.length === 0"
@@ -578,6 +600,7 @@ function resolveFolderName(path: string): string {
       v-else-if="uiStore.threadingEnabled"
       ref="scrollContainer"
       class="message-items"
+      :class="{ 'multi-select': messagesStore.selectedIds.length > 1 }"
       @scroll="onScroll"
     >
       <template v-for="thread in messagesStore.threads" :key="thread.thread_id">
@@ -624,7 +647,13 @@ function resolveFolderName(path: string): string {
       <div v-if="messagesStore.loadingMore" class="loading-more">Loading more...</div>
     </div>
 
-    <div v-else ref="scrollContainer" class="message-items" @scroll="onScroll">
+    <div
+      v-else
+      ref="scrollContainer"
+      class="message-items"
+      :class="{ 'multi-select': messagesStore.selectedIds.length > 1 }"
+      @scroll="onScroll"
+    >
       <div
         v-for="msg in messagesStore.messages"
         :key="msg.id"
@@ -853,6 +882,38 @@ function resolveFolderName(path: string): string {
   width: 110px;
   flex-shrink: 0;
   text-align: left;
+}
+
+.column-headers.cards {
+  height: 34px;
+  gap: 2px;
+  padding-right: 8px;
+  background: var(--color-bg);
+}
+
+/* Centre the select-all box over the row avatars (12px pad + 34px). */
+.column-headers.cards .col-check {
+  width: 58px;
+}
+
+.sort-label {
+  margin-right: 4px;
+  color: var(--color-text-muted);
+}
+
+.sort-chip {
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.sort-chip:hover {
+  background: var(--color-bg-hover);
+}
+
+.sort-chip.active {
+  background: var(--color-accent-light);
 }
 
 .sortable {

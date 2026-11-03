@@ -2,6 +2,7 @@
 import { useRouter, useRoute } from "vue-router";
 import { useInvitesStore } from "@/stores/invites";
 import { useUiStore } from "@/stores/ui";
+import logoUrl from "@/assets/goyav-logo.png";
 
 const router = useRouter();
 const route = useRoute();
@@ -23,6 +24,7 @@ const topItems = [
 <template>
   <nav class="sidebar">
     <div class="sidebar-top">
+      <img :src="logoUrl" alt="Goyav" class="sidebar-logo" />
       <button
         v-for="item in topItems"
         :key="item.name"
@@ -84,8 +86,7 @@ const topItems = [
 <style scoped>
 .sidebar {
   width: var(--sidebar-width);
-  background: var(--color-bg-tertiary);
-  border-right: 0.8px solid var(--color-border);
+  background: var(--color-ground);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -99,6 +100,12 @@ const topItems = [
   align-items: center;
   padding: 12px 0;
   gap: 12px;
+}
+
+.sidebar-logo {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 4px;
 }
 
 .sidebar-item {
@@ -135,7 +142,8 @@ const topItems = [
 }
 
 .sidebar-item.active {
-  color: #fff;
-  background: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-bg);
+  box-shadow: inset 0 0 0 1px var(--color-border);
 }
 </style>

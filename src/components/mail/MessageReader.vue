@@ -238,8 +238,8 @@ function iframeSrcdoc(): string {
     line-height: 1.5;
     word-wrap: break-word;
     overflow-wrap: break-word;
-    color: ${uiStore.theme === "dark" ? "#e5e5e5" : "#1a1a1a"};
-    background: ${uiStore.theme === "dark" ? "#171717" : "#ffffff"};
+    color: ${uiStore.resolvedTheme === "dark" ? "#e5e5e5" : "#1a1a1a"};
+    background: ${uiStore.resolvedTheme === "dark" ? "#1b1b1b" : "#ffffff"};
   }
   body * {
     max-width: 100% !important;
@@ -251,7 +251,7 @@ function iframeSrcdoc(): string {
     word-break: break-word;
   }
   pre { white-space: pre-wrap; }
-  a { color: #1a73e8; cursor: pointer; }
+  a { color: ${uiStore.resolvedTheme === "dark" ? "#27a592" : "#14806f"}; cursor: pointer; }
 </style>
 </head>
 <body>${html}<script>

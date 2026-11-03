@@ -179,9 +179,17 @@ describe("Regression: selection", () => {
     const store = setupStores();
     store.messages = [makeSummary("msg1")];
 
-    const wrapper = mount(MessageList, { global: { plugins: [router] } });
-    const row = wrapper.find(".message-row");
-    expect(row.element.tagName).toBe("DIV");
+    const ui = useUiStore();
+    for (const [layout, rowSelector] of [
+      ["cards", ".mail-card"],
+      ["table", ".message-row"],
+    ] as const) {
+      ui.messageListLayout = layout;
+      const wrapper = mount(MessageList, { global: { plugins: [router] } });
+      const row = wrapper.find(rowSelector);
+      expect(row.element.tagName).toBe("DIV");
+      wrapper.unmount();
+    }
   });
 
   it("BUG: thread move/delete must include all message IDs, not just the first", () => {

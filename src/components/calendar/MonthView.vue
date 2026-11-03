@@ -207,7 +207,7 @@ function onCellDrop(day: Date) {
               class="month-event"
               :class="{ dragging: isCalendarDragging && dragCalendarEvent?.id === event.id }"
               :data-testid="`cal-event-${event.id}`"
-              :style="{ backgroundColor: getEventColor(event) }"
+              :style="{ '--ev': getEventColor(event) }"
               @click.stop="emit('eventClick', event.id)"
               @mousedown="onEventMouseDown($event, event)"
             >
@@ -242,7 +242,7 @@ function onCellDrop(day: Date) {
 .month-day-name {
   flex: 1;
   text-align: center;
-  padding: 6px 0;
+  padding: 10px 0;
   font-size: 11px;
   font-weight: 600;
   color: var(--color-text-muted);
@@ -281,7 +281,7 @@ function onCellDrop(day: Date) {
 .month-cell.today .day-number {
   background: var(--color-accent);
   color: white;
-  border-radius: 50%;
+  border-radius: 7px;
   width: 24px;
   height: 24px;
   display: inline-flex;
@@ -294,7 +294,7 @@ function onCellDrop(day: Date) {
 }
 
 .month-cell.drag-over {
-  background: rgba(66, 133, 244, 0.15);
+  background: var(--color-accent-light);
   outline: 1px dashed var(--color-accent);
   outline-offset: -1px;
 }
@@ -312,10 +312,12 @@ function onCellDrop(day: Date) {
 }
 
 .month-event {
-  font-size: 10px;
-  color: white;
-  padding: 1px 4px;
-  border-radius: 2px;
+  font-size: 11px;
+  background: color-mix(in srgb, var(--ev) 20%, var(--color-bg));
+  border-left: 3px solid var(--ev);
+  color: color-mix(in srgb, var(--ev) 40%, var(--color-text));
+  padding: 1px 5px;
+  border-radius: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

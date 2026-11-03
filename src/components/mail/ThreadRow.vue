@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { ThreadSummary } from "@/lib/types";
 import { useUiStore } from "@/stores/ui";
+import { acctColor } from "@/lib/account-colors";
 
 const props = defineProps<{
   thread: ThreadSummary;
@@ -17,6 +19,13 @@ defineEmits<{
 }>();
 
 const uiStore = useUiStore();
+
+const senderColor = computed(() => acctColor(props.thread.from_email));
+
+function senderInitial(): string {
+  const src = (props.thread.from_name ?? props.thread.from_email ?? "?").trim();
+  return src.charAt(0).toUpperCase() || "?";
+}
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -53,7 +62,73 @@ function isReply(): boolean {
 </script>
 
 <template>
+  <!-- Cards layout: avatar + sender / subject / preview. The message
+       count badge doubles as the expand toggle. -->
   <div
+    v-if="uiStore.messageListLayout === 'cards'"
+    class="mail-card"
+    :class="{ active, selected, unread: hasUnread() }"
+    @dblclick="$emit('open')"
+  >
+    <div class="mail-card-lead" data-testid="thread-check-cell" @click.stop="$emit('toggleSelect')">
+      <span
+        class="mail-card-avatar"
+        :style="{ background: senderColor.soft, color: senderColor.fill }"
+      >{{ senderInitial() }}</span>
+      <input
+        type="checkbox"
+        class="mail-card-check"
+        :checked="selected"
+        @click.stop="$emit('toggleSelect')"
+      />
+    </div>
+    <div class="mail-card-body">
+      <div class="mail-card-line">
+        <span v-if="hasUnread()" class="mail-card-unread" data-testid="msg-unread-dot" />
+        <span class="mail-card-from" data-testid="msg-from">
+          {{ thread.from_name || thread.from_email }}
+        </span>
+        <button
+          v-if="thread.message_count > 1"
+          type="button"
+          class="mail-card-count"
+          :class="{ expanded }"
+          :aria-label="`${expanded ? 'Collapse' : 'Expand'} thread of ${thread.message_count} messages`"
+          :aria-expanded="expanded"
+          @click.stop="$emit('toggle')"
+        >{{ thread.message_count }}</button>
+        <span class="mail-card-date" data-testid="msg-date">{{ formatDate(thread.last_date) }}</span>
+      </div>
+      <div class="mail-card-line col-subject" :class="{ bold: hasUnread() && !expanded }">
+        <span v-if="isReply()" class="mail-card-reply">&hookleftarrow;</span>
+        <span class="mail-card-subject" data-testid="msg-subject">{{ thread.subject || "(no subject)" }}</span>
+        <svg
+          v-if="thread.has_attachments"
+          class="mail-card-clip"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-label="Has attachments"
+        >
+          <path d="M21.44 11.05l-9.19 9.19a6 6 0 1 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+        </svg>
+        <span
+          class="mail-card-star"
+          :class="{ starred: isStarred() }"
+          data-testid="msg-star"
+          :data-starred="isStarred()"
+          @click.stop="$emit('toggleStar')"
+        >{{ isStarred() ? '\u2605' : '\u2606' }}</span>
+      </div>
+      <div v-if="thread.snippet" class="mail-card-snippet">{{ thread.snippet }}</div>
+    </div>
+  </div>
+
+  <div
+    v-else
     class="thread-row"
     :class="{ active, selected, unread: hasUnread() }"
     @dblclick="$emit('open')"

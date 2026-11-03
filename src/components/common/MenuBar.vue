@@ -2,7 +2,12 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { invoke } from "@tauri-apps/api/core";
-import { useUiStore, type ContactViewMode, type MessageViewMode } from "@/stores/ui";
+import {
+  useUiStore,
+  type ContactViewMode,
+  type MessageListLayout,
+  type MessageViewMode,
+} from "@/stores/ui";
 import {
   dispatch,
   formatShortcut,
@@ -51,6 +56,11 @@ function toggleThreading() {
 
 function setContactViewMode(mode: ContactViewMode) {
   uiStore.setContactViewMode(mode);
+  closeMenus();
+}
+
+function setListLayout(layout: MessageListLayout) {
+  uiStore.setMessageListLayout(layout);
   closeMenus();
 }
 
@@ -150,6 +160,26 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
 
           <div class="menu-separator"></div>
 
+          <div class="menu-group-heading">Message List</div>
+          <button
+            class="menu-action menu-action-radio"
+            data-testid="menu-view-list-cards"
+            @click="setListLayout('cards')"
+          >
+            <span class="action-prefix">{{ uiStore.messageListLayout === 'cards' ? '\u25CF' : '\u00A0' }}</span>
+            <span class="action-label">Cards</span>
+          </button>
+          <button
+            class="menu-action menu-action-radio"
+            data-testid="menu-view-list-table"
+            @click="setListLayout('table')"
+          >
+            <span class="action-prefix">{{ uiStore.messageListLayout === 'table' ? '\u25CF' : '\u00A0' }}</span>
+            <span class="action-label">Compact Table</span>
+          </button>
+
+          <div class="menu-separator"></div>
+
           <button class="menu-action" data-testid="menu-view-threaded" @click="toggleThreading">
             <span class="action-prefix">{{ uiStore.threadingEnabled ? '\u2713' : '\u00A0' }}</span>
             <span class="action-label">Threaded View</span>
@@ -198,8 +228,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
   display: flex;
   align-items: center;
   height: 32px;
-  background: var(--color-bg);
-  border-bottom: 1px solid var(--color-border);
+  background: var(--color-ground);
   padding: 0 8px;
   font-size: 12px;
   flex-shrink: 0;
@@ -228,10 +257,10 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
   min-width: 240px;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: var(--radius);
   padding: 4px 0;
   z-index: 1000;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-mdl);
 }
 
 .menu-action {

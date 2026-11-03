@@ -73,6 +73,10 @@ function onMobileOpenMessage(messageId: string) {
 const showRightReader = computed(() =>
   uiStore.messageViewMode === "right" && uiStore.readerVisible,
 );
+// Right mode gives the list and the reader a panel each.
+const splitReaderPanels = computed(
+  () => !isOutboxFolder.value && uiStore.messageViewMode === "right",
+);
 
 // Bottom mode: reader pane stacked below the list (single message)
 const showBottomReader = computed(() =>
@@ -398,18 +402,18 @@ onUnmounted(() => {
   <div v-else class="mail-view">
     <div class="mail-panes">
       <!-- Folder pane -->
-      <div class="folder-pane" :style="{ width: uiStore.folderPaneWidth + 'px' }">
+      <div class="folder-pane app-panel" :style="{ width: uiStore.folderPaneWidth + 'px' }">
         <FolderTree />
       </div>
       <div class="resize-handle" @mousedown="startResize('folder', $event)"></div>
 
-      <!-- Main pane (#150). Toolbar with Compose lives here so the
-           "Compose" button sits above the message list, mirroring how
-           Calendar's "+ Event" sits above the calendar grid. The
-           "MAILBOXES" header inside the folder tree is the visual
-           partner on the left. -->
-      <div class="mail-main">
-        <Toolbar />
+      <!-- Main pane (#150). Toolbar with Compose sits above the
+           message list, mirroring how Calendar's "+ Event" sits above
+           the calendar grid. With a side reader, list and reader are
+           separate panels and the toolbar heads the list panel;
+           otherwise the whole pane is one panel. -->
+      <div class="mail-main" :class="{ 'app-panel': !splitReaderPanels }">
+        <Toolbar v-if="!splitReaderPanels" />
         <div class="mail-content">
 
       <!-- Outbox view replaces the message list when the synthetic
@@ -420,10 +424,11 @@ onUnmounted(() => {
       <!-- Right mode: message list + reader side by side -->
       <template v-if="!isOutboxFolder && uiStore.messageViewMode === 'right'">
         <div
-          class="message-list-pane"
+          class="message-list-pane app-panel"
           :style="{ width: showRightReader ? uiStore.messageListWidth + 'px' : undefined }"
           :class="{ expanded: !showRightReader }"
         >
+          <Toolbar />
           <MessageList @open-message="onOpenMessage" />
         </div>
         <div
@@ -431,7 +436,7 @@ onUnmounted(() => {
           class="resize-handle"
           @mousedown="startResize('list', $event)"
         ></div>
-        <div v-if="showRightReader" class="reader-pane">
+        <div v-if="showRightReader" class="reader-pane app-panel">
           <MessageReader @close="uiStore.hideReader()" />
         </div>
       </template>
@@ -527,6 +532,7 @@ onUnmounted(() => {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  padding-bottom: var(--panel-gap);
 }
 
 /* Right side of the folder pane. Stacks the toolbar (with Compose)
@@ -564,20 +570,42 @@ onUnmounted(() => {
   width: auto !important;
 }
 
+.message-list-pane.app-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.message-list-pane.app-panel > :last-child {
+  flex: 1;
+  min-height: 0;
+}
+
 .reader-pane {
   flex: 1;
   min-width: 200px;
 }
 
+/* The gap between panels doubles as the resize grip. */
 .resize-handle {
-  width: 4px;
+  position: relative;
+  width: var(--panel-gap);
   cursor: col-resize;
-  background: transparent;
   flex-shrink: 0;
+}
+
+.resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: calc(50% - 1px);
+  width: 2px;
+  border-radius: 1px;
+  background: transparent;
   transition: background 0.15s;
 }
 
-.resize-handle:hover {
+.resize-handle:hover::after {
   background: var(--color-accent);
 }
 

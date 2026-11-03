@@ -69,11 +69,15 @@ function setupStores() {
   return store;
 }
 
-describe("MessageList click handling", () => {
+describe.each([
+  ["cards", ".mail-card"],
+  ["table", ".message-row"],
+] as const)("MessageList click handling (%s layout)", (layout, rowSelector) => {
   let router: any;
 
   beforeEach(() => {
     setActivePinia(createPinia());
+    useUiStore().messageListLayout = layout;
     router = createRouter({
       history: createWebHistory(),
       routes: [{ path: "/", component: { template: "<div />" } }],
@@ -83,7 +87,7 @@ describe("MessageList click handling", () => {
   it("renders message rows", () => {
     setupStores();
     const wrapper = mount(MessageList, { global: { plugins: [router] } });
-    expect(wrapper.findAll(".message-row").length).toBe(4);
+    expect(wrapper.findAll(rowSelector).length).toBe(4);
   });
 
   it("click selects one message", async () => {
@@ -153,7 +157,7 @@ describe("MessageList click handling", () => {
 
     await wrapper.vm.$nextTick();
 
-    const rows = wrapper.findAll(".message-row");
+    const rows = wrapper.findAll(rowSelector);
     expect(rows[0].classes()).toContain("selected");
     expect(rows[1].classes()).not.toContain("selected");
     expect(rows[2].classes()).toContain("selected");
@@ -162,7 +166,7 @@ describe("MessageList click handling", () => {
   it("message rows are divs not buttons", () => {
     setupStores();
     const wrapper = mount(MessageList, { global: { plugins: [router] } });
-    const row = wrapper.find(".message-row");
+    const row = wrapper.find(rowSelector);
     expect(row.element.tagName).toBe("DIV");
   });
 
@@ -174,13 +178,15 @@ describe("MessageList click handling", () => {
     });
 
     // Right-click first row to open the context menu (single-selection).
-    const rows = wrapper.findAll(".message-row");
+    const rows = wrapper.findAll(rowSelector);
     await rows[0].trigger("contextmenu");
     await wrapper.vm.$nextTick();
 
     // The menu is rendered via `<Teleport to="body">` so it lives outside the
     // component's mount root — query the document directly.
     const api = await import("@/lib/tauri");
+    // The module mock is shared by both layout runs.
+    (api.saveMessageAsEml as any).mockClear();
     const saveBtn = document.querySelector<HTMLElement>('[data-testid="ctx-save-eml"]');
     expect(saveBtn).not.toBeNull();
     saveBtn!.click();

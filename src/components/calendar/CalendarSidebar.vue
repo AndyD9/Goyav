@@ -453,7 +453,7 @@ async function unsubscribeThisCalendar() {
 }
 
 .calendar-item.drag-over {
-  background: rgba(66, 133, 244, 0.12);
+  background: var(--color-accent-light);
   border-radius: 4px;
   outline: 1px dashed var(--color-accent);
   outline-offset: -1px;
@@ -631,7 +631,7 @@ async function unsubscribeThisCalendar() {
 .rename-error {
   margin: 8px 0 0;
   font-size: 12px;
-  color: #dc2626;
+  color: var(--color-danger-text);
 }
 
 .rename-footer {
