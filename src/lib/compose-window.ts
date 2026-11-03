@@ -45,7 +45,7 @@ export function openComposeWindow(params: ComposeParams = {}) {
   const titleSuffix = params.subject || "(no subject)";
   const composeWindow = new WebviewWindow(label, {
     url,
-    title: `Write ${titleSuffix} - Chithi`,
+    title: `Write ${titleSuffix} - Goyav`,
     width: 1024,
     height: 700,
     center: true,

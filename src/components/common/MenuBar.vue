@@ -214,7 +214,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
       <div v-if="openMenu === 'help'" class="menu-dropdown" @click.stop data-testid="menu-help-dropdown">
         <button class="menu-action" data-testid="menu-help-about" @click="openAbout">
           <span class="action-prefix">&#160;</span>
-          <span class="action-label">About Chithi&hellip;</span>
+          <span class="action-label">About Goyav&hellip;</span>
         </button>
       </div>
     </div>

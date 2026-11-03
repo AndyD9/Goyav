@@ -238,7 +238,7 @@ function notifyNewMail(accountId: string, count: number) {
     ? `1 new message in ${accountName}`
     : `${count} new messages in ${accountName}`;
 
-  sendNotification({ title: "Chithi", body });
+  sendNotification({ title: "Goyav", body });
 }
 
 // Periodic sync every 2 minutes

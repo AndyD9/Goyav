@@ -65,11 +65,11 @@ function skipForNow() {
   <div class="onboarding-view">
     <div class="brand-pill">
       <img :src="logoUrl" alt="" class="brand-tile" />
-      <span class="brand-name">Chithi</span>
+      <span class="brand-name">Goyav</span>
     </div>
     <h1 class="hero">Your mail, your calendar, on your device.</h1>
     <p class="lede">
-      Pick a provider to sign in. Chithi stores everything locally — nothing
+      Pick a provider to sign in. Goyav stores everything locally — nothing
       leaves your machine unless you send it.
     </p>
 

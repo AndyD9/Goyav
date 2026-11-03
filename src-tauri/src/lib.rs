@@ -244,7 +244,7 @@ pub fn run() {
 fn resolve_data_dir(
     app: &tauri::AppHandle,
 ) -> std::result::Result<std::path::PathBuf, Box<dyn std::error::Error>> {
-    // Desktop: keep the previous `~/.local/share/chithi` layout.
+    // Desktop: `<data_local_dir>/goyav` (fork of Chithi; kept apart from its `chithi` dir).
     // Mobile: use the sandboxed app-data dir from Tauri's path resolver — only
     // that location is writable inside the app sandbox on Android/iOS.
     #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -258,6 +258,6 @@ fn resolve_data_dir(
             let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
             std::path::PathBuf::from(home).join(".local").join("share")
         });
-        Ok(base.join("chithi"))
+        Ok(base.join("goyav"))
     }
 }

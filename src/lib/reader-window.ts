@@ -15,7 +15,7 @@ export function openReaderWindow(accountId: string, messageId: string, subject?:
 
   const win = new WebviewWindow(label, {
     url,
-    title: `${titleSuffix} - Chithi`,
+    title: `${titleSuffix} - Goyav`,
     width: 900,
     height: 700,
     center: true,

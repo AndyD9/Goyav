@@ -46,7 +46,7 @@ describe("openComposeWindow", () => {
     const [label, options] = mockWebviewWindow.mock.calls[0];
     expect(label).toMatch(/^compose-\d+$/);
     expect(options.url).toBe("/compose");
-    expect(options.title).toBe("Write (no subject) - Chithi");
+    expect(options.title).toBe("Write (no subject) - Goyav");
     expect(options.width).toBe(1024);
     expect(options.height).toBe(700);
     expect(options.center).toBe(true);
@@ -113,7 +113,7 @@ describe("openComposeWindow", () => {
     openComposeWindow({ subject: "Re: Hello" });
 
     const [, options] = mockWebviewWindow.mock.calls[0];
-    expect(options.title).toBe("Write Re: Hello - Chithi");
+    expect(options.title).toBe("Write Re: Hello - Goyav");
   });
 
   it("should handle forward with no to/cc", () => {

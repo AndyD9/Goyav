@@ -53,7 +53,7 @@ import MonthView from "@/components/calendar/MonthView.vue";
 import CalendarSidebar from "@/components/calendar/CalendarSidebar.vue";
 import CalendarView from "@/views/CalendarView.vue";
 
-const recurringReason = "Editing, deleting, or moving recurring events is not supported in Chithi.";
+const recurringReason = "Editing, deleting, or moving recurring events is not supported in Goyav.";
 const unknownReason = "Recurrence information is unavailable. Refresh this event before editing.";
 
 function event(patch: Partial<CalendarEvent> = {}): CalendarEvent {

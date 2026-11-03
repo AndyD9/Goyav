@@ -3,7 +3,7 @@ use serde::Serialize;
 /// Stable user-facing reasons an ordinary calendar mutation is unavailable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum CalendarMutationBlockReason {
-    #[error("Editing, deleting, or moving recurring events is not supported in Chithi.")]
+    #[error("Editing, deleting, or moving recurring events is not supported in Goyav.")]
     Recurring,
     #[error("Recurrence information is unavailable. Refresh this event before editing.")]
     UnknownRecurrence,
@@ -100,7 +100,7 @@ mod tests {
         for (reason, message) in [
             (
                 CalendarMutationBlockReason::Recurring,
-                "Editing, deleting, or moving recurring events is not supported in Chithi.",
+                "Editing, deleting, or moving recurring events is not supported in Goyav.",
             ),
             (
                 CalendarMutationBlockReason::UnknownRecurrence,

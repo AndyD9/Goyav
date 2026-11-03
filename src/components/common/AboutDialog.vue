@@ -43,7 +43,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
         <header class="about-header">
           <h2 id="about-title" class="about-title">
             <img :src="logoUrl" alt="" class="about-logo" />
-            Chithi
+            Goyav
           </h2>
           <button
             class="about-close"

@@ -164,7 +164,7 @@ pub fn await_login_token(listener: TcpListener, expected_state: &str) -> Result<
         b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n\
         <html><body style='font-family:sans-serif;text-align:center;padding:60px'>\
         <h2>Matrix sign-in successful</h2>\
-        <p>You can close this window and return to Chithi.</p>\
+        <p>You can close this window and return to Goyav.</p>\
         </body></html>",
     );
     Ok(token)

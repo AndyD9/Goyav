@@ -15,7 +15,7 @@ type SupportResult<Details extends object = object> = Details &
 export type CalendarEditScope = "standalone" | "this-occurrence" | "entire-series";
 
 const RECURRING_REASON =
-  "Editing, deleting, or moving recurring events is not supported in Chithi.";
+  "Editing, deleting, or moving recurring events is not supported in Goyav.";
 const MEETING_OCCURRENCE_REASON =
   "Editing one occurrence of a meeting with attendees is not supported yet.";
 const UNKNOWN_REASON =

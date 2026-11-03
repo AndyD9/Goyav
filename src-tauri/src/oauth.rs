@@ -370,17 +370,17 @@ fn write_callback_page(stream: &mut impl Write, page: CallbackPage) {
         CallbackPage::Success => (
             "200 OK",
             "Authorization successful!",
-            "You can close this window and return to Chithi.",
+            "You can close this window and return to Goyav.",
         ),
         CallbackPage::AccessDenied => (
             "400 Bad Request",
             "Authorization not completed",
-            "Access was not granted. Return to Chithi and try again.",
+            "Access was not granted. Return to Goyav and try again.",
         ),
         CallbackPage::Failure => (
             "400 Bad Request",
             "Authorization failed",
-            "The provider did not complete authorization. Return to Chithi and try again.",
+            "The provider did not complete authorization. Return to Goyav and try again.",
         ),
     };
     let body = format!(
@@ -909,7 +909,7 @@ pub async fn register_oidc_client_with_client(
     client: &reqwest::Client,
 ) -> Result<String> {
     let body = serde_json::json!({
-        "client_name": "Chithi Mail",
+        "client_name": "Goyav Mail",
         "redirect_uris": [],
         "grant_types": ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"],
         "response_types": [],
@@ -1252,7 +1252,7 @@ pub async fn refresh_token_dynamic_with_client(
 // Keyring storage for OAuth tokens
 // ---------------------------------------------------------------------------
 
-const KEYRING_SERVICE: &str = "in.kushaldas.chithi.oauth";
+const KEYRING_SERVICE: &str = "fr.goyav.mail.oauth";
 
 // Android note: the `keyring` crate v3 has no Android backend and silently
 // falls back to an in-memory mock that doesn't persist across `Entry::new`
