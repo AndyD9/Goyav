@@ -108,7 +108,11 @@ async function syncAll() {
         Sync
       </button>
       <span v-if="activityStore.hasActiveOperations" class="op-spinner"></span>
-      <span class="status-dot" :class="connectionStatus" data-testid="sync-status"></span>
+      <span
+        class="status-dot"
+        :class="[connectionStatus, { idle: accountsStore.accounts.length === 0 }]"
+        data-testid="sync-status"
+      ></span>
       <span
         v-if="uiStore.hoverUrl"
         class="hover-url"
@@ -198,6 +202,12 @@ async function syncAll() {
 
 .status-dot.disconnected {
   background: var(--color-danger);
+}
+
+/* Nothing to sync yet: neither connected nor failing. */
+.status-dot.idle {
+  background: var(--color-text-muted);
+  box-shadow: none;
 }
 
 .sync-error-msg {

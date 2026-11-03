@@ -14,10 +14,13 @@ const isStandaloneWindow = computed(
   () => route.name === "compose" || route.name === "reader",
 );
 
-// Mail and Calendar split themselves into several panels; every other
-// view is shown inside a single panel.
+// Mail, Calendar and Settings split themselves into several panels;
+// every other view is shown inside a single panel.
 const viewHasOwnPanels = computed(
-  () => route.name === "mail" || route.name === "calendar",
+  () =>
+    route.name === "mail" ||
+    route.name === "calendar" ||
+    route.name === "settings",
 );
 </script>
 

@@ -182,6 +182,8 @@ describe("SettingsView", () => {
     });
     await flushPromises();
 
+    // Desktop lists archives under their own settings section.
+    await wrapper.get('[data-testid="settings-nav-calendars"]').trigger("click");
     expect(wrapper.get(".desktop-archive-settings").text())
       .toContain("Micke Nordin · Kalender: 26 cached event(s)");
     expect(wrapper.get(".desktop-archive-settings").text())
