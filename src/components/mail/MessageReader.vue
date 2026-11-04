@@ -133,8 +133,12 @@ watch(
     const msgId = messagesStore.activeMessageId;
     if (!acct || !msgId) return;
     try {
-      verifyOutcome.value = await api.pgpVerifyMessage(acct, msgId);
+      const outcome = await api.pgpVerifyMessage(acct, msgId);
+      // A slow result for a previous message must not land on this one.
+      if (messagesStore.activeMessageId !== msgId) return;
+      verifyOutcome.value = outcome;
     } catch (e) {
+      if (messagesStore.activeMessageId !== msgId) return;
       verifyOutcome.value = {
         kind: "error",
         message: e instanceof Error ? e.message : String(e),
@@ -147,7 +151,13 @@ function verifyBadgeLabel(o: PgpVerifyOutcome | null): string {
   if (!o) return "";
   switch (o.kind) {
     case "good":
-      return t("Signed by {signer}", { signer: o.signerUid ?? o.signerFingerprint.slice(-16) });
+      // A valid signature by a key that does not carry the From address
+      // must not read as "signed by the sender".
+      return o.senderMatches
+        ? t("Signed by {signer}", { signer: o.signerUid ?? o.signerFingerprint.slice(-16) })
+        : t("Valid signature by {signer}, who is not the sender", {
+            signer: o.signerUid ?? o.signerFingerprint.slice(-16),
+          });
     case "bad":
       return t("Signature invalid ({signer})", { signer: o.signerUid ?? o.signerFingerprint.slice(-16) });
     case "unknownKey":
@@ -163,7 +173,7 @@ function verifyBadgeClass(o: PgpVerifyOutcome | null): string {
   if (!o) return "";
   switch (o.kind) {
     case "good":
-      return "pgp-badge pgp-badge-good";
+      return o.senderMatches ? "pgp-badge pgp-badge-good" : "pgp-badge pgp-badge-warn";
     case "bad":
     case "error":
       return "pgp-badge pgp-badge-bad";

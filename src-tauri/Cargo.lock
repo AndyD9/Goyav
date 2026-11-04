@@ -784,6 +784,7 @@ dependencies = [
  "mime_guess",
  "native-tls",
  "openssl",
+ "pgp",
  "rand 0.9.4",
  "regex",
  "reqwest 0.12.28",
@@ -808,6 +809,7 @@ dependencies = [
  "urlencoding",
  "utf7-imap",
  "uuid",
+ "wecanencrypt",
  "windows-timezones",
  "zeroize",
 ]

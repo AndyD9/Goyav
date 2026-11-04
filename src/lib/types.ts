@@ -175,6 +175,10 @@ export type PgpVerifyOutcome =
       signerUid: string | null;
       signerFingerprint: string;
       verifierFingerprint: string;
+      /** A non-revoked UID of the signing key carries the message's From
+       *  address. When false the signature is valid but made by someone
+       *  other than the displayed sender. */
+      senderMatches: boolean;
     }
   | { kind: "bad"; signerUid: string | null; signerFingerprint: string }
   | { kind: "unknownKey"; keyId: string }

@@ -77,6 +77,8 @@ export const mail: Record<string, string> = {
   "Messages": "Messages",
   "Close tab: {subject}": "Fermer l'onglet : {subject}",
   "Signed by {signer}": "Signé par {signer}",
+  "Valid signature by {signer}, who is not the sender":
+    "Signature valide de {signer}, qui n'est pas l'expéditeur",
   "Signature invalid ({signer})": "Signature invalide ({signer})",
   "Unknown signer (key id {keyId})": "Signataire inconnu (ID de clé {keyId})",
   "Signature check error: {message}": "Erreur de vérification de la signature : {message}",

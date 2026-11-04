@@ -222,6 +222,7 @@ describe("pgp decrypt / verify wrappers", () => {
       signerUid: "Alice <a@x>",
       signerFingerprint: "AAAA" + "0".repeat(36),
       verifierFingerprint: "AAAA" + "0".repeat(36),
+      senderMatches: true,
     });
     const o = await api.pgpVerifyMessage("acc1", "msg-1");
     expect(o.kind).toBe("good");

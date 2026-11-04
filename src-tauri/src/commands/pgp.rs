@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use libtumpa::{
-    card, card::link as card_link, key, network, KeySummary, SubkeySummary, UserIdSummary,
+    card, card::link as card_link, key, KeySummary, SubkeySummary, UserIdSummary,
 };
 use serde::Serialize;
 use tauri::{Emitter, State};
@@ -197,6 +197,7 @@ pub async fn pgp_get_key(state: State<'_, AppState>, fingerprint: String) -> Res
 pub async fn pgp_import_key(state: State<'_, AppState>, data: Vec<u8>) -> Result<PgpImportResult> {
     let store = state.pgp_store().map_err(lt_err)?;
     tokio::task::spawn_blocking(move || {
+        let data = sanitized_import_bytes(&data, None)?;
         let guard = store.lock().expect("pgp keystore mutex poisoned");
         let info = key::import_any(&guard, &data).map_err(lt_err)?;
         Ok(PgpImportResult {
@@ -236,6 +237,7 @@ pub async fn pgp_pick_and_import_key(
     let bytes = std::fs::read(path)?;
     let store = state.pgp_store().map_err(lt_err)?;
     let result = tokio::task::spawn_blocking(move || -> Result<PgpImportResult> {
+        let bytes = sanitized_import_bytes(&bytes, None)?;
         let guard = store.lock().expect("pgp keystore mutex poisoned");
         let info = key::import_any(&guard, &bytes).map_err(lt_err)?;
         Ok(PgpImportResult {
@@ -283,13 +285,31 @@ pub async fn pgp_export_public(state: State<'_, AppState>, fingerprint: String) 
 #[tauri::command]
 pub async fn pgp_wkd_fetch(state: State<'_, AppState>, email: String) -> Result<String> {
     let store = state.pgp_store().map_err(lt_err)?;
-    tokio::task::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || -> Result<String> {
+        // Fetch without importing, then keep only the User IDs for the
+        // queried address (with verified self-certifications) and verified
+        // subkeys. The WKD host of the queried domain has no authority over
+        // other addresses: a key fetched for mallory@evil.example must not
+        // become the recipient key for alice@bank.example.
+        let address = email.trim();
+        let fetched = wecanencrypt::fetch_key_by_email(address)
+            .map_err(|e| Error::Other(format!("wkd: {e}")))?;
+        let data = sanitized_import_bytes(&fetched, Some(address))?;
         let guard = store.lock().expect("pgp keystore mutex poisoned");
-        network::wkd_fetch_and_import(&guard, &email)
+        let info = key::import_any(&guard, &data).map_err(lt_err)?;
+        Ok(info.fingerprint)
     })
     .await
     .map_err(|e| Error::Other(format!("wkd task join failed: {e}")))?
-    .map_err(lt_err)
+}
+
+/// Reduce a public certificate to the components its primary key verifiably
+/// certified (see `pgp_cert`). Secret keys pass through unchanged.
+fn sanitized_import_bytes(data: &[u8], only_address: Option<&str>) -> Result<Vec<u8>> {
+    match crate::pgp_cert::sanitize_for_import(data, only_address)? {
+        crate::pgp_cert::CertificateImport::Secret(bytes)
+        | crate::pgp_cert::CertificateImport::Public(bytes) => Ok(bytes),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -643,6 +663,10 @@ pub enum PgpVerifyOutcome {
         signer_uid: Option<String>,
         signer_fingerprint: String,
         verifier_fingerprint: String,
+        /// Whether a non-revoked UID of the signing certificate carries the
+        /// message's From address. A valid signature by someone else must not
+        /// be presented as authenticating the sender.
+        sender_matches: bool,
     },
     /// Signer is in the keystore but signature didn't verify.
     Bad {
@@ -655,21 +679,78 @@ pub enum PgpVerifyOutcome {
     Error { message: String },
 }
 
+/// Address part of a User ID: the text inside `<...>`, or the whole value
+/// when it is a bare address.
+fn uid_address(uid: &str) -> Option<&str> {
+    let candidate = match (uid.rfind('<'), uid.rfind('>')) {
+        (Some(start), Some(end)) if start < end => &uid[start + 1..end],
+        _ => uid,
+    };
+    let candidate = candidate.trim();
+    (candidate.contains('@') && !candidate.contains(char::is_whitespace)).then_some(candidate)
+}
+
+/// Pick the UID to display for a signer and whether it matches `sender`.
+/// Revoked UIDs are never shown. A UID whose address equals the From address
+/// wins; otherwise the primary UID (then the first one) is shown and the
+/// result is flagged as not matching the sender.
+fn pick_signer_uid<'a>(
+    uids: impl IntoIterator<Item = (&'a str, bool, bool)>,
+    sender: &str,
+) -> (Option<String>, bool) {
+    let sender = sender.trim();
+    let live: Vec<(&str, bool)> = uids
+        .into_iter()
+        .filter(|(_, revoked, _)| !revoked)
+        .map(|(value, _, primary)| (value, primary))
+        .collect();
+    if !sender.is_empty() {
+        if let Some((value, _)) = live
+            .iter()
+            .find(|(value, _)| uid_address(value).is_some_and(|a| a.eq_ignore_ascii_case(sender)))
+        {
+            return (Some((*value).to_string()), true);
+        }
+    }
+    let fallback = live
+        .iter()
+        .find(|(_, primary)| *primary)
+        .or(live.first())
+        .map(|(value, _)| (*value).to_string());
+    (fallback, false)
+}
+
+macro_rules! signer_of {
+    ($key_info:expr, $sender:expr) => {
+        pick_signer_uid(
+            $key_info
+                .user_ids
+                .iter()
+                .map(|u| (u.value.as_str(), u.revoked, u.is_primary)),
+            $sender,
+        )
+    };
+}
+
 impl PgpVerifyOutcome {
-    fn from_decrypt(o: libtumpa::decrypt::DecryptVerifyOutcome) -> Self {
+    fn from_decrypt(o: libtumpa::decrypt::DecryptVerifyOutcome, sender: &str) -> Self {
         use libtumpa::decrypt::DecryptVerifyOutcome as D;
         match o {
             D::Unsigned => PgpVerifyOutcome::Unsigned,
             D::Good {
                 key_info,
                 verifier_fingerprint,
-            } => PgpVerifyOutcome::Good {
-                signer_uid: key_info.user_ids.into_iter().next().map(|u| u.value),
-                signer_fingerprint: key_info.fingerprint,
-                verifier_fingerprint,
-            },
+            } => {
+                let (signer_uid, sender_matches) = signer_of!(key_info, sender);
+                PgpVerifyOutcome::Good {
+                    signer_uid,
+                    signer_fingerprint: key_info.fingerprint,
+                    verifier_fingerprint,
+                    sender_matches,
+                }
+            }
             D::Bad { key_info } => PgpVerifyOutcome::Bad {
-                signer_uid: key_info.user_ids.into_iter().next().map(|u| u.value),
+                signer_uid: signer_of!(key_info, sender).0,
                 signer_fingerprint: key_info.fingerprint,
             },
             D::UnknownKey { issuer_ids } => PgpVerifyOutcome::UnknownKey {
@@ -678,19 +759,27 @@ impl PgpVerifyOutcome {
         }
     }
 
-    fn from_verify(o: libtumpa::verify::VerifyOutcome, verifier_fp: Option<String>) -> Self {
+    fn from_verify(
+        o: libtumpa::verify::VerifyOutcome,
+        verifier_fp: Option<String>,
+        sender: &str,
+    ) -> Self {
         use libtumpa::verify::VerifyOutcome as V;
         match o {
             V::Good {
                 key_info,
                 verifier_fingerprint,
-            } => PgpVerifyOutcome::Good {
-                signer_uid: key_info.user_ids.into_iter().next().map(|u| u.value),
-                signer_fingerprint: key_info.fingerprint,
-                verifier_fingerprint,
-            },
+            } => {
+                let (signer_uid, sender_matches) = signer_of!(key_info, sender);
+                PgpVerifyOutcome::Good {
+                    signer_uid,
+                    signer_fingerprint: key_info.fingerprint,
+                    verifier_fingerprint,
+                    sender_matches,
+                }
+            }
             V::Bad { key_info } => PgpVerifyOutcome::Bad {
-                signer_uid: key_info.user_ids.into_iter().next().map(|u| u.value),
+                signer_uid: signer_of!(key_info, sender).0,
                 signer_fingerprint: key_info.fingerprint,
             },
             V::UnknownKey { key_id } => PgpVerifyOutcome::UnknownKey { key_id },
@@ -908,7 +997,7 @@ pub async fn pgp_decrypt_message(
 
     Ok(PgpDecryptedMessage {
         plaintext_body,
-        verify_outcome: PgpVerifyOutcome::from_decrypt(result.outcome),
+        verify_outcome: PgpVerifyOutcome::from_decrypt(result.outcome, &from_email),
     })
 }
 
@@ -921,7 +1010,8 @@ pub async fn pgp_verify_message(
     account_id: String,
     message_id: String,
 ) -> Result<PgpVerifyOutcome> {
-    let (raw, ..) = load_raw_with_metadata(&app, &state, &account_id, &message_id).await?;
+    let (raw, from_email, ..) =
+        load_raw_with_metadata(&app, &state, &account_id, &message_id).await?;
 
     // Try multipart/signed first.
     if let Some((signed_entity, signature)) = crate::mail::pgp_mime::extract_signed_payload(&raw) {
@@ -951,7 +1041,7 @@ pub async fn pgp_verify_message(
         .map_err(|e| Error::Other(format!("pgp verify task join failed: {e}")))?;
 
         return match outcome {
-            Ok(o) => Ok(PgpVerifyOutcome::from_verify(o, None)),
+            Ok(o) => Ok(PgpVerifyOutcome::from_verify(o, None, &from_email)),
             Err(e) => Ok(PgpVerifyOutcome::Error {
                 message: e.to_string(),
             }),
@@ -1209,11 +1299,37 @@ mod tests {
     /// on every Good signature outcome (only visible once the card
     /// decrypt path actually returned a Good outcome end-to-end).
     #[test]
+    fn signer_uid_is_bound_to_the_from_address() {
+        let uids = [
+            ("Alice <alice@bank.example>", false, false),
+            ("Mallory <mallory@evil.example>", false, true),
+        ];
+        // From matches a UID: that UID is shown and flagged as the sender.
+        assert_eq!(
+            pick_signer_uid(uids, "ALICE@bank.example"),
+            (Some("Alice <alice@bank.example>".into()), true)
+        );
+        // Spoofed From that no UID carries: primary UID shown, not the sender.
+        assert_eq!(
+            pick_signer_uid(uids, "ceo@corp.example"),
+            (Some("Mallory <mallory@evil.example>".into()), false)
+        );
+        // Revoked UIDs never match or display.
+        let revoked = [("Alice <alice@bank.example>", true, true), ("m@evil.example", false, false)];
+        assert_eq!(
+            pick_signer_uid(revoked, "alice@bank.example"),
+            (Some("m@evil.example".into()), false)
+        );
+        assert_eq!(pick_signer_uid(uids, ""), (Some("Mallory <mallory@evil.example>".into()), false));
+    }
+
+    #[test]
     fn pgp_verify_outcome_serializes_variant_fields_in_camel_case() {
         let outcome = PgpVerifyOutcome::Good {
             signer_uid: Some("Alice <alice@example.com>".into()),
             signer_fingerprint: "DEADBEEF".repeat(5),
             verifier_fingerprint: "CAFEBABE".repeat(5),
+            sender_matches: true,
         };
         let json = serde_json::to_value(&outcome).expect("serialize");
         assert_eq!(json["kind"], "good");

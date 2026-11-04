@@ -17,6 +17,7 @@ mod message;
 mod oauth;
 mod ops;
 mod path_validation;
+mod pgp_cert;
 mod provider;
 mod state;
 mod updater;

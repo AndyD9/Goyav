@@ -40,7 +40,7 @@ pub fn detect_kind(raw: &[u8]) -> Option<PgpKind> {
         return None;
     }
     let (headers, body) = split_headers_body(raw)?;
-    let ct = header_value(headers, b"content-type").unwrap_or_default();
+    let ct = top_level_content_type(headers).unwrap_or_default();
     if header_value_is_multipart_pgp_encrypted(&ct) {
         return Some(PgpKind::MimeEncrypted);
     }
@@ -61,7 +61,7 @@ pub fn detect_kind(raw: &[u8]) -> Option<PgpKind> {
 /// the armored OpenPGP message that libtumpa decrypts.
 pub fn extract_encrypted_payload(raw: &[u8]) -> Option<Vec<u8>> {
     let (headers, body) = split_headers_body(raw)?;
-    let ct = header_value(headers, b"content-type")?;
+    let ct = top_level_content_type(headers)?;
     if !header_value_is_multipart_pgp_encrypted(&ct) {
         return None;
     }
@@ -86,7 +86,7 @@ pub fn extract_encrypted_payload(raw: &[u8]) -> Option<Vec<u8>> {
 /// Returns `(signed_entity, armored_signature)`.
 pub fn extract_signed_payload(raw: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
     let (headers, body) = split_headers_body(raw)?;
-    let ct = header_value(headers, b"content-type")?;
+    let ct = top_level_content_type(headers)?;
     if !header_value_is_multipart_pgp_signed(&ct) {
         return None;
     }
@@ -197,6 +197,40 @@ fn split_headers_body(raw: &[u8]) -> Option<(&[u8], &[u8])> {
     } else {
         find_subslice(raw, b"\n\n").map(|i| (&raw[..i], &raw[i + 2..]))
     }
+}
+
+/// The message's top-level Content-Type, or `None` when it is ambiguous.
+///
+/// The reader renders the body with mail-parser, which takes the *last*
+/// Content-Type header and merges RFC 2231 `boundary*N` continuations,
+/// while this module scans for the first header and a literal `boundary`
+/// parameter. If both interpretations could differ, a genuine signed entity
+/// could be verified while different, attacker-chosen content is rendered
+/// under the "Signed by" badge. Such messages are therefore treated as not
+/// PGP/MIME at all: no verification, no badge.
+fn top_level_content_type(headers: &[u8]) -> Option<String> {
+    if count_headers(headers, b"content-type") != 1 {
+        return None;
+    }
+    let ct = header_value(headers, b"content-type")?;
+    let has_extended_param = ct
+        .split(';')
+        .skip(1)
+        .any(|param| param.split('=').next().is_some_and(|name| name.contains('*')));
+    if has_extended_param {
+        return None;
+    }
+    Some(ct)
+}
+
+/// Number of header fields named `name` (continuation lines not counted).
+fn count_headers(headers: &[u8], name: &[u8]) -> usize {
+    headers
+        .split(|&b| b == b'\n')
+        .filter(|line| !matches!(line.first(), Some(b' ' | b'\t')))
+        .filter_map(|line| line.iter().position(|&b| b == b':').map(|colon| &line[..colon]))
+        .filter(|field| ascii_eq_ci(trim_trailing_wsp(field), name))
+        .count()
 }
 
 /// Look up a header by name (ASCII case-insensitive). Returns the full
@@ -484,6 +518,33 @@ fn starts_with_ci(hay: &[u8], prefix: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ambiguous_content_type_is_not_treated_as_signed() {
+        // Reader (mail-parser) would render the EVIL part; the verifier
+        // would check the genuine SIG parts. Such a message gets no badge.
+        let duplicate = b"From: alice@example.com\r\n\
+Content-Type: multipart/signed; protocol=\"application/pgp-signature\"; boundary=\"SIG\"\r\n\
+Content-Type: multipart/mixed; boundary=\"EVIL\"\r\n\
+\r\n\
+--EVIL\r\nContent-Type: text/plain\r\n\r\nattacker text\r\n--EVIL--\r\n\
+--SIG\r\nContent-Type: text/plain\r\n\r\ngenuine\r\n\
+--SIG\r\nContent-Type: application/pgp-signature\r\n\r\nsig\r\n--SIG--\r\n";
+        assert_eq!(detect_kind(duplicate), None);
+        assert!(extract_signed_payload(duplicate).is_none());
+
+        let continuation = b"From: alice@example.com\r\n\
+Content-Type: multipart/signed; protocol=\"application/pgp-signature\";\r\n\
+\x20boundary=\"SIG\"; boundary*1=\"X\"\r\n\
+\r\n\
+--SIG\r\nContent-Type: text/plain\r\n\r\ngenuine\r\n\
+--SIG\r\nContent-Type: application/pgp-signature\r\n\r\nsig\r\n--SIG--\r\n";
+        assert_eq!(detect_kind(continuation), None);
+        assert!(extract_signed_payload(continuation).is_none());
+
+        // A folded single Content-Type is still fine.
+        assert_eq!(detect_kind(SIGNED_MESSAGE), Some(PgpKind::MimeSigned));
+    }
 
     const ENCRYPTED_MESSAGE: &[u8] = b"\
 MIME-Version: 1.0\r\n\

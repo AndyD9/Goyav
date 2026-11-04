@@ -67,6 +67,11 @@ clearurls = "0.0.4"
 # keystore at ~/.tumpa/keys.db with tumpa-cli and the tumpa desktop app
 # (honors $TUMPA_DIR / $TUMPA_KEYSTORE).
 libtumpa = { version = "0.4.1", default-features = false, features = ["card", "network"] }
+# Same versions libtumpa already pulls in; used directly to fetch WKD keys
+# without importing them and to verify certificate bindings before import
+# (src/pgp_cert.rs).
+wecanencrypt = { version = "=0.16.1", default-features = false, features = ["keystore", "network"] }
+pgp = { version = "=0.19.0", default-features = false, features = ["bzip2"] }
 zeroize = { version = "1", features = ["derive"] }
 # Self-update from the GitHub releases (see src/updater.rs).
 tauri-plugin-updater = "2"
