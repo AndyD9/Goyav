@@ -3483,6 +3483,53 @@ fn invitation_organizers_match(existing: Option<&str>, incoming: Option<&str>) -
     }
 }
 
+/// Case-insensitive equality of two non-empty addresses.
+fn same_address(a: &str, b: &str) -> bool {
+    let (a, b) = (a.trim(), b.trim());
+    !a.is_empty() && a.eq_ignore_ascii_case(b)
+}
+
+/// PARTSTAT values an iTIP REPLY may set (RFC 5545 §3.2.12, lowercased by
+/// the parser). Anything else is ignored rather than stored verbatim.
+const ITIP_REPLY_PARTSTATS: [&str; 5] =
+    ["accepted", "declined", "tentative", "delegated", "needs-action"];
+
+/// RFC 5546 §3.2.3: a REPLY carries the replying attendee's own status, so it
+/// may only update that attendee, and only on an event this account
+/// organizes. `sender_email` is the From address of the message carrying the
+/// REPLY; without this binding any correspondent could rewrite every
+/// attendee's RSVP by naming them in the ICS.
+fn reply_update_allowed(
+    event_organizer: Option<&str>,
+    account_email: &str,
+    sender_email: &str,
+    attendee_email: &str,
+    status: &str,
+) -> bool {
+    event_organizer.is_some_and(|organizer| same_address(organizer, account_email))
+        && same_address(attendee_email, sender_email)
+        && ITIP_REPLY_PARTSTATS.contains(&status)
+}
+
+/// RFC 5546 §3.2.5: only the organizer cancels, and a CANCEL only concerns
+/// attendees. The stored organizer must therefore differ from this account,
+/// match the ORGANIZER in the CANCEL, and match the message sender.
+/// The ORGANIZER inside the ICS alone is attacker-chosen and public to every
+/// invitee, so it is not sufficient on its own.
+fn cancel_allowed(
+    event_organizer: Option<&str>,
+    account_email: &str,
+    sender_email: &str,
+    cancel_organizer: Option<&str>,
+) -> bool {
+    let Some(organizer) = event_organizer else {
+        return false;
+    };
+    !same_address(organizer, account_email)
+        && invitation_organizers_match(Some(organizer), cancel_organizer)
+        && same_address(organizer, sender_email)
+}
+
 fn stored_invitation_sequence(event: &CalendarEvent, invitation_uid: &str) -> Result<u32> {
     let raw = event.ical_data.as_deref().ok_or_else(|| {
         crate::error::Error::Other(
@@ -4651,23 +4698,24 @@ async fn deliver_invites(
 }
 
 /// Process an incoming iTIP REPLY to update attendee status on the organizer's event.
-/// Called when the organizer receives a METHOD:REPLY email.
+/// Called only when the organizer explicitly applies a METHOD:REPLY email from
+/// the reader; returns the number of attendee statuses updated.
 #[tauri::command]
 pub async fn process_invite_reply(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     account_id: String,
     message_id: String,
-) -> Result<()> {
+) -> Result<u32> {
     log::info!(
         "process_invite_reply: account={} message={}",
         account_id,
         message_id
     );
 
-    let raw = {
+    let (raw, sender_email) = {
         let conn = state.db.writer().await;
-        let (maildir_path, _, _, _, _, _, _) =
+        let (maildir_path, sender_email, _, _, _, _, _) =
             db::messages::get_message_metadata(&conn, &account_id, &message_id)?;
         if BodyLocation::from_persisted(&maildir_path).needs_fetch() {
             return Err(crate::error::Error::Other(
@@ -4675,8 +4723,9 @@ pub async fn process_invite_reply(
             ));
         }
         let full_path = crate::path_validation::resolve_under(&state.data_dir, &maildir_path)?;
-        std::fs::read(&full_path)
-            .map_err(|e| crate::error::Error::Other(format!("Failed to read message: {}", e)))?
+        let raw = std::fs::read(&full_path)
+            .map_err(|e| crate::error::Error::Other(format!("Failed to read message: {}", e)))?;
+        (raw, sender_email)
     };
 
     let replies = ical::parse_ical_from_email(&raw);
@@ -4687,15 +4736,16 @@ pub async fn process_invite_reply(
 
     if reply_invites.is_empty() {
         log::debug!("process_invite_reply: no METHOD:REPLY found in message");
-        return Ok(());
+        return Ok(0);
     }
 
     // Phase 1: update local DB and collect provider-neutral remote updates.
     // The writer guard is dropped before backend network activity.
-    let (account, attendee_updates) = {
+    let (account, attendee_updates, applied) = {
         let conn = state.db.writer().await;
         let account = db::accounts::get_account_full(&conn, &account_id)?;
         let mut attendee_updates = Vec::new();
+        let mut applied = 0u32;
 
         for reply in &reply_invites {
             let event = db::calendar::get_event_by_uid(&conn, &account_id, &reply.uid)?;
@@ -4706,6 +4756,22 @@ pub async fn process_invite_reply(
 
             for attendee in &reply.attendees {
                 let status = &attendee.status;
+                if !reply_update_allowed(
+                    event.organizer_email.as_deref(),
+                    &account.email,
+                    &sender_email,
+                    &attendee.email,
+                    status,
+                ) {
+                    log::warn!(
+                        "process_invite_reply: ignoring REPLY line for {} on UID {}: not the \
+                         sender, not an event this account organizes, or unknown PARTSTAT",
+                        attendee.email,
+                        reply.uid
+                    );
+                    continue;
+                }
+                applied += 1;
                 log::info!(
                     "process_invite_reply: {} responded '{}' to event '{}'",
                     attendee.email,
@@ -4718,7 +4784,10 @@ pub async fn process_invite_reply(
                         serde_json::from_str::<Vec<serde_json::Value>>(att_json)
                     {
                         for att in attendees.iter_mut() {
-                            if att["email"].as_str() == Some(&attendee.email) {
+                            if att["email"]
+                                .as_str()
+                                .is_some_and(|email| same_address(email, &attendee.email))
+                            {
                                 att["status"] = serde_json::json!(status);
                             }
                         }
@@ -4740,7 +4809,7 @@ pub async fn process_invite_reply(
                 }
             }
         }
-        (account, attendee_updates)
+        (account, attendee_updates, applied)
     };
 
     // Phase 2: let the provider apply any supported remote participant update
@@ -4761,12 +4830,18 @@ pub async fn process_invite_reply(
     }
 
     // Notify frontend to refresh calendar UI. Runs regardless of whether
-    // a JMAP push happened, since phase 1 always updated the local DB.
-    use tauri::Emitter as _;
-    app.emit("calendar-changed", account_id.as_str()).ok();
+    // a JMAP push happened, since phase 1 updated the local DB.
+    if applied > 0 {
+        use tauri::Emitter as _;
+        app.emit("calendar-changed", account_id.as_str()).ok();
+    }
 
-    log::info!("process_invite_reply: completed for account {}", account_id);
-    Ok(())
+    log::info!(
+        "process_invite_reply: completed for account {} ({} update(s))",
+        account_id,
+        applied
+    );
+    Ok(applied)
 }
 
 #[derive(Debug)]
@@ -4782,6 +4857,8 @@ enum ProvenanceCancellation {
 async fn delete_provenance_invitation_copy(
     state: &AppState,
     source_account_id: &str,
+    source_account_email: &str,
+    sender_email: &str,
     cancel: &ParsedInvite,
 ) -> Result<ProvenanceCancellation> {
     if matches!(
@@ -4845,12 +4922,14 @@ async fn delete_provenance_invitation_copy(
                 "The invitation copy changed while preparing cancellation".into(),
             ));
         }
-        if !invitation_organizers_match(
+        if !cancel_allowed(
             event.organizer_email.as_deref(),
+            source_account_email,
+            sender_email,
             cancel.organizer_email.as_deref(),
         ) {
             log::warn!(
-                "Ignoring cancellation with mismatched organizer for UID {}",
+                "Ignoring cancellation for UID {}: organizer does not match the sender",
                 cancel.uid
             );
             return Ok(ProvenanceCancellation::Ignored);
@@ -4908,31 +4987,35 @@ async fn delete_provenance_invitation_copy(
 }
 
 /// Process a METHOD:CANCEL email and remove its matching calendar copy.
+/// Called only when the user explicitly applies the cancellation from the
+/// reader; returns the number of events removed.
 #[tauri::command]
 pub async fn process_cancelled_invite(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     account_id: String,
     message_id: String,
-) -> Result<()> {
+) -> Result<u32> {
     log::info!(
         "process_cancelled_invite: account={} message={}",
         account_id,
         message_id
     );
 
-    let raw = {
+    let (raw, sender_email, account_email) = {
         let conn = state.db.reader();
-        let (maildir_path, _, _, _, _, _, _) =
+        let (maildir_path, sender_email, _, _, _, _, _) =
             db::messages::get_message_metadata(&conn, &account_id, &message_id)?;
         if BodyLocation::from_persisted(&maildir_path).needs_fetch() {
             return Err(crate::error::Error::Other(
                 "Message body not fetched yet".to_string(),
             ));
         }
+        let account_email = db::accounts::get_account_full(&conn, &account_id)?.email;
         let full_path = crate::path_validation::resolve_under(&state.data_dir, &maildir_path)?;
-        std::fs::read(&full_path)
-            .map_err(|e| crate::error::Error::Other(format!("Failed to read message: {}", e)))?
+        let raw = std::fs::read(&full_path)
+            .map_err(|e| crate::error::Error::Other(format!("Failed to read message: {}", e)))?;
+        (raw, sender_email, account_email)
     };
 
     let invites = ical::parse_ical_from_email(&raw);
@@ -4943,14 +5026,22 @@ pub async fn process_cancelled_invite(
 
     if cancels.is_empty() {
         log::debug!("process_cancelled_invite: no METHOD:CANCEL found");
-        return Ok(());
+        return Ok(0);
     }
 
-    let mut deleted = 0;
+    let mut deleted = 0u32;
     let mut cleanup_ids = Vec::new();
     let mut changed_accounts = std::collections::HashSet::new();
     for cancel in &cancels {
-        match delete_provenance_invitation_copy(&state, &account_id, cancel).await? {
+        match delete_provenance_invitation_copy(
+            &state,
+            &account_id,
+            &account_email,
+            &sender_email,
+            cancel,
+        )
+        .await?
+        {
             ProvenanceCancellation::Deleted {
                 destination_account_id,
                 cleanup_ids: mut event_cleanup_ids,
@@ -4963,19 +5054,47 @@ pub async fn process_cancelled_invite(
             ProvenanceCancellation::Ignored => continue,
             ProvenanceCancellation::NotFound => {}
         }
+        // Same restriction as the provenance path: a single-occurrence or
+        // unclassified CANCEL must not delete the whole series.
+        if matches!(
+            cancel.recurrence_kind,
+            RecurrenceKind::Occurrence | RecurrenceKind::Unknown
+        ) {
+            log::warn!(
+                "process_cancelled_invite: ignoring occurrence or unclassified cancellation for UID={}",
+                cancel.uid
+            );
+            continue;
+        }
         let mut conn = state.db.writer().await;
         if let Some(event) = db::calendar::get_event_by_uid(&conn, &account_id, &cancel.uid)? {
-            // Verify the CANCEL's organizer matches the event's organizer to
-            // prevent spoofed CANCEL emails from deleting events.
-            if !invitation_organizers_match(
+            // Only the stored organizer, sending from their own address, may
+            // cancel; never for events this account organizes itself.
+            if !cancel_allowed(
                 event.organizer_email.as_deref(),
+                &account_email,
+                &sender_email,
                 cancel.organizer_email.as_deref(),
             ) {
                 log::warn!(
-                    "process_cancelled_invite: missing or mismatched organizer for UID={}, skipping",
+                    "process_cancelled_invite: organizer/sender mismatch or own event for UID={}, skipping",
                     cancel.uid
                 );
                 continue;
+            }
+            // Reject stale cancellations when the stored copy carries its
+            // source calendar data (and therefore a SEQUENCE to compare).
+            if event.ical_data.is_some() {
+                match stored_invitation_sequence(&event, &cancel.uid) {
+                    Ok(stored) if cancel.sequence >= stored => {}
+                    _ => {
+                        log::warn!(
+                            "process_cancelled_invite: stale or unverifiable SEQUENCE for UID={}, skipping",
+                            cancel.uid
+                        );
+                        continue;
+                    }
+                }
             }
             let transaction = conn.transaction()?;
             cleanup_ids.extend(
@@ -5002,10 +5121,11 @@ pub async fn process_cancelled_invite(
     }
 
     log::info!(
-        "process_cancelled_invite: completed for account {}",
-        account_id
+        "process_cancelled_invite: completed for account {} ({} removed)",
+        account_id,
+        deleted
     );
-    Ok(())
+    Ok(deleted)
 }
 
 fn build_invite_message(
@@ -5093,6 +5213,65 @@ mod tests {
         RecurrenceIdentity, RecurrenceIdentitySeed, RecurrenceValueType,
     };
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    const ME: &str = "me@example.test";
+    const ORGANIZER: &str = "organizer@example.test";
+    const ALICE: &str = "alice@example.test";
+
+    #[test]
+    fn reply_only_updates_the_sending_attendee_on_own_events() {
+        // Legitimate: Alice replies for herself to an event this account organizes.
+        assert!(reply_update_allowed(Some(ME), ME, ALICE, ALICE, "accepted"));
+        assert!(reply_update_allowed(
+            Some("Me@Example.Test"),
+            ME,
+            "ALICE@example.test",
+            ALICE,
+            "declined"
+        ));
+        // A third party cannot rewrite Alice's status by naming her in the ICS.
+        assert!(!reply_update_allowed(
+            Some(ME),
+            ME,
+            "mallory@example.test",
+            ALICE,
+            "declined"
+        ));
+        // REPLYs are ignored for events this account merely attends.
+        assert!(!reply_update_allowed(Some(ORGANIZER), ME, ALICE, ALICE, "accepted"));
+        assert!(!reply_update_allowed(None, ME, ALICE, ALICE, "accepted"));
+        // Unknown PARTSTAT values are not stored verbatim.
+        assert!(!reply_update_allowed(Some(ME), ME, ALICE, ALICE, "x-owned"));
+        // Empty sender never matches.
+        assert!(!reply_update_allowed(Some(ME), ME, "", "", "accepted"));
+    }
+
+    #[test]
+    fn cancel_requires_external_organizer_matching_sender() {
+        // Legitimate: the organizer cancels an event this account attends.
+        assert!(cancel_allowed(Some(ORGANIZER), ME, ORGANIZER, Some(ORGANIZER)));
+        assert!(cancel_allowed(
+            Some(ORGANIZER),
+            ME,
+            "Organizer@Example.Test",
+            Some("ORGANIZER@example.test")
+        ));
+        // Any invitee knows UID and ORGANIZER; a correct ICS ORGANIZER from
+        // another sender must not cancel.
+        assert!(!cancel_allowed(
+            Some(ORGANIZER),
+            ME,
+            "mallory@example.test",
+            Some(ORGANIZER)
+        ));
+        // Nobody may cancel an event this account organizes, even when the
+        // forged CANCEL names this account as ORGANIZER and spoofs its From.
+        assert!(!cancel_allowed(Some(ME), ME, ME, Some(ME)));
+        // Mismatched or missing organizer values.
+        assert!(!cancel_allowed(Some(ORGANIZER), ME, ORGANIZER, Some(ALICE)));
+        assert!(!cancel_allowed(Some(ORGANIZER), ME, ORGANIZER, None));
+        assert!(!cancel_allowed(None, ME, ORGANIZER, Some(ORGANIZER)));
+    }
 
     #[test]
     fn archived_calendar_event_cannot_be_mutated_by_direct_id() {

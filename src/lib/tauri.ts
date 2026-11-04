@@ -548,17 +548,23 @@ export function notifyCalendarEvent(
   return invoke("notify_calendar_event", { eventId });
 }
 
+/** Applies a METHOD:REPLY message. Resolves to the number of attendee
+ *  statuses updated (0 when the sender is not a listed attendee of an event
+ *  this account organizes). Only call on explicit user action. */
 export function processInviteReply(
   accountId: string,
   messageId: string,
-): Promise<void> {
+): Promise<number> {
   return invoke("process_invite_reply", { accountId, messageId });
 }
 
+/** Applies a METHOD:CANCEL message. Resolves to the number of events removed
+ *  (0 when the sender is not the event's organizer). Only call on explicit
+ *  user action. */
 export function processCancelledInvite(
   accountId: string,
   messageId: string,
-): Promise<void> {
+): Promise<number> {
   return invoke("process_cancelled_invite", { accountId, messageId });
 }
 

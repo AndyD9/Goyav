@@ -779,38 +779,64 @@ async fn provenance_cancellation_rejects_spoof_stale_and_remote_failure() {
     };
     let before = fixture.snapshot();
 
+    let me = "me@example.test";
+    let organizer = "organizer@example.test";
     assert!(matches!(
         delete_provenance_invitation_copy(
             &fixture.state,
             "account-a",
+            me,
+            organizer,
             &cancel("attacker@example.test", 2)
         )
         .await
         .unwrap(),
         ProvenanceCancellation::Ignored
     ));
+    // The ORGANIZER inside the ICS is public to every invitee: a correct
+    // organizer value sent from another address must not cancel.
     assert!(matches!(
         delete_provenance_invitation_copy(
             &fixture.state,
             "account-a",
-            &cancel("organizer@example.test", 1)
+            me,
+            "attacker@example.test",
+            &cancel(organizer, 2)
         )
         .await
         .unwrap(),
         ProvenanceCancellation::Ignored
     ));
-    let mut missing_organizer = cancel("organizer@example.test", 2);
-    missing_organizer.organizer_email = None;
     assert!(matches!(
-        delete_provenance_invitation_copy(&fixture.state, "account-a", &missing_organizer)
-            .await
-            .unwrap(),
+        delete_provenance_invitation_copy(
+            &fixture.state,
+            "account-a",
+            me,
+            organizer,
+            &cancel(organizer, 1)
+        )
+        .await
+        .unwrap(),
         ProvenanceCancellation::Ignored
     ));
-    let mut occurrence = cancel("organizer@example.test", 2);
+    let mut missing_organizer = cancel(organizer, 2);
+    missing_organizer.organizer_email = None;
+    assert!(matches!(
+        delete_provenance_invitation_copy(
+            &fixture.state,
+            "account-a",
+            me,
+            organizer,
+            &missing_organizer
+        )
+        .await
+        .unwrap(),
+        ProvenanceCancellation::Ignored
+    ));
+    let mut occurrence = cancel(organizer, 2);
     occurrence.recurrence_kind = RecurrenceKind::Occurrence;
     assert!(matches!(
-        delete_provenance_invitation_copy(&fixture.state, "account-a", &occurrence)
+        delete_provenance_invitation_copy(&fixture.state, "account-a", me, organizer, &occurrence)
             .await
             .unwrap(),
         ProvenanceCancellation::Ignored
@@ -818,7 +844,9 @@ async fn provenance_cancellation_rejects_spoof_stale_and_remote_failure() {
     let error = delete_provenance_invitation_copy(
         &fixture.state,
         "account-a",
-        &cancel("organizer@example.test", 2),
+        me,
+        organizer,
+        &cancel(organizer, 2),
     )
     .await
     .unwrap_err();

@@ -41,6 +41,11 @@ const showHtml = computed({
 });
 const invites = ref<ParsedInvite[]>([]);
 const inviteSourceAccountId = ref<string | null>(null);
+// iTIP REPLY/CANCEL parts are never applied on open: the user must confirm.
+const itipReplies = ref<ParsedInvite[]>([]);
+const itipCancels = ref<ParsedInvite[]>([]);
+const itipBusy = ref(false);
+const itipOutcome = ref<string | null>(null);
 const calendarAttachment = ref<Attachment | null>(null);
 
 // Remote images: per-message, not persisted
@@ -60,6 +65,10 @@ watch(
   () => {
     invites.value = [];
     inviteSourceAccountId.value = null;
+    itipReplies.value = [];
+    itipCancels.value = [];
+    itipBusy.value = false;
+    itipOutcome.value = null;
     calendarAttachment.value = null;
     imagesHtml.value = null;
     loadingImages.value = false;
@@ -170,6 +179,9 @@ watch(
   () => messagesStore.activeMessage,
   async (msg) => {
     invites.value = [];
+    itipReplies.value = [];
+    itipCancels.value = [];
+    itipOutcome.value = null;
     if (!msg) return;
     const accountId = accountsStore.activeAccountId;
     const msgId = messagesStore.activeMessageId;
@@ -184,25 +196,51 @@ watch(
         invites.value = all.filter((inv) => inv.method.toUpperCase() === "REQUEST");
         inviteSourceAccountId.value = accountId;
 
-        // Auto-process METHOD:REPLY emails (attendee responses) to update participant status
-        const replies = all.filter((inv) => inv.method.toUpperCase() === "REPLY");
-        if (replies.length > 0) {
-          api.processInviteReply(accountId, msgId).catch((e) =>
-            console.error("Failed to process invite reply:", e));
-        }
-
-        // Auto-process METHOD:CANCEL emails (event cancellations)
-        const cancels = all.filter((inv) => inv.method.toUpperCase() === "CANCEL");
-        if (cancels.length > 0) {
-          api.processCancelledInvite(accountId, msgId).catch((e) =>
-            console.error("Failed to process cancelled invite:", e));
-        }
+        // REPLY/CANCEL change calendar state (and can delete a bound Meet
+        // room), so they are only surfaced here and applied on explicit
+        // confirmation via applyItip(). The backend additionally binds them to
+        // the message sender and the organizer role.
+        itipReplies.value = all.filter((inv) => inv.method.toUpperCase() === "REPLY");
+        itipCancels.value = all.filter((inv) => inv.method.toUpperCase() === "CANCEL");
       } catch {
         // No invites or parse error — silently ignore
       }
     }
   },
 );
+
+async function applyItip(kind: "reply" | "cancel") {
+  const accountId = inviteSourceAccountId.value;
+  const msgId = messagesStore.activeMessageId;
+  if (!accountId || !msgId || itipBusy.value) return;
+  itipBusy.value = true;
+  itipOutcome.value = null;
+  try {
+    const changed = kind === "reply"
+      ? await api.processInviteReply(accountId, msgId)
+      : await api.processCancelledInvite(accountId, msgId);
+    if (messagesStore.activeMessageId !== msgId) return;
+    if (kind === "reply") {
+      itipOutcome.value = changed > 0
+        ? t("Calendar updated with this response.")
+        : t("Not applied: the sender is not an attendee of an event you organize.");
+    } else {
+      itipOutcome.value = changed > 0
+        ? t("Event removed from your calendar.")
+        : t("Not applied: the sender is not the organizer of a matching event in your calendar.");
+    }
+    if (changed > 0) {
+      if (kind === "reply") itipReplies.value = [];
+      else itipCancels.value = [];
+    }
+  } catch (e) {
+    if (messagesStore.activeMessageId === msgId) {
+      itipOutcome.value = t("Could not apply: {error}", { error: String(e) });
+    }
+  } finally {
+    itipBusy.value = false;
+  }
+}
 
 const hasHtml = () => !!(displayedBody.value?.body_html);
 const hasText = () => !!(displayedBody.value?.body_text);
@@ -834,6 +872,40 @@ async function markSpam() {
         />
       </div>
 
+      <!-- Calendar responses and cancellations: applied only on confirmation -->
+      <div
+        v-if="(itipReplies.length > 0 || itipCancels.length > 0 || itipOutcome) && inviteSourceAccountId"
+        class="invite-section"
+      >
+        <div v-for="reply in itipReplies" :key="'reply-' + reply.uid" class="itip-notice">
+          <span class="itip-text">
+            {{ t("Response to “{title}”", { title: reply.summary || t("(No title)") }) }}
+          </span>
+          <button
+            class="pill-btn itip-btn"
+            data-testid="itip-apply-reply"
+            :disabled="itipBusy"
+            @click="applyItip('reply')"
+          >
+            {{ t("Update calendar") }}
+          </button>
+        </div>
+        <div v-for="cancel in itipCancels" :key="'cancel-' + cancel.uid" class="itip-notice">
+          <span class="itip-text">
+            {{ t("“{title}” was cancelled by the organizer", { title: cancel.summary || t("(No title)") }) }}
+          </span>
+          <button
+            class="pill-btn itip-btn"
+            data-testid="itip-apply-cancel"
+            :disabled="itipBusy"
+            @click="applyItip('cancel')"
+          >
+            {{ t("Remove from calendar") }}
+          </button>
+        </div>
+        <div v-if="itipOutcome" class="itip-outcome" data-testid="itip-outcome">{{ itipOutcome }}</div>
+      </div>
+
       <!-- Attachments -->
       <div v-if="messagesStore.activeMessage.attachments.length > 0" class="attachments-section">
         <div class="attachments-header">
@@ -1179,6 +1251,32 @@ async function markSpam() {
 
 .invite-section {
   padding: 12px 16px 0;
+}
+
+.itip-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.itip-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.itip-btn {
+  flex-shrink: 0;
+}
+
+.itip-outcome {
+  font-size: 0.9em;
+  color: var(--color-text-muted);
+  margin-bottom: 8px;
 }
 
 .attachments-section {

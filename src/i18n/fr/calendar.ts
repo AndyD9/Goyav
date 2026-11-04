@@ -306,4 +306,17 @@ export const calendar: Record<string, string> = {
     "L'action récurrente inachevée nécessite encore une réconciliation.",
   "The recurring event action still needs reconciliation.":
     "L'action sur l'événement récurrent nécessite encore une réconciliation.",
+
+  // iTIP responses and cancellations in the reader (applied on confirmation)
+  "Response to “{title}”": "Réponse à « {title} »",
+  "Update calendar": "Mettre à jour le calendrier",
+  "“{title}” was cancelled by the organizer": "« {title} » a été annulé par l'organisateur",
+  "Remove from calendar": "Retirer du calendrier",
+  "Calendar updated with this response.": "Calendrier mis à jour avec cette réponse.",
+  "Not applied: the sender is not an attendee of an event you organize.":
+    "Non appliqué : l'expéditeur n'est pas participant d'un événement que vous organisez.",
+  "Event removed from your calendar.": "Événement retiré de votre calendrier.",
+  "Not applied: the sender is not the organizer of a matching event in your calendar.":
+    "Non appliqué : l'expéditeur n'est pas l'organisateur d'un événement correspondant de votre calendrier.",
+  "Could not apply: {error}": "Impossible d'appliquer : {error}",
 };
