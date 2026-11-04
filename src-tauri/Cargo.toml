@@ -11,7 +11,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 dead_code = "deny"
 
 [dependencies]
-tauri = { version = "2", features = ["devtools"] }
+# No "devtools" feature: the web inspector stays available in debug builds
+# (Tauri enables it for debug_assertions) but is not compiled into releases.
+tauri = { version = "2" }
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
