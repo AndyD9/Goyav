@@ -295,6 +295,13 @@ pub async fn add_account(
     // During OAuth flow, tokens are stored under a temp ID like "o365-pending-123"
     // or "gmail-pending-123", referenced via password field "oauth2:{temp_id}".
     if let Some(temp_id) = config.password.strip_prefix("oauth2:") {
+        // Only the temporary ids the OAuth flows mint may be migrated (and
+        // deleted afterwards); never another account's token entry.
+        if !is_pending_oauth_id(temp_id) {
+            return Err(crate::error::Error::Other(
+                "Invalid OAuth sign-in session; please sign in again".into(),
+            ));
+        }
         if let Ok(Some(tokens)) = state.providers.token_store().load(temp_id) {
             state.providers.token_store().store(&id, &tokens)?;
             state.providers.token_store().delete(temp_id).ok();
@@ -510,8 +517,32 @@ pub async fn pick_signature_file(app: tauri::AppHandle) -> Result<Option<PickedS
     Ok(Some(PickedSignatureFile { name, content }))
 }
 
+/// Temporary token-store ids minted by the OAuth flows in AccountFormModal
+/// (`gmail-pending-<ms>`, `o365-pending-<ms>`, `jmap-oidc-pending-<ms>`).
+fn is_pending_oauth_id(id: &str) -> bool {
+    ["gmail-pending-", "o365-pending-", "jmap-oidc-pending-"]
+        .iter()
+        .find_map(|prefix| id.strip_prefix(prefix))
+        .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// Account ids become a directory name under the data dir. Accept only a
+/// single plain component so a crafted id can never point elsewhere.
+fn is_safe_account_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 128
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
 #[tauri::command]
 pub async fn delete_account(state: State<'_, AppState>, account_id: String) -> Result<()> {
+    if !is_safe_account_id(&account_id) {
+        return Err(crate::error::Error::Other(format!(
+            "Invalid account id: {account_id:?}"
+        )));
+    }
     log::info!("Deleting account {}", account_id);
     // A previous cleanup may have failed only because OAuth needed renewal.
     // Retry before checking the hard lifecycle-reference deletion guard.
@@ -568,6 +599,32 @@ pub async fn abandon_zoom_account(
         account_id
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod id_validation_tests {
+    use super::{is_pending_oauth_id, is_safe_account_id};
+
+    #[test]
+    fn only_minted_pending_ids_are_migrated() {
+        assert!(is_pending_oauth_id("gmail-pending-1730000000000"));
+        assert!(is_pending_oauth_id("o365-pending-1"));
+        assert!(is_pending_oauth_id("jmap-oidc-pending-42"));
+        // Another account's real id, or anything else, is refused.
+        assert!(!is_pending_oauth_id("6f1c2a64-1b7e-4b8e-9d5c-2f0e4b7a9c11"));
+        assert!(!is_pending_oauth_id("gmail-pending-"));
+        assert!(!is_pending_oauth_id("gmail-pending-12x"));
+        assert!(!is_pending_oauth_id("zoom-pending-1"));
+    }
+
+    #[test]
+    fn account_ids_cannot_escape_the_data_dir() {
+        assert!(is_safe_account_id("6f1c2a64-1b7e-4b8e-9d5c-2f0e4b7a9c11"));
+        assert!(is_safe_account_id("test-account_1"));
+        for id in ["", "..", ".", "../x", "/Users/me", "a/b", "a\\b", "x\0y"] {
+            assert!(!is_safe_account_id(id), "{id:?}");
+        }
+    }
 }
 
 #[cfg(test)]
