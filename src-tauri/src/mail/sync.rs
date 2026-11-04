@@ -842,11 +842,25 @@ pub(crate) fn sanitize_folder_name(name: &str) -> String {
         .collect::<Vec<_>>()
         .join(".");
 
-    if sanitized.is_empty() || sanitized == "." || sanitized == ".." {
+    let readable = if sanitized.is_empty() || sanitized == "." || sanitized == ".." {
         "_".to_string()
     } else {
         sanitized
-    }
+    };
+    // The readable part is lossy ('.' -> '_', '/' -> '.') and case-insensitive
+    // filesystems fold case, so distinct server folders ("A/B.C", "A/B_C",
+    // "Work"/"work") could share one directory and overwrite each other's
+    // "{uid}:2,{flags}" body files. A hash of the exact server name makes the
+    // directory unique per folder. Stored maildir paths are recorded per
+    // message, so bodies written under the previous naming stay readable.
+    format!("{readable}~{:016x}", fnv1a64(name.as_bytes()))
+}
+
+/// FNV-1a 64-bit: small, stable across Rust versions and platforms.
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325u64, |hash, &byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3)
+    })
 }
 
 pub(crate) fn flags_to_maildir_suffix(flags: &[String]) -> String {
@@ -1246,5 +1260,42 @@ mod folder_preflight_tests {
     #[test]
     fn all_uids_below_the_lowest_failure_yields_none() {
         assert_eq!(safe_watermark(&[5], &[5], 11), None);
+    }
+}
+
+#[cfg(test)]
+mod folder_name_tests {
+    use super::sanitize_folder_name;
+
+    #[test]
+    fn distinct_server_folders_get_distinct_directories() {
+        let names = [
+            "Public/Team.News",
+            "Public/Team_News",
+            "Public.Team_News",
+            "INBOX.Work",
+            "INBOX_Work",
+            "Work",
+            "work",
+        ];
+        let dirs: Vec<String> = names.iter().map(|n| sanitize_folder_name(n)).collect();
+        for (i, a) in dirs.iter().enumerate() {
+            for b in &dirs[i + 1..] {
+                // Compare case-insensitively: APFS is case-insensitive by default.
+                assert!(!a.eq_ignore_ascii_case(b), "{a} vs {b}");
+            }
+        }
+    }
+
+    #[test]
+    fn directory_name_stays_a_single_safe_component() {
+        for name in ["../../etc", "/abs/path", "a\\b", "..", ".", "", "x\0y"] {
+            let dir = sanitize_folder_name(name);
+            assert!(!dir.contains('/') && !dir.contains('\\') && !dir.contains('\0'), "{dir}");
+            assert!(dir != "." && dir != ".." && !dir.is_empty(), "{dir}");
+        }
+        // Stable and readable.
+        assert_eq!(sanitize_folder_name("INBOX"), sanitize_folder_name("INBOX"));
+        assert!(sanitize_folder_name("INBOX").starts_with("INBOX~"));
     }
 }
