@@ -496,6 +496,57 @@ describe("SettingsView", () => {
     expect(api.abandonZoomAccount).not.toHaveBeenCalled();
   });
 
+  it("shows a loading state while the account is being deleted", async () => {
+    const store = useAccountsStore();
+    store.accounts = [zoomAccount()];
+    let resolveDelete!: () => void;
+    vi.mocked(api.deleteAccount).mockImplementationOnce(
+      () => new Promise((resolve) => { resolveDelete = () => resolve(undefined); }),
+    );
+    const wrapper = mount(SettingsView, {
+      global: { plugins: [makeRouter()] },
+      attachTo: document.body,
+    });
+
+    await wrapper.find('[title="Delete"]').trigger("click");
+    await flushPromises();
+    const confirm = bodyEl('[data-testid="delete-account-confirm"]') as HTMLButtonElement;
+    confirm.click();
+    await flushPromises();
+
+    expect(confirm.disabled).toBe(true);
+    expect(confirm.textContent).toContain("Deleting");
+    expect(confirm.querySelector(".btn-spinner")).not.toBeNull();
+    (bodyEl(".modal-footer .btn-secondary") as HTMLButtonElement).click();
+    await flushPromises();
+    expect(bodyEl('[data-testid="delete-account-confirm"]')).not.toBeNull();
+
+    resolveDelete();
+    await flushPromises();
+    expect(bodyEl('[data-testid="delete-account-confirm"]')).toBeNull();
+  });
+
+  it("keeps the dialog open and shows the error when deletion fails", async () => {
+    const store = useAccountsStore();
+    store.accounts = [zoomAccount()];
+    vi.mocked(api.deleteAccount).mockRejectedValueOnce("Zoom cleanup failed");
+    const wrapper = mount(SettingsView, {
+      global: { plugins: [makeRouter()] },
+      attachTo: document.body,
+    });
+
+    await wrapper.find('[title="Delete"]').trigger("click");
+    await flushPromises();
+    bodyEl('[data-testid="delete-account-confirm"]')!.click();
+    await flushPromises();
+
+    expect(bodyEl('[data-testid="delete-account-error"]')?.textContent)
+      .toContain("Zoom cleanup failed");
+    const confirm = bodyEl('[data-testid="delete-account-confirm"]') as HTMLButtonElement;
+    expect(confirm.disabled).toBe(false);
+    expect(confirm.textContent).toContain("Delete");
+  });
+
   it("does not offer local abandonment for non-Zoom accounts", async () => {
     const store = useAccountsStore();
     store.accounts = [{

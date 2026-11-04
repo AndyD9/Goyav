@@ -8,6 +8,7 @@ import { usePlatformStore } from "@/stores/platform";
 import { useUiStore, type MessageListLayout, type Theme } from "@/stores/ui";
 import { acctColor } from "@/lib/account-colors";
 import * as api from "@/lib/tauri";
+import { errorMessage } from "@/lib/errors";
 import MobileAppBar from "@/components/mobile/MobileAppBar.vue";
 import AccountTypePicker from "@/components/settings/AccountTypePicker.vue";
 import AccountFormModal from "@/components/settings/AccountFormModal.vue";
@@ -122,6 +123,8 @@ const deletingZoomAccount = ref(false);
 const deletingVisioAccount = ref(false);
 const deleteProviderLoading = ref(false);
 const deleteProviderLookupFailed = ref(false);
+const deleteInProgress = ref(false);
+const deleteError = ref<string | null>(null);
 
 function getInitials(name: string): string {
   const words = name.split(/\s+/);
@@ -181,6 +184,10 @@ async function confirmDelete(id: string) {
 }
 
 function closeDeleteConfirm() {
+  // Deletion runs in the backend and cannot be cancelled; keep the dialog
+  // open until it settles so the user sees it is still in progress.
+  if (deleteInProgress.value) return;
+  deleteError.value = null;
   showDeleteConfirm.value = false;
   deletingAccountId.value = null;
   abandonZoomAcknowledged.value = false;
@@ -191,15 +198,25 @@ function closeDeleteConfirm() {
 }
 
 async function doDelete() {
-  if (deleteProviderLoading.value) return;
-  if (deletingAccountId.value) {
-    if (deletingZoomAccount.value && abandonZoomAcknowledged.value) {
-      await accountsStore.abandonZoomAccount(
-        deletingAccountId.value,
-        "ABANDON REMOTE ZOOM MEETINGS",
-      );
-    } else {
-      await accountsStore.deleteAccount(deletingAccountId.value);
+  if (deleteProviderLoading.value || deleteInProgress.value) return;
+  const id = deletingAccountId.value;
+  if (id) {
+    deleteInProgress.value = true;
+    deleteError.value = null;
+    try {
+      if (deletingZoomAccount.value && abandonZoomAcknowledged.value) {
+        await accountsStore.abandonZoomAccount(
+          id,
+          "ABANDON REMOTE ZOOM MEETINGS",
+        );
+      } else {
+        await accountsStore.deleteAccount(id);
+      }
+    } catch (error) {
+      deleteError.value = errorMessage(error);
+      return;
+    } finally {
+      deleteInProgress.value = false;
     }
   }
   closeDeleteConfirm();
@@ -633,6 +650,7 @@ watch([
                 <input
                   v-model="abandonZoomAcknowledged"
                   type="checkbox"
+                  :disabled="deleteInProgress"
                   data-testid="zoom-abandon-checkbox"
                 />
                 {{ t("I understand that remote Zoom meetings may remain") }}
@@ -658,16 +676,43 @@ watch([
                 {{ t("Deleting this local account does not delete rooms already created in La Suite Visio. Goyav will forget its associations with those rooms, so remove them from Visio separately if they should no longer be available.") }}
               </p>
             </div>
+            <p
+              v-if="deleteError"
+              class="delete-error"
+              role="alert"
+              data-testid="delete-account-error"
+            >
+              {{ t("Could not delete the account: {error}", { error: deleteError }) }}
+            </p>
           </div>
           <div class="modal-footer">
-            <button class="btn-secondary" @click="closeDeleteConfirm">{{ t("Cancel") }}</button>
+            <button
+              class="btn-secondary"
+              :disabled="deleteInProgress"
+              @click="closeDeleteConfirm"
+            >
+              {{ t("Cancel") }}
+            </button>
             <button
               class="btn-danger"
               data-testid="delete-account-confirm"
-              :disabled="deleteProviderLoading"
+              :disabled="deleteProviderLoading || deleteInProgress"
+              :aria-busy="deleteInProgress"
               @click="doDelete"
             >
-              {{ deleteProviderLoading ? t("Checking…") : deletingZoomAccount && abandonZoomAcknowledged ? t("Delete locally") : t("Delete") }}
+              <svg
+                v-if="deleteInProgress"
+                class="btn-spinner"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="M21 12a9 9 0 1 1-6.22-8.56" />
+              </svg>
+              {{ deleteInProgress ? t("Deleting…") : deleteProviderLoading ? t("Checking…") : deletingZoomAccount && abandonZoomAcknowledged ? t("Delete locally") : t("Delete") }}
             </button>
           </div>
         </div>
@@ -1138,6 +1183,37 @@ watch([
   font-size: 13px;
   color: var(--color-text-secondary);
   line-height: 1.5;
+}
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-danger:disabled,
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.btn-spinner {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  animation: delete-spin 0.8s linear infinite;
+}
+
+@keyframes delete-spin {
+  to { transform: rotate(360deg); }
+}
+
+.delete-error {
+  margin-top: 16px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-danger-text, var(--color-danger));
 }
 
 .zoom-abandon-warning {

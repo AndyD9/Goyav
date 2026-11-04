@@ -173,6 +173,7 @@ export const account: Record<string, string> = {
   "Deleting this local account does not delete rooms already created in La Suite Visio. Goyav will forget its associations with those rooms, so remove them from Visio separately if they should no longer be available.":
     "Supprimer ce compte local ne supprime pas les salles déjà créées dans La Suite Visio. Goyav oubliera ses liens avec ces salles : supprimez-les depuis Visio si elles ne doivent plus être disponibles.",
   "Checking…": "Vérification…",
+  "Could not delete the account: {error}": "Impossible de supprimer le compte : {error}",
   "Delete locally": "Supprimer localement",
 
   // Changelog

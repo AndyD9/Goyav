@@ -30,4 +30,5 @@ export const common: Record<string, string> = {
   None: "Aucune",
   "(no subject)": "(sans objet)",
   "(unknown sender)": "(expéditeur inconnu)",
+  "Deleting…": "Suppression…",
 };
