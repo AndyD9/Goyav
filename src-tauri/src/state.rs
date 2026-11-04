@@ -243,7 +243,7 @@ pub struct PendingSecret {
 pub struct MatrixSsoSession {
     pub created: std::time::Instant,
     pub homeserver: String,
-    pub listener: std::net::TcpListener,
+    pub listener: crate::meet::matrix::SsoListener,
     pub state: String,
 }
 

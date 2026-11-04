@@ -911,6 +911,9 @@ impl JmapConnection {
             let status = resp.status();
             return Err(Error::Other(format!("JMAP session error: {}", status)));
         }
+        // The session document names the URLs that receive credentials, so it
+        // must not have been served over cleartext after a redirect.
+        crate::mail::url_validation::require_https(resp.url().as_str())?;
 
         let session: JmapSession = resp
             .json()
@@ -937,6 +940,16 @@ impl JmapConnection {
             .event_source_url
             .as_deref()
             .map(|u| rewrite_url(u, &base_url));
+        // Every one of these receives the account password or token. A session
+        // URL on a public host and default port is used as given by
+        // rewrite_url, so enforce https here like the configured base URL.
+        // (Templates contain {placeholders}; they are not part of the check.)
+        for url in [&api_url, &download_url, &upload_url]
+            .into_iter()
+            .chain(event_source_url.as_ref())
+        {
+            crate::mail::url_validation::require_https(&url.replace(['{', '}'], ""))?;
+        }
 
         log::info!(
             "JMAP connected: account={}, api={}, eventSource={:?}",

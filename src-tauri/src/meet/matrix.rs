@@ -58,14 +58,10 @@ pub struct LoginResult {
 /// so a TOCTOU between `meet_matrix_login_start` (which races
 /// the listener registration) and the legitimate redirect is
 /// what we're actually defending against.
-pub fn sso_login_start(homeserver_url: &str) -> Result<(String, TcpListener, String)> {
+pub fn sso_login_start(homeserver_url: &str) -> Result<(String, SsoListener, String)> {
     crate::mail::url_validation::require_https(homeserver_url)?;
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .map_err(|e| Error::Other(format!("matrix sso bind: {}", e)))?;
-    let port = listener
-        .local_addr()
-        .map_err(|e| Error::Other(format!("matrix sso port: {}", e)))?
-        .port();
+    let listener = SsoListener::bind_loopback()?;
+    let port = listener.port()?;
     let state = crate::oauth::generate_code_verifier();
     // Matrix requires `localhost` in the Redirect URL to route back
     // through the SSO IdP cleanly; some IdPs reject 127.0.0.1.
@@ -84,6 +80,67 @@ pub fn sso_login_start(homeserver_url: &str) -> Result<(String, TcpListener, Str
     Ok((url, listener, state))
 }
 
+/// Loopback listener for the SSO callback.
+///
+/// The redirect URL names `localhost`, which browsers may resolve to `::1`
+/// before `127.0.0.1`. Binding only IPv4 would leave `[::1]:<port>` free for
+/// another local process to bind and receive the redirect, including the
+/// `loginToken` (a bearer credential: m.login.token has no PKCE). The same
+/// port is therefore held on both loopback addresses, and the callback is
+/// accepted on whichever the browser uses.
+#[derive(Debug)]
+pub struct SsoListener {
+    ipv4: TcpListener,
+    ipv6: Option<TcpListener>,
+}
+
+impl From<TcpListener> for SsoListener {
+    fn from(ipv4: TcpListener) -> Self {
+        Self { ipv4, ipv6: None }
+    }
+}
+
+impl SsoListener {
+    fn bind_loopback() -> Result<Self> {
+        for _ in 0..8 {
+            let ipv4 = TcpListener::bind("127.0.0.1:0")
+                .map_err(|e| Error::Other(format!("matrix sso bind: {}", e)))?;
+            let port = ipv4
+                .local_addr()
+                .map_err(|e| Error::Other(format!("matrix sso port: {}", e)))?
+                .port();
+            match TcpListener::bind(("::1", port)) {
+                Ok(ipv6) => return Ok(Self { ipv4, ipv6: Some(ipv6) }),
+                // Someone already holds [::1]:port; pick another port.
+                Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => continue,
+                // No IPv6 loopback on this host: browsers cannot use it either.
+                Err(_) => return Ok(Self { ipv4, ipv6: None }),
+            }
+        }
+        Err(Error::Other(
+            "matrix sso bind: could not reserve a loopback port on IPv4 and IPv6".into(),
+        ))
+    }
+
+    pub fn port(&self) -> Result<u16> {
+        Ok(self
+            .ipv4
+            .local_addr()
+            .map_err(|e| Error::Other(format!("matrix sso port: {}", e)))?
+            .port())
+    }
+
+    fn accept_nonblocking(&self) -> std::io::Result<(std::net::TcpStream, std::net::SocketAddr)> {
+        match self.ipv4.accept() {
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => match &self.ipv6 {
+                Some(ipv6) => ipv6.accept(),
+                None => Err(e),
+            },
+            other => other,
+        }
+    }
+}
+
 /// Wait for the browser to come back with a `loginToken` query
 /// parameter, validating that its `state=` matches the value we
 /// embedded in `sso_login_start`. Five-minute timeout matches
@@ -91,14 +148,20 @@ pub fn sso_login_start(homeserver_url: &str) -> Result<(String, TcpListener, Str
 /// listener wedged forever. A mismatched / missing state is
 /// surfaced as an error rather than silently exchanged — see
 /// the doc on `sso_login_start` for why this matters.
-pub fn await_login_token(listener: TcpListener, expected_state: &str) -> Result<String> {
+pub fn await_login_token(
+    listener: impl Into<SsoListener>,
+    expected_state: &str,
+) -> Result<String> {
+    let listener: SsoListener = listener.into();
     let deadline = Instant::now() + Duration::from_secs(SSO_CALLBACK_TIMEOUT_SECS);
-    listener
-        .set_nonblocking(true)
-        .map_err(|e| Error::Other(format!("matrix sso non-blocking: {}", e)))?;
+    for socket in std::iter::once(&listener.ipv4).chain(listener.ipv6.as_ref()) {
+        socket
+            .set_nonblocking(true)
+            .map_err(|e| Error::Other(format!("matrix sso non-blocking: {}", e)))?;
+    }
 
     let (mut stream, _) = loop {
-        match listener.accept() {
+        match listener.accept_nonblocking() {
             Ok(conn) => break conn,
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 if Instant::now() >= deadline {
@@ -736,6 +799,21 @@ mod tests {
             normalize_base_url("https://m.example.com///"),
             "https://m.example.com"
         );
+    }
+
+    #[test]
+    fn sso_callback_port_is_reserved_on_both_loopbacks() {
+        let listener = SsoListener::bind_loopback().unwrap();
+        let port = listener.port().unwrap();
+        // Another local process must not be able to take [::1]:<port> and
+        // receive the browser redirect carrying the loginToken.
+        if let Some(ipv6) = &listener.ipv6 {
+            assert_eq!(ipv6.local_addr().unwrap().port(), port);
+            let err = TcpListener::bind(("::1", port)).unwrap_err();
+            assert_eq!(err.kind(), std::io::ErrorKind::AddrInUse);
+        }
+        let err = TcpListener::bind(("127.0.0.1", port)).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::AddrInUse);
     }
 
     #[test]

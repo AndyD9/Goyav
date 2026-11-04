@@ -170,10 +170,7 @@ pub async fn meet_matrix_login_start(
     homeserver_url: String,
 ) -> Result<MatrixLoginStart> {
     let (url, listener, sso_state) = meet::matrix::sso_login_start(&homeserver_url)?;
-    let port = listener
-        .local_addr()
-        .map_err(|e| Error::Other(format!("matrix listener port: {}", e)))?
-        .port();
+    let port = listener.port()?;
     {
         let mut map = state.matrix_sso_listeners.lock().unwrap();
         evict_stale_matrix_sessions(&mut map);
