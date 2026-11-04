@@ -118,6 +118,53 @@ describe("ContactsView (desktop)", () => {
     expect(wrapper.find(".contact-name").text()).toBe("Cid");
   });
 
+  it("shows a busy state while deleting a contact and closes when done", async () => {
+    let resolveDelete!: () => void;
+    vi.mocked(api.deleteContact).mockImplementationOnce(
+      () => new Promise((resolve) => { resolveDelete = () => resolve(undefined); }),
+    );
+    const wrapper = mountView();
+    await flushPromises();
+    await wrapper.find('[data-testid="contact-b"]').trigger("click");
+    await wrapper.find('[data-testid="contact-delete-btn"]').trigger("click");
+
+    const confirm = document.body.querySelector(
+      '[data-testid="delete-contact-confirm"]',
+    ) as HTMLButtonElement;
+    confirm.click();
+    confirm.click();
+    await flushPromises();
+
+    expect(api.deleteContact).toHaveBeenCalledTimes(1);
+    expect(confirm.disabled).toBe(true);
+    expect(confirm.textContent).toContain("Deleting");
+
+    resolveDelete();
+    await flushPromises();
+    expect(document.body.querySelector('[data-testid="delete-contact-confirm"]')).toBeNull();
+    expect(wrapper.find('[data-testid="contact-detail-name"]').exists()).toBe(false);
+  });
+
+  it("keeps the delete dialog open with the error when deletion fails", async () => {
+    vi.mocked(api.deleteContact).mockRejectedValueOnce("CardDAV 412");
+    const wrapper = mountView();
+    await flushPromises();
+    await wrapper.find('[data-testid="contact-b"]').trigger("click");
+    await wrapper.find('[data-testid="contact-delete-btn"]').trigger("click");
+
+    (document.body.querySelector(
+      '[data-testid="delete-contact-confirm"]',
+    ) as HTMLButtonElement).click();
+    await flushPromises();
+
+    expect(document.body.querySelector('[data-testid="delete-contact-error"]')?.textContent)
+      .toContain("CardDAV 412");
+    const confirm = document.body.querySelector(
+      '[data-testid="delete-contact-confirm"]',
+    ) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(false);
+  });
+
   it("clicking a contact shows it in the detail panel", async () => {
     const wrapper = mountView();
     await flushPromises();

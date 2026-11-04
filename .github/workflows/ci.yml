@@ -4,7 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, goyav]
+  # Release (push to goyav) calls this workflow and only publishes when it
+  # passes, so goyav pushes are not listed above to avoid running it twice.
+  workflow_call:
 
 # Cancel superseded runs on the same ref (e.g. re-pushes to a PR branch).
 concurrency:

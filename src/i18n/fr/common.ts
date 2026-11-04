@@ -31,4 +31,5 @@ export const common: Record<string, string> = {
   "(no subject)": "(sans objet)",
   "(unknown sender)": "(expéditeur inconnu)",
   "Deleting…": "Suppression…",
+  "Something went wrong: {error}": "Une erreur est survenue : {error}",
 };

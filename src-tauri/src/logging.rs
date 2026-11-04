@@ -5,9 +5,20 @@ use crate::error::Result;
 /// Set up file + stderr logging. Log file goes into the data directory
 /// next to the SQLite database so everything lives in one place.
 ///
-/// File: `<data_dir>/chithi.log`  (INFO and above)
-/// Stderr: DEBUG and above (only in debug builds)
+/// File: `<data_dir>/chithi.log`  (INFO and above; DEBUG for this crate in
+/// debug builds)
+/// Stderr: DEBUG and above, TRACE for this crate (only in debug builds)
 pub fn init(data_dir: &Path) -> Result<()> {
+    // fern matches whole `::` path segments, so the filter has to name the
+    // library crate (`chithi_lib`), not the package (`chithi`).
+    let own_crate = env!("CARGO_CRATE_NAME");
+    // Release builds stay at INFO: some debug lines fire once per message
+    // and the log file is never rotated.
+    let own_file_level = if cfg!(debug_assertions) {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Info
+    };
     let log_path = data_dir.join("chithi.log");
 
     let file_config = fern::Dispatch::new()
@@ -21,8 +32,7 @@ pub fn init(data_dir: &Path) -> Result<()> {
             ))
         })
         .level(log::LevelFilter::Info)
-        // Keep our own crate at debug level in the log file too
-        .level_for("chithi", log::LevelFilter::Debug)
+        .level_for(own_crate, own_file_level)
         .chain(fern::log_file(&log_path).map_err(|e| {
             crate::error::Error::Other(format!(
                 "Failed to open log file {}: {}",
@@ -45,7 +55,7 @@ pub fn init(data_dir: &Path) -> Result<()> {
                 ))
             })
             .level(log::LevelFilter::Debug)
-            .level_for("chithi", log::LevelFilter::Trace)
+            .level_for(own_crate, log::LevelFilter::Trace)
             .chain(std::io::stderr());
         root = root.chain(stderr_config);
     }

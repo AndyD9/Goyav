@@ -302,15 +302,43 @@ pub async fn add_account(
                 "Invalid OAuth sign-in session; please sign in again".into(),
             ));
         }
-        if let Ok(Some(tokens)) = state.providers.token_store().load(temp_id) {
-            state.providers.token_store().store(&id, &tokens)?;
-            state.providers.token_store().delete(temp_id).ok();
-            log::info!("Migrated OAuth tokens from {} to {}", temp_id, id);
+        // Creating the account without its tokens would leave it unable to
+        // sync, so a keychain failure or a missing entry aborts the add.
+        let tokens = state
+            .providers
+            .token_store()
+            .load(temp_id)?
+            .ok_or_else(|| {
+                crate::error::Error::Other(
+                    "OAuth sign-in session expired; please sign in again".into(),
+                )
+            })?;
+        state.providers.token_store().store(&id, &tokens)?;
+        if let Err(error) = state.providers.token_store().delete(temp_id) {
+            log::warn!(
+                "Migrated OAuth tokens to {} but could not delete temporary entry {}: {}",
+                id,
+                temp_id,
+                error
+            );
         }
+        log::info!("Migrated OAuth tokens from {} to {}", temp_id, id);
     }
 
     let conn = state.db.writer().await;
-    db::accounts::insert_account(&conn, &id, &config)?;
+    if let Err(error) = db::accounts::insert_account(&conn, &id, &config) {
+        // Don't leave the migrated tokens behind under an id no account owns.
+        if config.password.starts_with("oauth2:") {
+            if let Err(cleanup) = state.providers.token_store().delete(&id) {
+                log::warn!(
+                    "Could not remove OAuth tokens for failed account {}: {}",
+                    id,
+                    cleanup
+                );
+            }
+        }
+        return Err(error);
+    }
     log::info!("Account created with id={}", id);
 
     // Create a default local calendar only if the account has an enabled

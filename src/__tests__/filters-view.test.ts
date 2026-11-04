@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 
 vi.mock("@/lib/tauri", () => ({
@@ -75,5 +75,26 @@ describe("FiltersView", () => {
       op: "contains",
       value: "team@example.com",
     });
+  });
+
+  it("saves a filter only once when Save is clicked twice", async () => {
+    let resolveSave!: () => void;
+    vi.mocked(api.saveFilter).mockImplementationOnce(
+      () => new Promise((resolve) => { resolveSave = () => resolve(undefined); }),
+    );
+    const wrapper = mount(FiltersView, { attachTo: document.body });
+
+    await wrapper.find('[data-testid="filter-new-btn"]').trigger("click");
+    await wrapper.find(".cond-value").setValue("team@example.com");
+    const save = wrapper.find('[data-testid="filter-save-btn"]');
+    await save.trigger("click");
+    await save.trigger("click");
+
+    expect(api.saveFilter).toHaveBeenCalledTimes(1);
+    expect((save.element as HTMLButtonElement).disabled).toBe(true);
+
+    resolveSave();
+    await flushPromises();
+    expect(wrapper.find('[data-testid="filter-save-btn"]').exists()).toBe(false);
   });
 });

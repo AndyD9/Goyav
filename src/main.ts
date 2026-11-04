@@ -9,6 +9,7 @@ import {
 import { usePlatformStore } from "./stores/platform";
 import { dismissToast, showToast } from "./lib/toast";
 import { t } from "./i18n";
+import { errorMessage } from "./lib/errors";
 import "./assets/styles/main.css";
 
 const STARTUP_ATTEMPTS = 2;
@@ -18,6 +19,28 @@ const BACKGROUND_RETRY_INITIAL_DELAY_MS = 1_000;
 const BACKGROUND_RETRY_MAX_DELAY_MS = 30_000;
 
 const app = createApp(App);
+
+// Last line of defence for failures no handler caught (e.g. a rejected
+// command in an async click handler): log them and tell the user, instead
+// of the action silently doing nothing.
+let lastReportedError: { message: string; at: number } | null = null;
+function reportUnhandledError(error: unknown) {
+  console.error("Unhandled error:", error);
+  const message = errorMessage(error);
+  const now = Date.now();
+  // A failing background loop can reject repeatedly; show it once.
+  if (lastReportedError?.message === message && now - lastReportedError.at < 5_000) {
+    return;
+  }
+  lastReportedError = { message, at: now };
+  showToast(t("Something went wrong: {error}", { error: message }), "error", 6_000);
+}
+app.config.errorHandler = (error) => reportUnhandledError(error);
+window.addEventListener("unhandledrejection", (event) => {
+  event.preventDefault();
+  reportUnhandledError(event.reason);
+});
+
 const pinia = createPinia();
 app.use(pinia);
 app.use(router);

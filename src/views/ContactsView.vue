@@ -9,6 +9,7 @@ import { usePlatformStore } from "@/stores/platform";
 import { useUiStore } from "@/stores/ui";
 import type { ContactBook, Contact } from "@/lib/types";
 import * as api from "@/lib/tauri";
+import { errorMessage } from "@/lib/errors";
 import ContactFormModal from "@/components/contacts/ContactFormModal.vue";
 import BooksSidebar from "@/components/contacts/BooksSidebar.vue";
 import ContactListPanel from "@/components/contacts/ContactListPanel.vue";
@@ -34,6 +35,8 @@ const selectedBookId = ref<string | null>(storeSelectedBookId.value);
 const selectedContact = ref<Contact | null>(null);
 const showDeleteConfirm = ref(false);
 const deletingContactId = ref<string | null>(null);
+const deleteInProgress = ref(false);
+const deleteError = ref<string | null>(null);
 
 // The new/edit contact form lives in ContactFormModal (#166); the view
 // drives it through the exposed openNew / openEdit handles.
@@ -317,12 +320,29 @@ function confirmDelete(id: string) {
   showDeleteConfirm.value = true;
 }
 
-async function doDelete() {
-  if (!deletingContactId.value) return;
-  await api.deleteContact(deletingContactId.value);
+function closeDeleteConfirm() {
+  // The delete is already on its way to the server and cannot be cancelled.
+  if (deleteInProgress.value) return;
   showDeleteConfirm.value = false;
-  if (selectedContact.value?.id === deletingContactId.value) selectedContact.value = null;
   deletingContactId.value = null;
+  deleteError.value = null;
+}
+
+async function doDelete() {
+  const id = deletingContactId.value;
+  if (!id || deleteInProgress.value) return;
+  deleteInProgress.value = true;
+  deleteError.value = null;
+  try {
+    await api.deleteContact(id);
+  } catch (error) {
+    deleteError.value = errorMessage(error);
+    return;
+  } finally {
+    deleteInProgress.value = false;
+  }
+  closeDeleteConfirm();
+  if (selectedContact.value?.id === id) selectedContact.value = null;
   if (selectedBookId.value) contacts.value = await api.listContacts(selectedBookId.value);
 }
 
@@ -432,15 +452,43 @@ async function onMerged(surviving: Contact) {
 
     <!-- Delete Confirm -->
     <Teleport to="body">
-      <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="showDeleteConfirm = false">
+      <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="closeDeleteConfirm">
         <div class="modal modal-sm">
           <div class="modal-body">
             <h3 class="confirm-title">{{ t('Delete Contact') }}</h3>
             <p class="confirm-text">{{ t('Are you sure? This cannot be undone.') }}</p>
+            <p
+              v-if="deleteError"
+              class="delete-error"
+              role="alert"
+              data-testid="delete-contact-error"
+            >
+              {{ t('Error: {error}', { error: deleteError }) }}
+            </p>
           </div>
           <div class="modal-footer">
-            <button class="btn-cancel" @click="showDeleteConfirm = false">{{ t('Cancel') }}</button>
-            <button class="btn-delete" @click="doDelete">{{ t('Delete') }}</button>
+            <button class="btn-cancel" :disabled="deleteInProgress" @click="closeDeleteConfirm">{{ t('Cancel') }}</button>
+            <button
+              class="btn-delete"
+              data-testid="delete-contact-confirm"
+              :disabled="deleteInProgress"
+              :aria-busy="deleteInProgress"
+              @click="doDelete"
+            >
+              <svg
+                v-if="deleteInProgress"
+                class="btn-spinner spinning"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="M21 12a9 9 0 1 1-6.22-8.56" />
+              </svg>
+              {{ deleteInProgress ? t('Deleting…') : t('Delete') }}
+            </button>
           </div>
         </div>
       </div>
@@ -628,8 +676,16 @@ async function onMerged(surviving: Contact) {
   border-radius: 4px; font-size: 16px; font-weight: 500; color: var(--color-text);
 }
 .btn-delete {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   height: 32px; padding: 0 20px; background: var(--color-danger);
   border-radius: 4px; font-size: 16px; font-weight: 500; color: white;
+}
+.btn-cancel:disabled,
+.btn-delete:disabled { opacity: 0.6; cursor: default; }
+.btn-spinner { width: 16px; height: 16px; flex-shrink: 0; }
+.delete-error {
+  margin-top: 12px; font-size: 13px; line-height: 1.45;
+  color: var(--color-danger-text, var(--color-danger));
 }
 
 .confirm-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }

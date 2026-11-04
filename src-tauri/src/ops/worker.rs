@@ -332,7 +332,12 @@ impl AccountWorker {
                     }
                 } else {
                     let conn = self.db.writer().await;
-                    let _ = super::offline::mark_dead(&conn, entry.id);
+                    if let Err(error) = super::offline::mark_dead(&conn, entry.id) {
+                        // The row stays pending; stop instead of reporting
+                        // it dead and retrying it on every drain.
+                        log::error!("Failed to mark offline op {} dead: {}", entry.id, error);
+                        break;
+                    }
                 }
                 log::warn!(
                     "Offline op {} ({}) exceeded max retries, marking dead",
@@ -505,7 +510,19 @@ impl AccountWorker {
                     }
 
                     let conn = self.db.writer().await;
-                    let _ = super::offline::mark_completed(&conn, entry.id);
+                    if let Err(error) = super::offline::mark_completed(&conn, entry.id) {
+                        // The server already applied the op but the row is
+                        // still queued, so a later drain will replay it.
+                        // Stop here rather than keep draining on a DB that
+                        // cannot record progress.
+                        log::error!(
+                            "Offline op {} ({}) succeeded but completion persistence failed; it may be replayed: {}",
+                            entry.id,
+                            entry.action_type,
+                            error
+                        );
+                        break;
+                    }
                     log::info!(
                         "Replayed offline op {} ({}) successfully",
                         entry.id,
@@ -680,7 +697,16 @@ impl AccountWorker {
                     }
 
                     let conn = self.db.writer().await;
-                    let _ = super::offline::mark_failed(&conn, entry.id, &e.to_string());
+                    if let Err(error) = super::offline::mark_failed(&conn, entry.id, &e.to_string())
+                    {
+                        // Without the retry count bump the op never reaches
+                        // the dead threshold and is retried forever.
+                        log::error!(
+                            "Failed to record retry for offline op {}: {}",
+                            entry.id,
+                            error
+                        );
+                    }
                     log::warn!(
                         "Replay of offline op {} ({}) failed (attempt {}): {}",
                         entry.id,

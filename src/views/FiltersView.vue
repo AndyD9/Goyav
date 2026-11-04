@@ -134,22 +134,42 @@ function needsValue(action: FilterAction): boolean {
   return action.action === "flag" || action.action === "unflag";
 }
 
-async function toggleEnabled(rule: FilterRule) {
-  const updated = { ...rule, enabled: !rule.enabled };
-  await filtersStore.saveFilter(updated);
-}
+// One filter write at a time: a double click must not save or delete
+// twice. Failures reach the global error toast (main.ts).
+const filterWriteInProgress = ref(false);
 
-async function saveFilter() {
-  if (!editingRule.value) return;
-  await filtersStore.saveFilter(editingRule.value);
-  editingRule.value = null;
-}
-
-async function deleteFilter(id: string) {
-  await filtersStore.deleteFilter(id);
-  if (editingRule.value?.id === id) {
-    editingRule.value = null;
+async function runFilterWrite(write: () => Promise<void>) {
+  if (filterWriteInProgress.value) return;
+  filterWriteInProgress.value = true;
+  try {
+    await write();
+  } finally {
+    filterWriteInProgress.value = false;
   }
+}
+
+function toggleEnabled(rule: FilterRule) {
+  return runFilterWrite(() =>
+    filtersStore.saveFilter({ ...rule, enabled: !rule.enabled }),
+  );
+}
+
+function saveFilter() {
+  const rule = editingRule.value;
+  if (!rule) return;
+  return runFilterWrite(async () => {
+    await filtersStore.saveFilter(rule);
+    editingRule.value = null;
+  });
+}
+
+function deleteFilter(id: string) {
+  return runFilterWrite(async () => {
+    await filtersStore.deleteFilter(id);
+    if (editingRule.value?.id === id) {
+      editingRule.value = null;
+    }
+  });
 }
 
 async function applyToFolder() {
@@ -372,13 +392,13 @@ const actionFolderOptions = computed(() => [
 
         <!-- Footer -->
         <div class="editor-footer">
-          <button v-if="editingRule.id && filtersStore.filters.some(f => f.id === editingRule?.id)" class="btn-delete" data-testid="filter-delete-btn" @click="deleteFilter(editingRule.id)">
+          <button v-if="editingRule.id && filtersStore.filters.some(f => f.id === editingRule?.id)" class="btn-delete" data-testid="filter-delete-btn" :disabled="filterWriteInProgress" @click="deleteFilter(editingRule.id)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
             {{ t('Delete') }}
           </button>
           <div class="footer-right">
             <button class="btn-cancel" @click="editingRule = null">{{ t('Cancel') }}</button>
-            <button class="btn-save" data-testid="filter-save-btn" @click="saveFilter">{{ t('Save Filter') }}</button>
+            <button class="btn-save" data-testid="filter-save-btn" :disabled="filterWriteInProgress" @click="saveFilter">{{ t('Save Filter') }}</button>
           </div>
         </div>
       </div>
@@ -863,8 +883,14 @@ const actionFolderOptions = computed(() => [
   cursor: pointer;
 }
 
-.btn-save:hover {
+.btn-save:hover:not(:disabled) {
   background: var(--color-accent-hover);
+}
+
+.btn-save:disabled,
+.btn-delete:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .btn-delete {

@@ -117,7 +117,8 @@ pub struct Account {
     pub meet_protocol: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// Debug is implemented by hand below so the password never reaches logs.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AccountConfig {
     pub display_name: String,
     #[serde(default)]
@@ -214,7 +215,8 @@ fn default_true() -> bool {
     true
 }
 
-#[derive(Debug, Clone)]
+// Debug is implemented by hand below so the password never reaches logs.
+#[derive(Clone)]
 pub struct AccountFull {
     pub id: String,
     pub display_name: String,
@@ -270,6 +272,42 @@ pub struct AccountFull {
     pub pgp_autocrypt_header: bool,
     pub pgp_encrypt_subject: bool,
     pub pgp_encrypt_drafts: bool,
+}
+
+/// Identifies an account in debug output without exposing its password.
+fn redacted_password(password: &str) -> &'static str {
+    if password.is_empty() {
+        "<empty>"
+    } else {
+        "<redacted>"
+    }
+}
+
+impl std::fmt::Debug for AccountConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AccountConfig")
+            .field("display_name", &self.display_name)
+            .field("email", &self.email)
+            .field("provider", &self.provider)
+            .field("mail_protocol", &self.mail_protocol)
+            .field("username", &self.username)
+            .field("password", &redacted_password(&self.password))
+            .finish_non_exhaustive()
+    }
+}
+
+impl std::fmt::Debug for AccountFull {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AccountFull")
+            .field("id", &self.id)
+            .field("display_name", &self.display_name)
+            .field("email", &self.email)
+            .field("provider", &self.provider)
+            .field("mail_protocol", &self.mail_protocol)
+            .field("username", &self.username)
+            .field("password", &redacted_password(&self.password))
+            .finish_non_exhaustive()
+    }
 }
 
 impl AccountFull {

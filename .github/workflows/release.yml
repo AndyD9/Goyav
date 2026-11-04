@@ -27,8 +27,17 @@ permissions:
   contents: write
 
 jobs:
+  # The installed app auto-updates to whatever this workflow publishes, so
+  # the full test suite must pass first.
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   macos:
     name: Build and publish (macOS arm64)
+    needs: ci
     runs-on: macos-latest
     # Signing key, its password and the OAuth client live in the "release"
     # environment, which only the goyav branch may use; other workflows and
