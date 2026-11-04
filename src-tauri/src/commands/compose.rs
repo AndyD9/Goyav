@@ -169,7 +169,10 @@ fn plain_text_to_html(text: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;");
-    format!("<div>{}</div>", escaped.replace("\r\n", "\n").replace('\n', "<br>\n"))
+    format!(
+        "<div>{}</div>",
+        escaped.replace("\r\n", "\n").replace('\n', "<br>\n")
+    )
 }
 
 /// An attachment referenced by the renderer. `token` is the opaque handle
@@ -1755,15 +1758,24 @@ mod markdown_body_tests {
     #[test]
     fn html_signature_wraps_plaintext_body() {
         let html = resolve_body_html(&signed("Hi <you>\nthanks", false)).expect("html part");
-        assert!(html.starts_with("<div>Hi &lt;you&gt;<br>\nthanks</div>"), "{html}");
-        assert!(html.ends_with("<table><tr><td>Andy</td></tr></table>"), "{html}");
+        assert!(
+            html.starts_with("<div>Hi &lt;you&gt;<br>\nthanks</div>"),
+            "{html}"
+        );
+        assert!(
+            html.ends_with("<table><tr><td>Andy</td></tr></table>"),
+            "{html}"
+        );
     }
 
     #[test]
     fn html_signature_follows_markdown_body() {
         let html = resolve_body_html(&signed("**hi**", true)).expect("html part");
         assert!(html.contains("<strong>hi</strong>"), "{html}");
-        assert!(html.ends_with("<table><tr><td>Andy</td></tr></table>"), "{html}");
+        assert!(
+            html.ends_with("<table><tr><td>Andy</td></tr></table>"),
+            "{html}"
+        );
     }
 
     #[test]

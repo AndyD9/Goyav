@@ -1782,8 +1782,11 @@ mod tests {
         assert_eq!(result, 0);
         assert!(!ical_within_bounds(&"x".repeat(MAX_ICAL_BYTES + 1)));
         // Multibyte characters at the BEGIN:/END: probe offsets must not panic.
-        assert!(ical_within_bounds("BEGé:\nENDé\nBEGIN:VCALENDAR\nEND:VCALENDAR\n"));
-        let normal = "BEGIN:VCALENDAR\nBEGIN:VEVENT\nBEGIN:VALARM\nEND:VALARM\nEND:VEVENT\nEND:VCALENDAR\n";
+        assert!(ical_within_bounds(
+            "BEGé:\nENDé\nBEGIN:VCALENDAR\nEND:VCALENDAR\n"
+        ));
+        let normal =
+            "BEGIN:VCALENDAR\nBEGIN:VEVENT\nBEGIN:VALARM\nEND:VALARM\nEND:VEVENT\nEND:VCALENDAR\n";
         assert!(ical_within_bounds(normal));
     }
 
@@ -1800,9 +1803,7 @@ mod tests {
         let invite = ParsedInvite {
             method: "REQUEST".into(),
             uid: "u1\nATTENDEE;PARTSTAT=DECLINED:mailto:x@example.test".into(),
-            summary: Some(
-                "Sync\nATTENDEE;PARTSTAT=DECLINED:mailto:colleague@example.org".into(),
-            ),
+            summary: Some("Sync\nATTENDEE;PARTSTAT=DECLINED:mailto:colleague@example.org".into()),
             description: None,
             location: None,
             dtstart: "2026-11-10T09:00:00Z".into(),
@@ -1819,7 +1820,10 @@ mod tests {
         };
         let reply = generate_reply(&invite, "user@example.org", None, "accepted");
         let lines = content_lines(&reply);
-        assert!(lines.iter().all(|l| !l.starts_with("X-INJECTED")), "{reply}");
+        assert!(
+            lines.iter().all(|l| !l.starts_with("X-INJECTED")),
+            "{reply}"
+        );
         assert_eq!(
             lines.iter().filter(|l| l.starts_with("ATTENDEE")).count(),
             1,
@@ -1853,7 +1857,9 @@ mod tests {
         assert!(lines.iter().all(|l| !l.starts_with("X-INJECTED")), "{ical}");
         assert!(lines.contains(&"DESCRIPTION:line one\\nline two".to_string()));
         assert!(lines.contains(&"LOCATION:Room\\; 1\\, floor 2".to_string()));
-        assert!(lines.iter().any(|l| l.starts_with("DTSTART;TZID=Europe/Paris:")));
+        assert!(lines
+            .iter()
+            .any(|l| l.starts_with("DTSTART;TZID=Europe/Paris:")));
     }
 
     fn classify_ical_data(ical_text: &str) -> RecurrenceKind {

@@ -32,12 +32,28 @@ mod uid_and_text_safety_tests {
     #[test]
     fn uid_is_encoded_as_a_single_path_segment() {
         // Ordinary UIDs keep their existing resource names.
-        assert_eq!(dav_path_segment("abc-123@chithi.example"), "abc-123@chithi.example");
+        assert_eq!(
+            dav_path_segment("abc-123@chithi.example"),
+            "abc-123@chithi.example"
+        );
         // Traversal, query, fragment and backslash cannot leave the collection.
-        for uid in ["../work/evil", "..\\work\\evil", "x?y", "x#y", "a/b", "%2e%2e/x"] {
+        for uid in [
+            "../work/evil",
+            "..\\work\\evil",
+            "x?y",
+            "x#y",
+            "a/b",
+            "%2e%2e/x",
+        ] {
             let segment = dav_path_segment(uid);
-            assert!(!segment.contains('/') && !segment.contains('\\'), "{uid} -> {segment}");
-            assert!(!segment.contains('?') && !segment.contains('#'), "{uid} -> {segment}");
+            assert!(
+                !segment.contains('/') && !segment.contains('\\'),
+                "{uid} -> {segment}"
+            );
+            assert!(
+                !segment.contains('?') && !segment.contains('#'),
+                "{uid} -> {segment}"
+            );
             assert!(!segment.contains("%2e%2e"), "{uid} -> {segment}");
         }
         assert_eq!(dav_path_segment(".."), "%2E%2E");
@@ -56,8 +72,17 @@ mod uid_and_text_safety_tests {
             false,
             None,
         );
-        let lines: Vec<_> = ical.replace("\r\n ", "").split("\r\n").map(str::to_string).collect();
-        assert!(lines.iter().all(|l| !l.starts_with("ORGANIZER") && !l.starts_with("ATTENDEE")), "{ical}");
+        let lines: Vec<_> = ical
+            .replace("\r\n ", "")
+            .split("\r\n")
+            .map(str::to_string)
+            .collect();
+        assert!(
+            lines
+                .iter()
+                .all(|l| !l.starts_with("ORGANIZER") && !l.starts_with("ATTENDEE")),
+            "{ical}"
+        );
         assert!(lines.contains(&"LOCATION:Room\\; 2".to_string()));
     }
 }

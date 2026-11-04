@@ -27,22 +27,38 @@ pub fn check_on_startup(app: &AppHandle) {
 pub async fn check_for_updates(app: AppHandle) -> Result<()> {
     if let Err(e) = check(&app, true).await {
         log::warn!("Update check failed: {e}");
-        notify(&app, MessageDialogKind::Error, format!("Could not check for updates.\n\n{e}"));
+        notify(
+            &app,
+            MessageDialogKind::Error,
+            format!("Could not check for updates.\n\n{e}"),
+        );
     }
     Ok(())
 }
 
 async fn check(app: &AppHandle, manual: bool) -> Result<()> {
     let updater = app.updater().map_err(|e| Error::Other(e.to_string()))?;
-    let Some(update) = updater.check().await.map_err(|e| Error::Other(e.to_string()))? else {
+    let Some(update) = updater
+        .check()
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?
+    else {
         if manual {
             let version = app.package_info().version.to_string();
-            notify(app, MessageDialogKind::Info, format!("Goyav {version} is up to date."));
+            notify(
+                app,
+                MessageDialogKind::Info,
+                format!("Goyav {version} is up to date."),
+            );
         }
         return Ok(());
     };
 
-    log::info!("Update available: {} -> {}", update.current_version, update.version);
+    log::info!(
+        "Update available: {} -> {}",
+        update.current_version,
+        update.version
+    );
     let message = format!(
         "Goyav {} is available (you have {}).\n\nInstall it now? Goyav will restart.",
         update.version, update.current_version

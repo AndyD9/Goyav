@@ -497,7 +497,9 @@ pub async fn pick_signature_file(app: tauri::AppHandle) -> Result<Option<PickedS
     };
     let path = file_path
         .as_path()
-        .ok_or_else(|| crate::error::Error::Other("picked path was not on local filesystem".into()))?
+        .ok_or_else(|| {
+            crate::error::Error::Other("picked path was not on local filesystem".into())
+        })?
         .to_path_buf();
     let metadata = std::fs::metadata(&path)?;
     if metadata.len() as usize > db::signatures::MAX_SIGNATURE_BYTES {

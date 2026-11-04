@@ -3505,8 +3505,13 @@ fn same_address(a: &str, b: &str) -> bool {
 
 /// PARTSTAT values an iTIP REPLY may set (RFC 5545 §3.2.12, lowercased by
 /// the parser). Anything else is ignored rather than stored verbatim.
-const ITIP_REPLY_PARTSTATS: [&str; 5] =
-    ["accepted", "declined", "tentative", "delegated", "needs-action"];
+const ITIP_REPLY_PARTSTATS: [&str; 5] = [
+    "accepted",
+    "declined",
+    "tentative",
+    "delegated",
+    "needs-action",
+];
 
 /// RFC 5546 §3.2.3: a REPLY carries the replying attendee's own status, so it
 /// may only update that attendee, and only on an event this account
@@ -5252,7 +5257,13 @@ mod tests {
             "declined"
         ));
         // REPLYs are ignored for events this account merely attends.
-        assert!(!reply_update_allowed(Some(ORGANIZER), ME, ALICE, ALICE, "accepted"));
+        assert!(!reply_update_allowed(
+            Some(ORGANIZER),
+            ME,
+            ALICE,
+            ALICE,
+            "accepted"
+        ));
         assert!(!reply_update_allowed(None, ME, ALICE, ALICE, "accepted"));
         // Unknown PARTSTAT values are not stored verbatim.
         assert!(!reply_update_allowed(Some(ME), ME, ALICE, ALICE, "x-owned"));
@@ -5263,7 +5274,12 @@ mod tests {
     #[test]
     fn cancel_requires_external_organizer_matching_sender() {
         // Legitimate: the organizer cancels an event this account attends.
-        assert!(cancel_allowed(Some(ORGANIZER), ME, ORGANIZER, Some(ORGANIZER)));
+        assert!(cancel_allowed(
+            Some(ORGANIZER),
+            ME,
+            ORGANIZER,
+            Some(ORGANIZER)
+        ));
         assert!(cancel_allowed(
             Some(ORGANIZER),
             ME,

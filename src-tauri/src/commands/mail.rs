@@ -35,7 +35,7 @@ fn is_private_ip(ip: &std::net::IpAddr) -> bool {
             || s[0] & 0xffc0 == 0xfe80  // link-local fe80::/10
             || s[0] == 0x2002           // 6to4 (embeds an IPv4 address)
             || (s[0] == 0x64 && s[1] == 0xff9b) // NAT64 64:ff9b::/96
-            || v6.to_ipv4().is_some()   // ::a.b.c.d (IPv4-compatible)
+            || v6.to_ipv4().is_some() // ::a.b.c.d (IPv4-compatible)
         }
     }
 }
@@ -1270,9 +1270,21 @@ mod remote_image_safety_tests {
     #[test]
     fn private_and_mapped_addresses_are_blocked() {
         for ip in [
-            "127.0.0.1", "10.1.2.3", "192.168.1.1", "169.254.169.254", "0.1.2.3",
-            "100.64.0.1", "198.18.0.1", "224.0.0.1", "::1", "fd00::1", "fe80::1",
-            "::ffff:127.0.0.1", "::ffff:192.168.1.1", "64:ff9b::7f00:1", "2002:7f00:1::1",
+            "127.0.0.1",
+            "10.1.2.3",
+            "192.168.1.1",
+            "169.254.169.254",
+            "0.1.2.3",
+            "100.64.0.1",
+            "198.18.0.1",
+            "224.0.0.1",
+            "::1",
+            "fd00::1",
+            "fe80::1",
+            "::ffff:127.0.0.1",
+            "::ffff:192.168.1.1",
+            "64:ff9b::7f00:1",
+            "2002:7f00:1::1",
         ] {
             assert!(is_private_ip(&ip.parse().unwrap()), "{ip}");
         }
@@ -1300,7 +1312,10 @@ mod remote_image_safety_tests {
     #[test]
     fn only_bare_image_types_reach_the_data_uri() {
         assert_eq!(allowed_image_content_type("image/PNG"), Some("image/png"));
-        assert_eq!(allowed_image_content_type("image/jpeg; charset=x"), Some("image/jpeg"));
+        assert_eq!(
+            allowed_image_content_type("image/jpeg; charset=x"),
+            Some("image/jpeg")
+        );
         assert_eq!(
             allowed_image_content_type("image/png\"><meta http-equiv=refresh content=0>"),
             None
@@ -1319,11 +1334,21 @@ mod remote_image_safety_tests {
         let name = c"com.apple.quarantine";
         // SAFETY: valid fd, NUL-terminated name, buffer length matches.
         let len = unsafe {
-            libc::fgetxattr(file.as_raw_fd(), name.as_ptr(), buf.as_mut_ptr().cast(), buf.len(), 0, 0)
+            libc::fgetxattr(
+                file.as_raw_fd(),
+                name.as_ptr(),
+                buf.as_mut_ptr().cast(),
+                buf.len(),
+                0,
+                0,
+            )
         };
         assert!(len > 0, "{}", std::io::Error::last_os_error());
         let value = std::str::from_utf8(&buf[..len as usize]).unwrap();
-        assert!(value.starts_with("0083;") && value.contains(";Goyav;"), "{value}");
+        assert!(
+            value.starts_with("0083;") && value.contains(";Goyav;"),
+            "{value}"
+        );
     }
 }
 

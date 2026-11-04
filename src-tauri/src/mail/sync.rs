@@ -1291,7 +1291,10 @@ mod folder_name_tests {
     fn directory_name_stays_a_single_safe_component() {
         for name in ["../../etc", "/abs/path", "a\\b", "..", ".", "", "x\0y"] {
             let dir = sanitize_folder_name(name);
-            assert!(!dir.contains('/') && !dir.contains('\\') && !dir.contains('\0'), "{dir}");
+            assert!(
+                !dir.contains('/') && !dir.contains('\\') && !dir.contains('\0'),
+                "{dir}"
+            );
             assert!(dir != "." && dir != ".." && !dir.is_empty(), "{dir}");
         }
         // Stable and readable.

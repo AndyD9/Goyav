@@ -204,7 +204,10 @@ mod tests {
     fn legacy_signature_is_listed_until_saved() {
         let conn = setup();
         let list = list_signatures(&conn, "a1").unwrap();
-        assert_eq!(list, vec![sig(LEGACY_SIGNATURE_ID, "Signature", "-- \nOld sig", true)]);
+        assert_eq!(
+            list,
+            vec![sig(LEGACY_SIGNATURE_ID, "Signature", "-- \nOld sig", true)]
+        );
         assert!(list_signatures(&conn, "a2").unwrap().is_empty());
         assert!(list_signatures(&conn, "missing").unwrap().is_empty());
     }
@@ -229,7 +232,9 @@ mod tests {
         );
         assert_eq!(list_signatures(&conn, "a1").unwrap(), saved);
         let legacy: String = conn
-            .query_row("SELECT signature FROM accounts WHERE id='a1'", [], |r| r.get(0))
+            .query_row("SELECT signature FROM accounts WHERE id='a1'", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(legacy, "<p>Short</p>");
     }
@@ -247,7 +252,12 @@ mod tests {
     #[test]
     fn rejects_duplicates_unknown_accounts_and_oversized_bodies() {
         let conn = setup();
-        assert!(save_signatures(&conn, "a1", &[sig("x", "A", "", false), sig("x", "B", "", false)]).is_err());
+        assert!(save_signatures(
+            &conn,
+            "a1",
+            &[sig("x", "A", "", false), sig("x", "B", "", false)]
+        )
+        .is_err());
         assert!(save_signatures(&conn, "nope", &[sig("x", "A", "", false)]).is_err());
         let huge = "a".repeat(MAX_SIGNATURE_BYTES + 1);
         assert!(save_signatures(&conn, "a1", &[sig("x", "A", &huge, false)]).is_err());
@@ -257,7 +267,8 @@ mod tests {
     fn deleting_the_account_removes_its_signatures() {
         let conn = setup();
         save_signatures(&conn, "a1", &[sig("s1", "A", "a", true)]).unwrap();
-        conn.execute("DELETE FROM accounts WHERE id='a1'", []).unwrap();
+        conn.execute("DELETE FROM accounts WHERE id='a1'", [])
+            .unwrap();
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM account_signatures", [], |r| r.get(0))
             .unwrap();

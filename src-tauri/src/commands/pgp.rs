@@ -9,9 +9,7 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use libtumpa::{
-    card, card::link as card_link, key, KeySummary, SubkeySummary, UserIdSummary,
-};
+use libtumpa::{card, card::link as card_link, key, KeySummary, SubkeySummary, UserIdSummary};
 use serde::Serialize;
 use tauri::{Emitter, State};
 use tauri_plugin_dialog::DialogExt;
@@ -1315,12 +1313,18 @@ mod tests {
             (Some("Mallory <mallory@evil.example>".into()), false)
         );
         // Revoked UIDs never match or display.
-        let revoked = [("Alice <alice@bank.example>", true, true), ("m@evil.example", false, false)];
+        let revoked = [
+            ("Alice <alice@bank.example>", true, true),
+            ("m@evil.example", false, false),
+        ];
         assert_eq!(
             pick_signer_uid(revoked, "alice@bank.example"),
             (Some("m@evil.example".into()), false)
         );
-        assert_eq!(pick_signer_uid(uids, ""), (Some("Mallory <mallory@evil.example>".into()), false));
+        assert_eq!(
+            pick_signer_uid(uids, ""),
+            (Some("Mallory <mallory@evil.example>".into()), false)
+        );
     }
 
     #[test]

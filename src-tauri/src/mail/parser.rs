@@ -54,7 +54,10 @@ fn reader_sender(parsed: &mail_parser::Message<'_>, hint: &str) -> Address {
     let chosen = instances
         .iter()
         .find(|list| {
-            !hint.is_empty() && list.iter().any(|a| a.email.trim().eq_ignore_ascii_case(hint))
+            !hint.is_empty()
+                && list
+                    .iter()
+                    .any(|a| a.email.trim().eq_ignore_ascii_case(hint))
         })
         .or(instances.first());
     let matching_mailbox = chosen.and_then(|list| {

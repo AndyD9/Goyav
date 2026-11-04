@@ -3439,7 +3439,10 @@ async fn cross_account_move_of_someone_elses_invitation_drops_attendees() {
     // destination account.
     let fixture = Fixture::new().await;
     let source = stored_event("standalone", RecurrenceKind::Standalone, None);
-    assert_eq!(source.organizer_email.as_deref(), Some("organizer@example.test"));
+    assert_eq!(
+        source.organizer_email.as_deref(),
+        Some("organizer@example.test")
+    );
     assert!(source.attendees_json.is_some());
     fixture.insert(&source).await;
 

@@ -213,10 +213,12 @@ fn top_level_content_type(headers: &[u8]) -> Option<String> {
         return None;
     }
     let ct = header_value(headers, b"content-type")?;
-    let has_extended_param = ct
-        .split(';')
-        .skip(1)
-        .any(|param| param.split('=').next().is_some_and(|name| name.contains('*')));
+    let has_extended_param = ct.split(';').skip(1).any(|param| {
+        param
+            .split('=')
+            .next()
+            .is_some_and(|name| name.contains('*'))
+    });
     if has_extended_param {
         return None;
     }
@@ -228,7 +230,11 @@ fn count_headers(headers: &[u8], name: &[u8]) -> usize {
     headers
         .split(|&b| b == b'\n')
         .filter(|line| !matches!(line.first(), Some(b' ' | b'\t')))
-        .filter_map(|line| line.iter().position(|&b| b == b':').map(|colon| &line[..colon]))
+        .filter_map(|line| {
+            line.iter()
+                .position(|&b| b == b':')
+                .map(|colon| &line[..colon])
+        })
         .filter(|field| ascii_eq_ci(trim_trailing_wsp(field), name))
         .count()
 }

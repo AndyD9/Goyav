@@ -837,7 +837,9 @@ fn ical_provenance(
 ) -> Result<Provenance> {
     let data = icalendar::parser::unfold(data);
     if !crate::calendar::ical::ical_within_bounds(&data) {
-        return Err(semantic_error("iCalendar provenance exceeds size or nesting bounds"));
+        return Err(semantic_error(
+            "iCalendar provenance exceeds size or nesting bounds",
+        ));
     }
     let calendar = icalendar::parser::read_calendar(&data)
         .map_err(|_| semantic_error("invalid iCalendar provenance"))?;

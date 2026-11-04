@@ -1711,10 +1711,42 @@ mod tests {
             )
             .unwrap();
         }
-        insert_search_row(&conn, "m1", "acc1", "INBOX", "March invoice", "billing@shop.test", "2026-03-02T00:00:00Z");
-        insert_search_row(&conn, "m2", "acc1", "Archive", "Invoice for March", "billing@shop.test", "2026-03-05T00:00:00Z");
-        insert_search_row(&conn, "m3", "acc2", "INBOX", "Invoice April", "other@shop.test", "2026-04-01T00:00:00Z");
-        insert_search_row(&conn, "m4", "acc1", "INBOX", "Lunch", "friend@mail.test", "2026-04-02T00:00:00Z");
+        insert_search_row(
+            &conn,
+            "m1",
+            "acc1",
+            "INBOX",
+            "March invoice",
+            "billing@shop.test",
+            "2026-03-02T00:00:00Z",
+        );
+        insert_search_row(
+            &conn,
+            "m2",
+            "acc1",
+            "Archive",
+            "Invoice for March",
+            "billing@shop.test",
+            "2026-03-05T00:00:00Z",
+        );
+        insert_search_row(
+            &conn,
+            "m3",
+            "acc2",
+            "INBOX",
+            "Invoice April",
+            "other@shop.test",
+            "2026-04-01T00:00:00Z",
+        );
+        insert_search_row(
+            &conn,
+            "m4",
+            "acc1",
+            "INBOX",
+            "Lunch",
+            "friend@mail.test",
+            "2026-04-02T00:00:00Z",
+        );
         conn
     }
 
@@ -1758,7 +1790,9 @@ mod tests {
         let conn = search_fixture(true);
         let accounts = vec!["acc1".to_string()];
         assert_eq!(
-            search_local_messages(&conn, &accounts, &text_filter("   "), 50).unwrap().total,
+            search_local_messages(&conn, &accounts, &text_filter("   "), 50)
+                .unwrap()
+                .total,
             0
         );
         let quoted =

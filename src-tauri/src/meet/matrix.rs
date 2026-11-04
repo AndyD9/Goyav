@@ -110,7 +110,12 @@ impl SsoListener {
                 .map_err(|e| Error::Other(format!("matrix sso port: {}", e)))?
                 .port();
             match TcpListener::bind(("::1", port)) {
-                Ok(ipv6) => return Ok(Self { ipv4, ipv6: Some(ipv6) }),
+                Ok(ipv6) => {
+                    return Ok(Self {
+                        ipv4,
+                        ipv6: Some(ipv6),
+                    })
+                }
                 // Someone already holds [::1]:port; pick another port.
                 Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => continue,
                 // No IPv6 loopback on this host: browsers cannot use it either.
@@ -148,10 +153,7 @@ impl SsoListener {
 /// listener wedged forever. A mismatched / missing state is
 /// surfaced as an error rather than silently exchanged — see
 /// the doc on `sso_login_start` for why this matters.
-pub fn await_login_token(
-    listener: impl Into<SsoListener>,
-    expected_state: &str,
-) -> Result<String> {
+pub fn await_login_token(listener: impl Into<SsoListener>, expected_state: &str) -> Result<String> {
     let listener: SsoListener = listener.into();
     let deadline = Instant::now() + Duration::from_secs(SSO_CALLBACK_TIMEOUT_SECS);
     for socket in std::iter::once(&listener.ipv4).chain(listener.ipv6.as_ref()) {

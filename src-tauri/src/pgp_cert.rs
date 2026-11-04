@@ -11,7 +11,9 @@
 
 use std::io::Cursor;
 
-use pgp::composed::{Deserializable, SignedKeyDetails, SignedPublicKey, SignedPublicSubKey, SignedSecretKey};
+use pgp::composed::{
+    Deserializable, SignedKeyDetails, SignedPublicKey, SignedPublicSubKey, SignedSecretKey,
+};
 use pgp::packet::{Signature, SignatureType};
 use pgp::ser::Serialize;
 use pgp::types::SignedUser;
@@ -72,8 +74,9 @@ fn sanitize_public(key: &SignedPublicKey, only_address: Option<&str>) -> Result<
         .users
         .iter()
         .filter(|user| match &wanted {
-            Some(addr) => uid_address(&String::from_utf8_lossy(user.id.id()))
-                .is_some_and(|a| &a == addr),
+            Some(addr) => {
+                uid_address(&String::from_utf8_lossy(user.id.id())).is_some_and(|a| &a == addr)
+            }
             None => true,
         })
         .filter_map(|user| {
@@ -159,7 +162,11 @@ fn is_verified_uid_self_signature(
         .is_ok()
 }
 
-fn is_verified_subkey_signature<K>(sig: &Signature, primary: &pgp::packet::PublicKey, subkey: &K) -> bool
+fn is_verified_subkey_signature<K>(
+    sig: &Signature,
+    primary: &pgp::packet::PublicKey,
+    subkey: &K,
+) -> bool
 where
     K: pgp::types::KeyDetails + Serialize,
 {
@@ -195,7 +202,10 @@ mod tests {
         let alice = generate("Alice <alice@example.org>");
         let original = parsed(&alice);
         let clean = sanitized(&alice, None).unwrap();
-        assert_eq!(clean.primary_key.fingerprint(), original.primary_key.fingerprint());
+        assert_eq!(
+            clean.primary_key.fingerprint(),
+            original.primary_key.fingerprint()
+        );
         assert_eq!(clean.details.users.len(), 1);
         assert_eq!(clean.public_subkeys.len(), original.public_subkeys.len());
     }
@@ -206,7 +216,9 @@ mod tests {
         let mallory = parsed(&generate("Mallory <mallory@evil.example>"));
         // Graft Mallory's subkeys (bound by Mallory's primary) onto Alice.
         let mut tampered = alice.clone();
-        tampered.public_subkeys.extend(mallory.public_subkeys.iter().cloned());
+        tampered
+            .public_subkeys
+            .extend(mallory.public_subkeys.iter().cloned());
         let bytes = tampered.to_bytes().unwrap();
 
         let clean = sanitized(&bytes, None).unwrap();
@@ -226,7 +238,12 @@ mod tests {
         let mut tampered = alice.clone();
         let mut users = alice.details.users.clone();
         users.extend(mallory.details.users.iter().cloned());
-        tampered.details = SignedKeyDetails::new(vec![], alice.details.direct_signatures.clone(), users, vec![]);
+        tampered.details = SignedKeyDetails::new(
+            vec![],
+            alice.details.direct_signatures.clone(),
+            users,
+            vec![],
+        );
         let bytes = tampered.to_bytes().unwrap();
 
         let clean = sanitized(&bytes, None).unwrap();
@@ -238,14 +255,20 @@ mod tests {
     fn wkd_keeps_only_the_queried_address() {
         let key = wecanencrypt::create_key_simple(
             "pw",
-            &["Mallory <mallory@evil.example>", "Alice <alice@bank.example>"],
+            &[
+                "Mallory <mallory@evil.example>",
+                "Alice <alice@bank.example>",
+            ],
         )
         .unwrap();
         let bytes = key.public_key.into_bytes();
 
         let clean = sanitized(&bytes, Some("Mallory@Evil.example")).unwrap();
         assert_eq!(clean.details.users.len(), 1);
-        assert_eq!(clean.details.users[0].id.id(), b"Mallory <mallory@evil.example>");
+        assert_eq!(
+            clean.details.users[0].id.id(),
+            b"Mallory <mallory@evil.example>"
+        );
 
         assert!(sanitized(&bytes, Some("nobody@evil.example")).is_err());
     }
