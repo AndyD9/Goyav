@@ -2558,6 +2558,20 @@ async fn move_event_to_calendar_inner(
             crate::error::Error::Other("Cannot move event with malformed attendees.".into())
         })?
         .unwrap_or_default();
+    // Only an event the source account organizes may carry its attendee list
+    // to the destination: the copy is created with the destination account as
+    // organizer, and providers (Google sendUpdates=all, Graph) then invite
+    // every attendee from the user's account. For an invitation someone else
+    // organizes, that list and the event text are the sender's, so the copy
+    // must be a personal one without attendees.
+    let source_is_own_event = match source.organizer_email.as_deref().map(str::trim) {
+        None | Some("") => true,
+        Some(organizer) => {
+            let conn = state.db.reader();
+            let source_email = db::accounts::get_account_full(&conn, &source.account_id)?.email;
+            same_address(organizer, &source_email)
+        }
+    };
     let copied_input = NewEventInput {
         account_id: target_account_id,
         calendar_id: target_calendar_id,
@@ -2569,7 +2583,7 @@ async fn move_event_to_calendar_inner(
         all_day: source.all_day,
         timezone: source.timezone.clone(),
         recurrence_rule: None,
-        attendees: if snapshot.invitation_source.is_some() {
+        attendees: if snapshot.invitation_source.is_some() || !source_is_own_event {
             vec![]
         } else {
             attendees

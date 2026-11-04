@@ -641,7 +641,40 @@ fn ical_duration(duration: chrono::Duration) -> String {
     value
 }
 
-fn ical_text_value(value: &str) -> String {
+/// Largest iCalendar text handed to the recursive `icalendar` parser.
+const MAX_ICAL_BYTES: usize = 4 * 1024 * 1024;
+/// Deepest BEGIN nesting accepted, matching the CalDAV resource parser
+/// (VCALENDAR > VEVENT > VALARM needs 3).
+const MAX_ICAL_DEPTH: usize = 16;
+
+/// Iterative size and nesting check run before any call into the recursive
+/// `icalendar` parser. Sender-controlled text with thousands of nested
+/// `BEGIN:` lines would otherwise overflow the worker stack and abort the
+/// whole process. Compares bytes so a multibyte character at an odd offset
+/// cannot make the guard itself panic.
+pub(crate) fn ical_within_bounds(text: &str) -> bool {
+    if text.len() > MAX_ICAL_BYTES {
+        return false;
+    }
+    let mut depth = 0usize;
+    for line in text.lines() {
+        let line = line.trim_start().as_bytes();
+        if line.len() >= 6 && line[..6].eq_ignore_ascii_case(b"BEGIN:") {
+            depth += 1;
+            if depth > MAX_ICAL_DEPTH {
+                return false;
+            }
+        } else if line.len() >= 4 && line[..4].eq_ignore_ascii_case(b"END:") {
+            depth = depth.saturating_sub(1);
+        }
+    }
+    true
+}
+
+/// RFC 5545 TEXT escaping (backslash, `;`, `,`, newlines; other control
+/// characters become spaces). Required for every value written after a
+/// `NAME:` so that stored, sender-derived text cannot start new content lines.
+pub(crate) fn ical_text_value(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     let mut chars = value.chars().peekable();
     while let Some(ch) = chars.next() {
@@ -661,6 +694,36 @@ fn ical_text_value(value: &str) -> String {
         }
     }
     escaped
+}
+
+/// Value that must stay a single token on its content line (CAL-ADDRESS
+/// after `mailto:`, TZID, RRULE, PARTSTAT): line breaks and other control
+/// characters are dropped rather than escaped.
+pub(crate) fn ical_single_token(value: &str) -> String {
+    value.chars().filter(|ch| !ch.is_control()).collect()
+}
+
+/// TZID parameter value: IANA names are written bare (what every client
+/// expects); anything else is quoted so it cannot add parameters or lines.
+pub(crate) fn ical_tzid(tz: &str) -> String {
+    if !tz.is_empty()
+        && tz
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-' | '+'))
+    {
+        tz.to_string()
+    } else {
+        ical_parameter_value(tz)
+    }
+}
+
+/// Join content lines with CRLF, folding each at 75 octets (RFC 5545 §3.1).
+pub(crate) fn join_ical_lines(lines: &[String]) -> String {
+    lines
+        .iter()
+        .flat_map(|line| fold_ical_content_line(line))
+        .collect::<Vec<_>>()
+        .join("\r\n")
 }
 
 fn fold_ical_content_line(line: &str) -> Vec<String> {
@@ -765,6 +828,11 @@ pub fn parse_ical_data_with_recurrence(ical_text: &str) -> Vec<ParsedIcalEvent> 
         .replace("\r\n", "\n") // Normalize remaining CRLF to LF
         .replace("\n ", "") // Unfold LF + space
         .replace("\n\t", ""); // Unfold LF + tab
+
+    if !ical_within_bounds(&normalized) {
+        log::warn!("parse_ical_data: calendar exceeds size or nesting bounds; ignoring it");
+        return invites;
+    }
 
     // Exchange/Outlook emit DESCRIPTION;ALTREP="data:text/html,...":plain text
     // where the quoted value contains raw unescaped " chars (RFC-violating but
@@ -1123,10 +1191,10 @@ pub fn generate_reply(
             lines.push(format!(
                 "ORGANIZER;CN={}:mailto:{}",
                 ical_parameter_value(org_name),
-                org_email
+                ical_single_token(org_email)
             ));
         } else {
-            lines.push(format!("ORGANIZER:mailto:{}", org_email));
+            lines.push(format!("ORGANIZER:mailto:{}", ical_single_token(org_email)));
         }
     }
 
@@ -1137,12 +1205,16 @@ pub fn generate_reply(
         .unwrap_or_default();
     lines.push(format!(
         "ATTENDEE;PARTSTAT={};RSVP=FALSE{}:mailto:{}",
-        partstat, attendee_name, user_email
+        ical_single_token(&partstat),
+        attendee_name,
+        ical_single_token(user_email)
     ));
 
-    lines.push(format!("UID:{}", invite.uid));
+    // UID and SUMMARY come from the sender's invite and were TEXT-unescaped by
+    // the parser (real newlines possible), so they must be re-escaped.
+    lines.push(format!("UID:{}", ical_text_value(&invite.uid)));
     if let Some(ref summary) = invite.summary {
-        lines.push(format!("SUMMARY:{}", summary));
+        lines.push(format!("SUMMARY:{}", ical_text_value(summary)));
     }
     if !invite.all_day {
         if let Some(ref tz) = invite.timezone {
@@ -1150,12 +1222,12 @@ pub fn generate_reply(
             let local_end = crate::mail::caldav::utc_to_local(&invite.dtend, tz);
             lines.push(format!(
                 "DTSTART;TZID={}:{}",
-                tz,
+                ical_tzid(tz),
                 to_ical_datetime(&local_start)
             ));
             lines.push(format!(
                 "DTEND;TZID={}:{}",
-                tz,
+                ical_tzid(tz),
                 to_ical_datetime(&local_end)
             ));
         } else {
@@ -1177,7 +1249,7 @@ pub fn generate_reply(
     lines.push("END:VEVENT".to_string());
     lines.push("END:VCALENDAR".to_string());
 
-    lines.join("\r\n")
+    join_ical_lines(&lines)
 }
 
 /// Generate a METHOD:REQUEST iCalendar for inviting attendees to an event.
@@ -1209,10 +1281,13 @@ pub fn generate_invite(
         lines.push(format!(
             "ORGANIZER;CN={}:mailto:{}",
             ical_parameter_value(name),
-            organizer_email
+            ical_single_token(organizer_email)
         ));
     } else {
-        lines.push(format!("ORGANIZER:mailto:{}", organizer_email));
+        lines.push(format!(
+            "ORGANIZER:mailto:{}",
+            ical_single_token(organizer_email)
+        ));
     }
 
     // Attendees
@@ -1224,23 +1299,24 @@ pub fn generate_invite(
             .unwrap_or_default();
         lines.push(format!(
             "ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE{}:mailto:{}",
-            cn, attendee.email
+            cn,
+            ical_single_token(&attendee.email)
         ));
     }
 
-    lines.push(format!("UID:{}", uid));
-    lines.push(format!("SUMMARY:{}", summary));
+    lines.push(format!("UID:{}", ical_text_value(uid)));
+    lines.push(format!("SUMMARY:{}", ical_text_value(summary)));
     if let Some(tz) = timezone {
         let local_start = crate::mail::caldav::utc_to_local(dtstart, tz);
         let local_end = crate::mail::caldav::utc_to_local(dtend, tz);
         lines.push(format!(
             "DTSTART;TZID={}:{}",
-            tz,
+            ical_tzid(tz),
             to_ical_datetime(&local_start)
         ));
         lines.push(format!(
             "DTEND;TZID={}:{}",
-            tz,
+            ical_tzid(tz),
             to_ical_datetime(&local_end)
         ));
     } else {
@@ -1249,13 +1325,13 @@ pub fn generate_invite(
     }
 
     if let Some(loc) = location {
-        lines.push(format!("LOCATION:{}", loc));
+        lines.push(format!("LOCATION:{}", ical_text_value(loc)));
     }
     if let Some(desc) = description {
-        lines.push(format!("DESCRIPTION:{}", desc));
+        lines.push(format!("DESCRIPTION:{}", ical_text_value(desc)));
     }
     if let Some(rrule) = recurrence_rule {
-        lines.push(format!("RRULE:{}", rrule));
+        lines.push(format!("RRULE:{}", ical_single_token(rrule)));
     }
 
     lines.push("SEQUENCE:0".to_string());
@@ -1264,7 +1340,7 @@ pub fn generate_invite(
     lines.push("END:VEVENT".to_string());
     lines.push("END:VCALENDAR".to_string());
 
-    lines.join("\r\n")
+    join_ical_lines(&lines)
 }
 
 // ---------------------------------------------------------------------------
@@ -1690,6 +1766,95 @@ fn parse_ical_duration(duration: &str) -> Option<chrono::Duration> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deeply_nested_calendar_is_rejected_without_recursing() {
+        // Would overflow a 2 MiB worker stack in the recursive parser.
+        let bomb = format!("BEGIN:VCALENDAR\n{}", "BEGIN:X\n".repeat(200_000));
+        assert!(!ical_within_bounds(&bomb));
+        // Run on a small stack: the guard must reject before any recursion.
+        let result = std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(move || parse_ical_data(&bomb).len())
+            .unwrap()
+            .join()
+            .unwrap();
+        assert_eq!(result, 0);
+        assert!(!ical_within_bounds(&"x".repeat(MAX_ICAL_BYTES + 1)));
+        // Multibyte characters at the BEGIN:/END: probe offsets must not panic.
+        assert!(ical_within_bounds("BEGé:\nENDé\nBEGIN:VCALENDAR\nEND:VCALENDAR\n"));
+        let normal = "BEGIN:VCALENDAR\nBEGIN:VEVENT\nBEGIN:VALARM\nEND:VALARM\nEND:VEVENT\nEND:VCALENDAR\n";
+        assert!(ical_within_bounds(normal));
+    }
+
+    fn content_lines(ical: &str) -> Vec<String> {
+        // Unfold, then split into logical content lines.
+        ical.replace("\r\n ", "")
+            .split("\r\n")
+            .map(str::to_string)
+            .collect()
+    }
+
+    #[test]
+    fn reply_escapes_sender_text_so_it_cannot_add_lines() {
+        let invite = ParsedInvite {
+            method: "REQUEST".into(),
+            uid: "u1\nATTENDEE;PARTSTAT=DECLINED:mailto:x@example.test".into(),
+            summary: Some(
+                "Sync\nATTENDEE;PARTSTAT=DECLINED:mailto:colleague@example.org".into(),
+            ),
+            description: None,
+            location: None,
+            dtstart: "2026-11-10T09:00:00Z".into(),
+            dtend: "2026-11-10T10:00:00Z".into(),
+            all_day: false,
+            timezone: Some("Europe/Paris\r\nX-INJECTED:1".into()),
+            organizer_email: Some("org@example.org\r\nX-INJECTED:2".into()),
+            organizer_name: None,
+            attendees: vec![],
+            recurrence_rule: None,
+            recurrence_kind: RecurrenceKind::Standalone,
+            sequence: 0,
+            ical_raw: String::new(),
+        };
+        let reply = generate_reply(&invite, "user@example.org", None, "accepted");
+        let lines = content_lines(&reply);
+        assert!(lines.iter().all(|l| !l.starts_with("X-INJECTED")), "{reply}");
+        assert_eq!(
+            lines.iter().filter(|l| l.starts_with("ATTENDEE")).count(),
+            1,
+            "{reply}"
+        );
+        assert!(reply.lines().all(|l| l.len() <= 76), "{reply}");
+        // Round-trip: the escaped SUMMARY parses back to the original text.
+        let parsed = parse_ical_data(&reply);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].summary, invite.summary);
+        assert_eq!(parsed[0].attendees.len(), 1);
+    }
+
+    #[test]
+    fn invite_escapes_text_fields() {
+        let ical = generate_invite(
+            "uid-1",
+            "Title\nATTENDEE:mailto:extra@example.org",
+            "2026-11-10T09:00:00Z",
+            "2026-11-10T10:00:00Z",
+            Some("Room; 1, floor 2"),
+            Some("line one\nline two"),
+            "me@example.org",
+            None,
+            &[],
+            Some("FREQ=WEEKLY\r\nX-INJECTED:1"),
+            Some("Europe/Paris"),
+        );
+        let lines = content_lines(&ical);
+        assert!(lines.iter().all(|l| !l.starts_with("ATTENDEE")), "{ical}");
+        assert!(lines.iter().all(|l| !l.starts_with("X-INJECTED")), "{ical}");
+        assert!(lines.contains(&"DESCRIPTION:line one\\nline two".to_string()));
+        assert!(lines.contains(&"LOCATION:Room\\; 1\\, floor 2".to_string()));
+        assert!(lines.iter().any(|l| l.starts_with("DTSTART;TZID=Europe/Paris:")));
+    }
 
     fn classify_ical_data(ical_text: &str) -> RecurrenceKind {
         match parse_ical_data(ical_text).as_slice() {
@@ -2689,6 +2854,8 @@ END:VCALENDAR\r\n";
         };
 
         let reply = generate_reply(&invite, "bob@example.com", Some("Bob Builder"), "accepted");
+        // Content lines are folded at 75 octets; compare the unfolded text.
+        let reply = reply.replace("\r\n ", "");
 
         assert!(reply.contains("METHOD:REPLY"), "Should have METHOD:REPLY");
         assert!(
@@ -2768,6 +2935,7 @@ END:VCALENDAR\r\n";
             None,
         );
 
+        let ical = ical.replace("\r\n ", "");
         assert!(ical.contains("METHOD:REQUEST"));
         assert!(ical.contains("UID:new-uid-789"));
         assert!(ical.contains("SUMMARY:Project Review"));

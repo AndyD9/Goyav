@@ -26,6 +26,43 @@ pub struct CalDavConfig {
 }
 
 #[cfg(test)]
+mod uid_and_text_safety_tests {
+    use super::*;
+
+    #[test]
+    fn uid_is_encoded_as_a_single_path_segment() {
+        // Ordinary UIDs keep their existing resource names.
+        assert_eq!(dav_path_segment("abc-123@chithi.example"), "abc-123@chithi.example");
+        // Traversal, query, fragment and backslash cannot leave the collection.
+        for uid in ["../work/evil", "..\\work\\evil", "x?y", "x#y", "a/b", "%2e%2e/x"] {
+            let segment = dav_path_segment(uid);
+            assert!(!segment.contains('/') && !segment.contains('\\'), "{uid} -> {segment}");
+            assert!(!segment.contains('?') && !segment.contains('#'), "{uid} -> {segment}");
+            assert!(!segment.contains("%2e%2e"), "{uid} -> {segment}");
+        }
+        assert_eq!(dav_path_segment(".."), "%2E%2E");
+        assert_eq!(dav_path_segment("."), "%2E");
+    }
+
+    #[test]
+    fn generated_event_escapes_multiline_text() {
+        let ical = generate_ical_event(
+            "uid-1",
+            "Title",
+            Some("x\nORGANIZER:mailto:owner@example.test\nATTENDEE:mailto:third@example.test"),
+            Some("Room; 2"),
+            "2026-11-10T09:00:00Z",
+            "2026-11-10T10:00:00Z",
+            false,
+            None,
+        );
+        let lines: Vec<_> = ical.replace("\r\n ", "").split("\r\n").map(str::to_string).collect();
+        assert!(lines.iter().all(|l| !l.starts_with("ORGANIZER") && !l.starts_with("ATTENDEE")), "{ical}");
+        assert!(lines.contains(&"LOCATION:Room\\; 2".to_string()));
+    }
+}
+
+#[cfg(test)]
 mod connect_tests {
     use super::*;
     use reqwest::header::{HeaderMap, HeaderValue};
@@ -678,7 +715,13 @@ impl CalDavClient {
         uid: &str,
         ical_data: &str,
     ) -> Result<PushedCalDavEvent> {
-        let href = format!("{}/{}.ics", calendar_href.trim_end_matches('/'), uid);
+        // The UID can come from a sender's invite or attachment. Encode it as a
+        // single path segment and require the result to stay a direct child of
+        // the selected collection *before* the authenticated PUT, as
+        // event_sets::create does; '../', '?', '#' or '\' must not move the write.
+        let segment = dav_path_segment(uid);
+        let href = format!("{}/{}.ics", calendar_href.trim_end_matches('/'), segment);
+        self.validate_resource_href(calendar_href, &href)?;
         let etag = self.put_event_at_href(&href, ical_data, None).await?;
         Ok(PushedCalDavEvent {
             href,
@@ -1465,6 +1508,28 @@ fn extract_uid_from_ical(ical: &str) -> Option<String> {
 // Generate minimal iCalendar for a new event
 // ---------------------------------------------------------------------------
 
+use crate::calendar::ical::ical_text_value;
+
+/// Percent-encode a value as one DAV path segment. Characters common in
+/// iCalendar UIDs (`@`, `.`, `-`, `_`, `+`, `=`, `~`) stay literal so existing
+/// resource names are unchanged; `/`, `\`, `?`, `#`, `%`, spaces and controls
+/// are encoded so the value can never leave the collection.
+pub(crate) fn dav_path_segment(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || b"@.-_+=~".contains(&byte) {
+            out.push(byte as char);
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    // "." and ".." are dot-segments even when every character is literal.
+    if out == "." || out == ".." {
+        return out.replace('.', "%2E");
+    }
+    out
+}
+
 /// Generate a minimal VCALENDAR/VEVENT iCalendar string from event fields.
 pub fn generate_ical_event(
     uid: &str,
@@ -1482,7 +1547,11 @@ pub fn generate_ical_event(
         format!("DTSTART;VALUE=DATE:{}", to_ical_date(start_time))
     } else if let Some(tz) = timezone {
         let local_time = utc_to_local(start_time, tz);
-        format!("DTSTART;TZID={}:{}", tz, to_ical_datetime(&local_time))
+        format!(
+            "DTSTART;TZID={}:{}",
+            crate::calendar::ical::ical_tzid(tz),
+            to_ical_datetime(&local_time)
+        )
     } else {
         format!("DTSTART:{}", to_ical_datetime(start_time))
     };
@@ -1491,7 +1560,11 @@ pub fn generate_ical_event(
         format!("DTEND;VALUE=DATE:{}", to_ical_date(end_time))
     } else if let Some(tz) = timezone {
         let local_time = utc_to_local(end_time, tz);
-        format!("DTEND;TZID={}:{}", tz, to_ical_datetime(&local_time))
+        format!(
+            "DTEND;TZID={}:{}",
+            crate::calendar::ical::ical_tzid(tz),
+            to_ical_datetime(&local_time)
+        )
     } else {
         format!("DTEND:{}", to_ical_datetime(end_time))
     };
@@ -1501,28 +1574,30 @@ pub fn generate_ical_event(
         "VERSION:2.0".to_string(),
         "PRODID:-//Chithi//EN".to_string(),
         "BEGIN:VEVENT".to_string(),
-        format!("UID:{}", uid),
+        format!("UID:{}", ical_text_value(uid)),
         format!("DTSTAMP:{}", now),
         dtstart,
         dtend,
-        format!("SUMMARY:{}", title),
+        format!("SUMMARY:{}", ical_text_value(title)),
     ];
 
     if let Some(desc) = description {
         if !desc.is_empty() {
-            lines.push(format!("DESCRIPTION:{}", desc));
+            lines.push(format!("DESCRIPTION:{}", ical_text_value(desc)));
         }
     }
     if let Some(loc) = location {
         if !loc.is_empty() {
-            lines.push(format!("LOCATION:{}", loc));
+            lines.push(format!("LOCATION:{}", ical_text_value(loc)));
         }
     }
 
     lines.push("END:VEVENT".to_string());
     lines.push("END:VCALENDAR".to_string());
 
-    lines.join("\r\n")
+    // TEXT values may hold real newlines (sender invites are unescaped by the
+    // parser; synced descriptions carry them natively), so escape and fold.
+    crate::calendar::ical::join_ical_lines(&lines)
 }
 
 /// Escape `&`, `<`, `>`, `"`, `'` for safe interpolation into XML text or

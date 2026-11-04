@@ -1622,7 +1622,9 @@ async fn standalone_move_to_current_calendar_is_a_write_free_noop() {
 #[tokio::test]
 async fn standalone_cross_account_move_copies_authoritative_content_then_deletes_source() {
     let fixture = Fixture::new().await;
-    let source = stored_event("standalone", RecurrenceKind::Standalone, None);
+    // Organized by the source account, so its attendees travel with the move.
+    let mut source = stored_event("standalone", RecurrenceKind::Standalone, None);
+    source.organizer_email = Some("Account-A@example.test".into());
     fixture.insert(&source).await;
 
     let id = move_event_to_calendar_inner(
@@ -2102,7 +2104,9 @@ fn invisible_move_races() -> Vec<InvisibleMoveRace> {
 
 async fn invisible_move_fixture(race: &InvisibleMoveRace) -> (Fixture, MoveSourceSnapshot) {
     let fixture = Fixture::new().await;
-    let source = stored_event("standalone", RecurrenceKind::Standalone, None);
+    // Organized by the source account, so its attendees travel with the move.
+    let mut source = stored_event("standalone", RecurrenceKind::Standalone, None);
+    source.organizer_email = Some("account-a@example.test".into());
     fixture.insert(&source).await;
     fixture
         .insert(&stored_event("other", RecurrenceKind::Standalone, None))
@@ -3426,4 +3430,35 @@ mod jmap_creation {
             after_refresh.borrow().as_ref().unwrap()
         );
     }
+}
+
+#[tokio::test]
+async fn cross_account_move_of_someone_elses_invitation_drops_attendees() {
+    // An invitation organized by someone else, accepted without provenance:
+    // its attendee list is the sender's and must not be re-invited from the
+    // destination account.
+    let fixture = Fixture::new().await;
+    let source = stored_event("standalone", RecurrenceKind::Standalone, None);
+    assert_eq!(source.organizer_email.as_deref(), Some("organizer@example.test"));
+    assert!(source.attendees_json.is_some());
+    fixture.insert(&source).await;
+
+    let id = move_event_to_calendar_inner(
+        &fixture.state,
+        source.id.clone(),
+        "cross-account".into(),
+        "account-b".into(),
+    )
+    .await
+    .unwrap();
+
+    let copied = fixture.event(&id);
+    assert_eq!(copied.account_id, "account-b");
+    assert_eq!(copied.title, source.title);
+    let attendees: Vec<serde_json::Value> = copied
+        .attendees_json
+        .as_deref()
+        .map(|json| serde_json::from_str(json).unwrap())
+        .unwrap_or_default();
+    assert!(attendees.is_empty(), "{:?}", copied.attendees_json);
 }
