@@ -30,18 +30,23 @@ jobs:
   macos:
     name: Build and publish (macOS arm64)
     runs-on: macos-latest
+    # Signing key, its password and the OAuth client live in the "release"
+    # environment, which only the goyav branch may use; other workflows and
+    # branches cannot read them.
+    environment: release
     steps:
       # A missing secret expands to "", which option_env! would bake in
       # as an empty OAuth client; stop before publishing such a build.
       - name: Check secrets
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           CHITHI_GOOGLE_CLIENT_ID: ${{ secrets.CHITHI_GOOGLE_CLIENT_ID }}
           CHITHI_GOOGLE_CLIENT_SECRET: ${{ secrets.CHITHI_GOOGLE_CLIENT_SECRET }}
         run: |
           missing=0
-          for name in TAURI_SIGNING_PRIVATE_KEY CHITHI_GOOGLE_CLIENT_ID CHITHI_GOOGLE_CLIENT_SECRET; do
-            if [ -z "${!name}" ]; then echo "::error::Missing repository secret $name"; missing=1; fi
+          for name in TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD CHITHI_GOOGLE_CLIENT_ID CHITHI_GOOGLE_CLIENT_SECRET; do
+            if [ -z "${!name}" ]; then echo "::error::Missing secret $name in the release environment"; missing=1; fi
           done
           exit $missing
 
@@ -89,7 +94,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           CHITHI_GOOGLE_CLIENT_ID: ${{ secrets.CHITHI_GOOGLE_CLIENT_ID }}
           CHITHI_GOOGLE_CLIENT_SECRET: ${{ secrets.CHITHI_GOOGLE_CLIENT_SECRET }}
         with:
