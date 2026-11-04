@@ -38,6 +38,52 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
 // Shared by CSS sizing, event positioning, and pointer hit-testing.
 const HOUR_HEIGHT = 52;
 
+// The all-day row scrolls past a user-resizable cap, persisted per device.
+const ALL_DAY_HEIGHT_KEY = "chithi-all-day-height";
+const ALL_DAY_MIN_HEIGHT = 32;
+const allDayMaxHeight = ref(readAllDayHeight());
+let allDayResizeCleanup: (() => void) | null = null;
+
+function readAllDayHeight(): number {
+  try {
+    const stored = parseInt(localStorage.getItem(ALL_DAY_HEIGHT_KEY) || "", 10);
+    if (Number.isFinite(stored) && stored >= ALL_DAY_MIN_HEIGHT) return stored;
+  } catch {
+    // Storage unavailable: fall back to the default cap.
+  }
+  return 96;
+}
+
+function onAllDayResizeStart(e: MouseEvent) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  const startY = e.clientY;
+  const startHeight = allDayMaxHeight.value;
+  const viewHeight = (e.currentTarget as HTMLElement).parentElement?.clientHeight ?? 600;
+  const maxHeight = Math.max(ALL_DAY_MIN_HEIGHT, Math.floor(viewHeight * 0.6));
+
+  const handleMove = (ev: MouseEvent) => {
+    const next = startHeight + ev.clientY - startY;
+    allDayMaxHeight.value = Math.round(Math.min(maxHeight, Math.max(ALL_DAY_MIN_HEIGHT, next)));
+  };
+  const handleUp = () => {
+    document.body.style.cursor = "";
+    document.removeEventListener("mousemove", handleMove);
+    document.removeEventListener("mouseup", handleUp);
+    allDayResizeCleanup = null;
+    try {
+      localStorage.setItem(ALL_DAY_HEIGHT_KEY, String(allDayMaxHeight.value));
+    } catch {
+      // Not persisted; the size still applies for this session.
+    }
+  };
+
+  document.body.style.cursor = "row-resize";
+  document.addEventListener("mousemove", handleMove);
+  document.addEventListener("mouseup", handleUp);
+  allDayResizeCleanup = handleUp;
+}
+
 const days = computed(() => {
   const d = parseCalendarDay(calendarStore.displayDate);
   if (props.singleDay) {
@@ -444,6 +490,7 @@ onUnmounted(() => {
     nowIntervalId = null;
   }
   if (dragCleanup) dragCleanup();
+  if (allDayResizeCleanup) allDayResizeCleanup();
 });
 </script>
 
@@ -453,26 +500,40 @@ onUnmounted(() => {
     :data-testid="singleDay ? 'cal-day-view' : 'cal-week-view'"
     :style="{ '--hour-height': `${HOUR_HEIGHT}px` }"
   >
-    <div class="all-day-row">
-      <div class="time-gutter all-day-label">all-day</div>
-      <div
-        v-for="day in days"
-        :key="calendarDay(day) + 'ad'"
-        class="all-day-cell"
-        :class="{ today: isToday(day) }"
-      >
+    <div
+      class="all-day-scroll"
+      data-testid="cal-all-day-row"
+      :style="{ maxHeight: `${allDayMaxHeight}px` }"
+    >
+      <div class="all-day-row">
+        <div class="time-gutter all-day-label">all-day</div>
         <div
-          v-for="event in getAllDayEvents(day)"
-          :key="event.id"
-          class="all-day-event"
-          :data-testid="`cal-event-${event.id}`"
-          :style="{ '--ev': getEventColor(event), ...getEventStyle(event) }"
-          @click="emit('eventClick', event.id)"
+          v-for="day in days"
+          :key="calendarDay(day) + 'ad'"
+          class="all-day-cell"
+          :class="{ today: isToday(day) }"
         >
-          {{ event.title || '(No title)' }}
+          <div
+            v-for="event in getAllDayEvents(day)"
+            :key="event.id"
+            class="all-day-event"
+            :data-testid="`cal-event-${event.id}`"
+            :style="{ '--ev': getEventColor(event), ...getEventStyle(event) }"
+            @click="emit('eventClick', event.id)"
+          >
+            {{ event.title || '(No title)' }}
+          </div>
         </div>
       </div>
     </div>
+    <div
+      class="all-day-resizer"
+      data-testid="cal-all-day-resizer"
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="Resize all-day events"
+      @mousedown="onAllDayResizeStart"
+    ></div>
 
     <div class="day-headers">
       <div class="time-gutter"></div>
@@ -551,27 +612,53 @@ onUnmounted(() => {
   background: var(--color-bg);
 }
 
+/* Always-on 6px scrollbar keeps the columns aligned with the time grid. */
+.all-day-scroll {
+  flex-shrink: 0;
+  overflow-y: scroll;
+}
+
+.all-day-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.all-day-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
 .all-day-row {
   display: flex;
-  border-bottom: 2px solid var(--color-border);
   min-height: 32px;
+}
+
+.all-day-resizer {
   flex-shrink: 0;
-  padding-right: 6px;
+  height: 6px;
+  border-bottom: 2px solid var(--color-border);
+  cursor: row-resize;
+  transition: border-color 0.1s;
+}
+
+.all-day-resizer:hover {
+  border-bottom-color: var(--color-accent);
 }
 
 .all-day-label {
   font-size: 10px;
   color: var(--color-text-muted);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-end;
-  padding-right: 12px;
+  padding: 8px 12px 0 0;
   text-transform: lowercase;
   letter-spacing: 0.3px;
 }
 
+/* min-width: 0 stops a long nowrap title from widening its day. */
 .all-day-cell {
   flex: 1;
+  min-width: 0;
   padding: 3px 2px;
   border-left: 1px solid var(--color-border);
   display: flex;
