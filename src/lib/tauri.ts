@@ -109,6 +109,10 @@ export function getMessageHtmlWithImages(
   return invoke("get_message_html_with_images", { accountId, messageId });
 }
 
+export function getSignaturePreviewHtml(html: string): Promise<string> {
+  return invoke("get_signature_preview_html", { html });
+}
+
 export function createFolder(
   accountId: string,
   folderPath: string,

@@ -52,6 +52,7 @@ vi.mock("@/stores/pgp-prompts", () => ({
 vi.mock("@/lib/tauri", () => ({
   listAccounts: vi.fn<Api["listAccounts"]>(),
   getAccountConfig: vi.fn<Api["getAccountConfig"]>(),
+  getSignaturePreviewHtml: vi.fn<Api["getSignaturePreviewHtml"]>(),
   getMessageBody: vi.fn<Api["getMessageBody"]>(),
   sendMessage: vi.fn<Api["sendMessage"]>(),
   saveDraft: vi.fn<Api["saveDraft"]>(),
@@ -1292,5 +1293,40 @@ describe("ComposeView PGP recipient snapshots", () => {
     await settleDebounces();
     expect(api.sendMessage).not.toHaveBeenCalled();
     expect(native.window.close).not.toHaveBeenCalled();
+  });
+});
+
+describe("ComposeView HTML signature", () => {
+  const signature = `<!DOCTYPE html><html><head><title>Sig</title></head><body>
+<!-- internal note -->
+<table><tr><td><b>Andy Dodakal</b></td></tr>
+<tr><td><a href="https://www.linkedin.com/in/andy/">LinkedIn</a></td></tr></table>
+</body></html>`;
+
+  beforeEach(() => {
+    vi.mocked(api.getAccountConfig).mockResolvedValue({ ...accountConfig, signature });
+    vi.mocked(api.getSignaturePreviewHtml).mockImplementation(async (html) => html);
+  });
+
+  it("previews the signature instead of inserting it into the body", async () => {
+    const wrapper = await mountCompose();
+    expect((wrapper.get('[data-testid="compose-body"]').element as HTMLTextAreaElement).value).toBe("");
+    expect(wrapper.find('[data-testid="signature-preview"]').exists()).toBe(true);
+  });
+
+  it("sends the signature body and its text rendering, not in drafts", async () => {
+    const wrapper = await mountCompose();
+    await fillRecipients(wrapper);
+    await wrapper.get('[data-testid="compose-save-draft"]').trigger("click");
+    await flushPromises();
+    expect(vi.mocked(api.saveDraft).mock.calls[0][1].signature_html).toBeUndefined();
+
+    await wrapper.get('[data-testid="compose-send"]').trigger("click");
+    await flushPromises();
+    const sent = vi.mocked(api.sendMessage).mock.calls[0][1];
+    expect(sent.signature_html).toContain("<b>Andy Dodakal</b>");
+    expect(sent.signature_html).not.toContain("internal note");
+    expect(sent.signature_html).not.toContain("<title>");
+    expect(sent.signature_text).toBe("Andy Dodakal\nLinkedIn <https://www.linkedin.com/in/andy/>");
   });
 });

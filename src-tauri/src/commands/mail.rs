@@ -485,6 +485,18 @@ pub async fn get_message_html_with_images(
     let html = parser::parse_html_with_images(&raw)
         .ok_or_else(|| Error::MailParse("Failed to parse message HTML".to_string()))?;
 
+    inline_remote_images(&html).await
+}
+
+/// Inline the HTML signature's remote images for the settings and compose
+/// previews, which render in the same network-less sandbox as mail.
+#[tauri::command]
+pub async fn get_signature_preview_html(html: String) -> Result<String> {
+    inline_remote_images(&html).await
+}
+
+/// Download each `https://` image `src` and swap it for a base64 data URI.
+async fn inline_remote_images(html: &str) -> Result<String> {
     // Find all img src URLs and download them, replacing with data URIs.
     // This keeps the iframe sandbox at allow-scripts only (no allow-same-origin).
     let re = regex::Regex::new(r#"src="(https://[^"]+)""#)
@@ -497,7 +509,7 @@ pub async fn get_message_html_with_images(
 
     // Collect all unique URLs
     let urls: Vec<String> = re
-        .captures_iter(&html)
+        .captures_iter(html)
         .filter_map(|cap| cap.get(1).map(|m| m.as_str().to_string()))
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
@@ -573,7 +585,7 @@ pub async fn get_message_html_with_images(
     }
 
     // Replace URLs with data URIs in the HTML
-    let result = re.replace_all(&html, |caps: &regex::Captures| {
+    let result = re.replace_all(html, |caps: &regex::Captures| {
         let url = caps.get(1).unwrap().as_str();
         if let Some(data_uri) = url_to_data.get(url) {
             format!("src=\"{}\"", data_uri)

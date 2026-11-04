@@ -91,6 +91,13 @@ pub struct ComposeMessage {
     /// when `body_html` is already populated (an explicit HTML body wins).
     #[serde(default)]
     pub markdown: bool,
+    /// The account's HTML signature, appended after the body in the html
+    /// part. Sent only on send (drafts keep the bare body), together with
+    /// `signature_text`, its plaintext rendering for the text part.
+    #[serde(default)]
+    pub signature_html: Option<String>,
+    #[serde(default)]
+    pub signature_text: Option<String>,
 }
 
 /// Resolve the effective HTML body for an outgoing message.
@@ -106,7 +113,19 @@ pub struct ComposeMessage {
 ///
 /// Shared by every send path (and reusable by the mobile composer once it
 /// exists) so Markdown rendering lives in one place, not per-platform.
+///
+/// An HTML signature forces an html part: a plaintext body is escaped
+/// into one so the signature can follow it.
 fn resolve_body_html(message: &ComposeMessage) -> Option<String> {
+    let body = resolve_base_body_html(message);
+    let Some(signature) = html_signature(message) else {
+        return body;
+    };
+    let body = body.unwrap_or_else(|| plain_text_to_html(&message.body_text));
+    Some(format!("{body}<br><br>\n{signature}"))
+}
+
+fn resolve_base_body_html(message: &ComposeMessage) -> Option<String> {
     if let Some(html) = &message.body_html {
         return Some(html.clone());
     }
@@ -120,6 +139,37 @@ fn resolve_body_html(message: &ComposeMessage) -> Option<String> {
             None
         }
     }
+}
+
+/// The plaintext part: the body, then the HTML signature's text rendering
+/// behind the conventional "-- " delimiter.
+fn resolve_body_text(message: &ComposeMessage) -> String {
+    let text = message
+        .signature_text
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty());
+    match (html_signature(message), text) {
+        (Some(_), Some(text)) => format!("{}\n\n-- \n{}", message.body_text, text),
+        _ => message.body_text.clone(),
+    }
+}
+
+fn html_signature(message: &ComposeMessage) -> Option<&str> {
+    message
+        .signature_html
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+}
+
+fn plain_text_to_html(text: &str) -> String {
+    let escaped = text
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;");
+    format!("<div>{}</div>", escaped.replace("\r\n", "\n").replace('\n', "<br>\n"))
 }
 
 /// An attachment referenced by the renderer. `token` is the opaque handle
@@ -200,6 +250,7 @@ pub async fn send_message(
     // (the Markdown source, when in Markdown mode) always rides as the
     // plaintext part, so recipients get both.
     let body_html = resolve_body_html(&message);
+    let body_text = resolve_body_text(&message);
 
     // Build the plain MIME bytes. `plain_raw` stays a `Vec<u8>` so the
     // optional PGP wrap and Autocrypt header inject below can each
@@ -214,7 +265,7 @@ pub async fn send_message(
         &message.cc,
         &message.bcc,
         &message.subject,
-        &message.body_text,
+        &body_text,
         body_html.as_deref(),
         &attachment_data,
         in_reply_to.as_deref(),
@@ -1624,7 +1675,7 @@ mod send_safety_tests {
 
 #[cfg(test)]
 mod markdown_body_tests {
-    use super::{resolve_body_html, ComposeMessage};
+    use super::{resolve_body_html, resolve_body_text, ComposeMessage};
 
     fn msg(body_text: &str, body_html: Option<&str>, markdown: bool) -> ComposeMessage {
         ComposeMessage {
@@ -1639,6 +1690,16 @@ mod markdown_body_tests {
             pgp_sign: false,
             pgp_encrypt: false,
             markdown,
+            signature_html: None,
+            signature_text: None,
+        }
+    }
+
+    fn signed(body_text: &str, markdown: bool) -> ComposeMessage {
+        ComposeMessage {
+            signature_html: Some("<table><tr><td>Andy</td></tr></table>".to_string()),
+            signature_text: Some("Andy\nSenior Product Designer".to_string()),
+            ..msg(body_text, None, markdown)
         }
     }
 
@@ -1687,6 +1748,31 @@ mod markdown_body_tests {
         let html = resolve_body_html(&msg("# ignored", Some("<p>explicit</p>"), true))
             .expect("explicit html");
         assert_eq!(html, "<p>explicit</p>");
+    }
+
+    /// A plaintext body gains an escaped html part so the HTML signature
+    /// can follow it.
+    #[test]
+    fn html_signature_wraps_plaintext_body() {
+        let html = resolve_body_html(&signed("Hi <you>\nthanks", false)).expect("html part");
+        assert!(html.starts_with("<div>Hi &lt;you&gt;<br>\nthanks</div>"), "{html}");
+        assert!(html.ends_with("<table><tr><td>Andy</td></tr></table>"), "{html}");
+    }
+
+    #[test]
+    fn html_signature_follows_markdown_body() {
+        let html = resolve_body_html(&signed("**hi**", true)).expect("html part");
+        assert!(html.contains("<strong>hi</strong>"), "{html}");
+        assert!(html.ends_with("<table><tr><td>Andy</td></tr></table>"), "{html}");
+    }
+
+    #[test]
+    fn html_signature_text_follows_the_delimiter() {
+        assert_eq!(
+            resolve_body_text(&signed("Hello", false)),
+            "Hello\n\n-- \nAndy\nSenior Product Designer"
+        );
+        assert_eq!(resolve_body_text(&msg("Hello", None, false)), "Hello");
     }
 }
 

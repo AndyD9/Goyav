@@ -26,6 +26,8 @@ import {
 } from "@/lib/compose-recipients";
 import Select from "@/components/common/Select.vue";
 import ComposeMenuBar from "@/components/compose/ComposeMenuBar.vue";
+import SignaturePreview from "@/components/common/SignaturePreview.vue";
+import { isHtmlSignature, htmlSignatureBody, htmlSignatureToText } from "@/lib/signature";
 
 type RecipientField = "to" | "cc" | "bcc";
 type ComposeRecipients = Record<RecipientField, string[]>;
@@ -361,9 +363,12 @@ function onAddrBlur() {
 }
 
 // Signature management — track current signature so we can swap it
-// when the user switches accounts in the From dropdown.
+// when the user switches accounts in the From dropdown. A text signature
+// lives in the body; an HTML one is previewed below it and appended by
+// the backend at send time.
 const currentSignature = ref("");
 const signatureSuffix = ref("");
+const signatureHtml = ref("");
 
 function buildSignatureBlock(sig: string, hasBody: boolean): string {
   if (!sig) return "";
@@ -373,14 +378,17 @@ function buildSignatureBlock(sig: string, hasBody: boolean): string {
   return gap + sig;
 }
 
-async function applySignature(accountId: string) {
+async function applySignature(accountId: string, insertText = true) {
   try {
     const config = await api.getAccountConfig(accountId);
-    const oldBlock = signatureSuffix.value;
     const newSig = config.signature || "";
+    const isHtml = isHtmlSignature(newSig);
+    signatureHtml.value = isHtml ? newSig : "";
+    if (!insertText) return;
+    const oldBlock = signatureSuffix.value;
     const queryBody = (route.query.body as string) || "";
     const hasBody = queryBody.length > 0;
-    const newBlock = buildSignatureBlock(newSig, hasBody);
+    const newBlock = isHtml ? "" : buildSignatureBlock(newSig, hasBody);
 
     if (oldBlock && bodyText.value.endsWith(oldBlock)) {
       bodyText.value = bodyText.value.slice(0, -oldBlock.length) + newBlock;
@@ -398,11 +406,11 @@ async function applySignature(accountId: string) {
 }
 
 // Apply signature on initial account selection and when switching
-// accounts. Skipped entirely when resuming a draft — the draft already
-// carries whatever signature it was saved with, and appending another
+// accounts. A resumed draft only picks up the HTML signature — it already
+// carries any text signature it was saved with, and appending another
 // would both duplicate it and race the async draft pre-fill.
 watch(selectedAccountId, (newId) => {
-  if (newId && !isResumingDraft) applySignature(newId);
+  if (newId) applySignature(newId, !isResumingDraft);
 });
 
 // Track initial values to detect changes.
@@ -874,6 +882,8 @@ async function send() {
       pgp_sign: pgpSign.value,
       pgp_encrypt: pgpEncrypt.value,
       markdown: markdownMode.value,
+      signature_html: signatureHtml.value ? htmlSignatureBody(signatureHtml.value) : null,
+      signature_text: signatureHtml.value ? htmlSignatureToText(signatureHtml.value) : null,
     });
     if (replyToMessageId) {
       api.setMessageFlags(accountId, [replyToMessageId], ["answered"], true)
@@ -1156,6 +1166,10 @@ async function send() {
         data-testid="compose-body"
         autofocus
       ></textarea>
+
+      <div v-if="signatureHtml" class="compose-signature">
+        <SignaturePreview :html="signatureHtml" />
+      </div>
 
       <div
         v-if="markdownMode"
@@ -1497,6 +1511,13 @@ async function send() {
 .compose-textarea:focus {
   outline: none;
   border-color: var(--color-accent);
+}
+
+.compose-signature {
+  margin: -4px 16px 16px;
+  max-height: 40%;
+  overflow-y: auto;
+  flex-shrink: 0;
 }
 
 .compose-markdown-hint {

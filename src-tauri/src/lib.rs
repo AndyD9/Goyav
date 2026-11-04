@@ -77,6 +77,7 @@ pub fn run() {
             commands::mail::import_search_hit,
             commands::mail::get_message_body,
             commands::mail::get_message_html_with_images,
+            commands::mail::get_signature_preview_html,
             commands::mail::get_threaded_messages,
             commands::mail::get_thread_messages,
             commands::mail::unthread_message,

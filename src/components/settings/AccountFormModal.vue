@@ -25,6 +25,8 @@ import JmapSection from "@/components/settings/JmapSection.vue";
 import DavSection from "@/components/settings/DavSection.vue";
 import SyncBindingsSection from "@/components/settings/SyncBindingsSection.vue";
 import PgpAdvancedSection from "@/components/settings/PgpAdvancedSection.vue";
+import SignaturePreview from "@/components/common/SignaturePreview.vue";
+import { isHtmlSignature } from "@/lib/signature";
 import {
   accountTypeLabelLong,
   isFastmailJmapUrl,
@@ -1112,6 +1114,11 @@ async function signInWithVisio() {
         rows="4"
         placeholder="-- &#10;Your Name&#10;Your Title"
       ></textarea>
+      <template v-if="isHtmlSignature(form.signature)">
+        <div class="signature-hint">HTML signature — added below the message and sent as HTML.</div>
+        <SignaturePreview :html="form.signature" />
+      </template>
+      <div v-else class="signature-hint">Plain text, or paste the HTML of a signature file.</div>
     </div>
 
     <!-- Per-binding sync controls. Only meaningful for accounts
@@ -1361,6 +1368,12 @@ async function signInWithVisio() {
 .signature-textarea:focus {
   outline: none;
   border-color: var(--color-accent);
+}
+
+.signature-hint {
+  margin: 6px 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
 }
 
 .info-box {

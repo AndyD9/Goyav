@@ -515,6 +515,9 @@ export interface ComposeMessage {
   pgp_encrypt?: boolean;
   /** Renders body_text as Markdown unless body_html is already set. */
   markdown?: boolean;
+  /** HTML signature appended to the html part, with its text rendering. */
+  signature_html?: string | null;
+  signature_text?: string | null;
 }
 
 export interface PgpRecipientStatus {
