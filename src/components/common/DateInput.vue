@@ -239,7 +239,7 @@ onUnmounted(() => {
 .date-input-trigger {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
   box-sizing: border-box;
   height: var(--input-height, 28px);
@@ -280,8 +280,8 @@ onUnmounted(() => {
   z-index: 1000;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
-  padding: 10px;
+  border-radius: 8px;
+  padding: 12px;
   min-width: 240px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }

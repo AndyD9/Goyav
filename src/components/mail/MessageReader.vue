@@ -1039,8 +1039,8 @@ async function markSpam() {
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 6px 8px;
-  padding: 6px 12px;
+  gap: 8px 8px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg);
 }
@@ -1051,7 +1051,7 @@ async function markSpam() {
   flex: 1 1 240px;
   flex-wrap: wrap;
   min-width: 0;
-  gap: 6px;
+  gap: 8px;
 }
 
 .actions-right {
@@ -1068,8 +1068,8 @@ async function markSpam() {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 5px;
-  padding: 5px 12px;
+  gap: 4px;
+  padding: 4px 12px;
   border-radius: 4px;
   border: none;
   font-size: 14px;
@@ -1085,9 +1085,9 @@ async function markSpam() {
 }
 
 .icon-action {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1108,7 +1108,7 @@ async function markSpam() {
 .view-toggle {
   display: flex;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -1161,7 +1161,8 @@ async function markSpam() {
 .header-label {
   color: var(--color-text-muted);
   flex-shrink: 0;
-  min-width: 40px;
+  /* Wide enough for the longest label in every language ("Date :"). */
+  min-width: 52px;
 }
 
 .header-value {
@@ -1188,25 +1189,25 @@ async function markSpam() {
 .attachments-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 12px;
   color: var(--color-text-muted);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .attachments-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 .attachment-chip {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
+  gap: 8px;
+  padding: 4px 12px;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--color-bg-secondary);
   color: var(--color-text);
   font-size: 12px;
@@ -1252,7 +1253,7 @@ async function markSpam() {
   color: var(--color-text-muted);
   background: var(--color-bg-tertiary);
   padding: 4px 8px;
-  border-radius: 3px;
+  border-radius: 4px;
   margin-bottom: 8px;
 }
 
@@ -1260,7 +1261,7 @@ async function markSpam() {
   font-size: 11px;
   padding: 2px 8px;
   border: 1px solid var(--color-border);
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--color-bg-secondary);
   color: var(--color-accent);
   cursor: pointer;
@@ -1278,7 +1279,7 @@ async function markSpam() {
 .body-html-wrapper {
   background: var(--color-email-body-bg);
   color: var(--color-email-body-text);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 16px;
   border: 1px solid var(--color-border);
   flex: 1 0 auto;
@@ -1311,8 +1312,8 @@ async function markSpam() {
   transform: translateX(-50%);
   background: var(--color-bg-active);
   color: var(--color-text);
-  padding: 6px 16px;
-  border-radius: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
   font-size: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   pointer-events: none;
@@ -1320,7 +1321,7 @@ async function markSpam() {
 
 .addr-clickable {
   cursor: default;
-  border-radius: 3px;
+  border-radius: 4px;
   padding: 0 2px;
 }
 
@@ -1350,7 +1351,7 @@ async function markSpam() {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 14px;
+  padding: 8px 16px;
   text-align: left;
   font-size: 13px;
   color: var(--color-text);
@@ -1367,12 +1368,12 @@ async function markSpam() {
 .pgp-banner {
   margin: 8px 16px 0 16px;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 0.8px solid var(--color-border);
   font-size: 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 .pgp-banner-row {
   display: flex;
@@ -1390,7 +1391,7 @@ async function markSpam() {
   background: var(--color-bg-tertiary);
 }
 .pgp-btn {
-  padding: 4px 10px;
+  padding: 4px 12px;
   border-radius: 4px;
   border: 0.8px solid var(--color-border);
   background: var(--color-accent);

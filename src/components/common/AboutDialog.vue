@@ -7,8 +7,8 @@ import logoUrl from "@/assets/goyav-logo.png";
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 
-const SOURCE_URL = "https://github.com/SUNET/chithi";
-const LICENSE_URL = "https://github.com/SUNET/chithi/blob/main/LICENSE";
+const SOURCE_URL = "https://github.com/AndyD9/Goyav";
+const LICENSE_URL = "https://github.com/AndyD9/Goyav/blob/goyav/LICENSE";
 
 const version = __APP_VERSION__;
 
@@ -65,7 +65,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
                 href="#"
                 data-testid="about-source-link"
                 @click.prevent="openExternal(SOURCE_URL)"
-              >github.com/SUNET/chithi</a>
+              >github.com/AndyD9/Goyav</a>
             </dd>
             <dt>{{ t("License") }}</dt>
             <dd>
@@ -107,7 +107,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 18px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -120,7 +120,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
 .about-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .about-logo {
@@ -135,7 +135,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
   font-size: 22px;
   line-height: 1;
   cursor: pointer;
-  padding: 0 6px;
+  padding: 0 8px;
 }
 
 .about-close:hover {
@@ -143,11 +143,11 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
 }
 
 .about-body {
-  padding: 18px;
+  padding: 20px;
 }
 
 .about-tagline {
-  margin: 0 0 14px;
+  margin: 0 0 16px;
   font-size: 13px;
   color: var(--color-text-secondary);
 }
@@ -155,7 +155,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
 .about-meta {
   display: grid;
   grid-template-columns: 84px 1fr;
-  row-gap: 6px;
+  row-gap: 8px;
   column-gap: 12px;
   margin: 0;
   font-size: 13px;

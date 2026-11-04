@@ -138,7 +138,7 @@ async function respond(response: string) {
 .invite-card {
   background: var(--color-bg-secondary);
   border: 0.8px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 16px;
   margin-bottom: 16px;
   display: flex;
@@ -230,8 +230,8 @@ async function respond(response: string) {
 .btn-decline {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 16px;
+  gap: 8px;
+  padding: 4px 16px;
   border-radius: 4px;
   font-size: 14px;
   font-weight: 500;

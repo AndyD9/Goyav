@@ -21,7 +21,7 @@ function documentFor(body: string): string {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:;">
 <style>
   html, body { margin: 0; background: #fff; color: #0a0908; }
-  body { padding: 12px 14px; font-family: Arial, Helvetica, sans-serif; font-size: 13px; }
+  body { padding: 12px 16px; font-family: Arial, Helvetica, sans-serif; font-size: 13px; }
 </style>
 </head>
 <body>${body}</body>

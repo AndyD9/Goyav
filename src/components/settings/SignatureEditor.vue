@@ -219,11 +219,11 @@ async function importFile(target: AccountSignature | null) {
 .sig-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 30px;
+  gap: 8px;
+  height: 32px;
   padding: 0 12px;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--color-bg);
   color: var(--color-text);
   font-size: 12.5px;
@@ -254,7 +254,7 @@ async function importFile(target: AccountSignature | null) {
 }
 
 .sig-empty {
-  padding: 18px;
+  padding: 20px;
   border: 1px dashed var(--color-border);
   border-radius: 8px;
   font-size: 13px;
@@ -283,9 +283,9 @@ async function importFile(target: AccountSignature | null) {
 .sig-item {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 7px 10px;
-  border-radius: 6px;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
   cursor: pointer;
 }
 
@@ -317,7 +317,7 @@ async function importFile(target: AccountSignature | null) {
 .sig-tag {
   font-size: 10px;
   font-weight: 600;
-  padding: 1px 6px;
+  padding: 1px 8px;
   border-radius: 4px;
   background: var(--color-bg-tertiary);
   color: var(--color-text-muted);
@@ -335,7 +335,7 @@ async function importFile(target: AccountSignature | null) {
 
 .sig-textarea {
   width: 100%;
-  padding: 8px 10px;
+  padding: 8px 12px;
   font-size: 13px;
   font-family: 'Liberation Mono', monospace;
   border: 0.8px solid var(--color-border);
@@ -352,7 +352,7 @@ async function importFile(target: AccountSignature | null) {
 }
 
 .sig-preview {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .sig-preview-label {
@@ -372,7 +372,7 @@ async function importFile(target: AccountSignature | null) {
 .sig-default {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 13px;
   color: var(--color-text);
   cursor: pointer;

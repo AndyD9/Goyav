@@ -371,7 +371,7 @@ function onPointerUp() {
 }
 
 .col {
-  padding: 0 6px;
+  padding: 0 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -389,8 +389,8 @@ function onPointerUp() {
 }
 
 .row-checkbox {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   cursor: pointer;
   accent-color: var(--color-accent);
 }
@@ -448,7 +448,7 @@ function onPointerUp() {
 }
 
 .col-date {
-  width: 110px;
+  width: 112px;
   flex-shrink: 0;
   color: var(--color-text-muted);
   font-size: 11px;
@@ -481,7 +481,7 @@ function onPointerUp() {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 12px 16px;
   background: inherit;
   touch-action: pan-y;
   cursor: pointer;
@@ -510,8 +510,8 @@ function onPointerUp() {
   position: absolute;
   right: -1px;
   bottom: -1px;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   box-shadow: 0 0 0 2px var(--color-bg);
 }
@@ -527,12 +527,12 @@ function onPointerUp() {
 .mobile-line1 {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .mobile-unread-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--color-accent);
   flex-shrink: 0;
@@ -586,14 +586,14 @@ function onPointerUp() {
 .mobile-line3 {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 13px;
   color: var(--color-text-muted);
 }
 
 .mobile-paperclip {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   flex-shrink: 0;
 }
 
@@ -624,8 +624,8 @@ function onPointerUp() {
 }
 
 .swipe-action svg {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
 }
 
 .swipe-archive {

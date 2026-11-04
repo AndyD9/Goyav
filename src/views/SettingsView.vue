@@ -699,9 +699,9 @@ watch([
 .settings-nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 34px;
-  padding: 0 10px;
+  gap: 12px;
+  height: 36px;
+  padding: 0 12px;
   border-radius: var(--radius);
   font-size: 13px;
   color: var(--color-text-secondary);
@@ -770,11 +770,11 @@ watch([
 .btn-add {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 16px;
+  gap: 8px;
+  padding: 8px 16px;
   background: var(--color-accent);
   color: white;
-  border-radius: 18px;
+  border-radius: 20px;
   font-size: 13px;
   font-weight: 500;
   transition: background 0.12s;
@@ -785,8 +785,8 @@ watch([
 }
 
 .btn-add-lg {
-  padding: 10px 22px;
-  border-radius: 22px;
+  padding: 12px 24px;
+  border-radius: 24px;
   font-size: 14px;
 }
 
@@ -831,8 +831,8 @@ watch([
 .account-card {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
+  gap: 16px;
+  padding: 16px 16px;
   border-bottom: 1px solid var(--color-divider);
   transition: background 0.1s;
 }
@@ -890,7 +890,7 @@ watch([
 .account-card-type {
   flex-shrink: 0;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 11px;
   font-weight: 500;
 }
@@ -933,7 +933,7 @@ watch([
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  padding: 14px 16px;
+  padding: 16px 16px;
   border-bottom: 1px solid var(--color-divider);
 }
 
@@ -968,7 +968,7 @@ watch([
 
 .segmented-btn {
   padding: 4px 12px;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 12px;
   font-weight: 500;
   color: var(--color-text-secondary);
@@ -999,7 +999,7 @@ watch([
 
 /* Archived calendars */
 .archive-settings {
-  padding: 14px 16px;
+  padding: 16px 16px;
   color: var(--color-text-muted);
   font-size: 13px;
   line-height: 1.5;
@@ -1015,7 +1015,7 @@ watch([
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 18px;
+  padding: 20px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-panel);
 }
@@ -1080,7 +1080,7 @@ watch([
   color: var(--color-text-muted);
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1144,7 +1144,7 @@ watch([
   margin-top: 16px;
   padding: 12px;
   border: 1px solid var(--color-danger);
-  border-radius: 6px;
+  border-radius: 8px;
   background: rgba(194, 65, 12, 0.08);
   color: var(--color-text);
   font-size: 13px;
@@ -1152,7 +1152,7 @@ watch([
 }
 
 .zoom-abandon-warning p {
-  margin: 6px 0 10px;
+  margin: 8px 0 12px;
   color: var(--color-text-secondary);
 }
 
@@ -1184,11 +1184,11 @@ watch([
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px 14px 40px;
+  padding: 4px 16px 40px;
 }
 
 .section {
-  margin-top: 18px;
+  margin-top: 20px;
 }
 
 .section:first-child {
@@ -1196,7 +1196,7 @@ watch([
 }
 
 .section-label {
-  padding: 0 4px 6px;
+  padding: 0 4px 8px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.6px;
@@ -1230,7 +1230,7 @@ watch([
   align-items: center;
   gap: 12px;
   min-height: 68px;
-  padding: 10px 14px;
+  padding: 12px 16px;
   border: 0;
   background: transparent;
   text-align: left;
@@ -1242,8 +1242,8 @@ watch([
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  width: 70px;
+  gap: 4px;
+  width: 72px;
   border: 0;
   border-left: 1px solid var(--color-border);
   background: transparent;
@@ -1255,8 +1255,8 @@ watch([
 }
 
 .mobile-account-delete svg {
-  width: 17px;
-  height: 17px;
+  width: 16px;
+  height: 16px;
   stroke-width: 1.7;
 }
 
@@ -1345,7 +1345,7 @@ watch([
   align-items: center;
   width: 100%;
   min-height: 44px;
-  padding: 0 14px;
+  padding: 0 16px;
   background: transparent;
   border: 0;
   border-bottom: 1px solid var(--color-border-soft, var(--color-border));
@@ -1388,7 +1388,7 @@ watch([
 
 .toggle-pill {
   position: relative;
-  width: 46px;
+  width: 48px;
   height: 28px;
   border-radius: 999px;
   background: var(--color-border);
@@ -1442,8 +1442,8 @@ watch([
   .modal::before {
     content: "";
     display: block;
-    width: 38px;
-    height: 5px;
+    width: 40px;
+    height: 4px;
     border-radius: 100px;
     background: var(--color-border);
     margin: 8px auto 4px;
@@ -1452,7 +1452,7 @@ watch([
 
   .modal-header {
     justify-content: center;
-    padding: 4px 16px 10px;
+    padding: 4px 16px 12px;
   }
 
   .modal-header h3 {

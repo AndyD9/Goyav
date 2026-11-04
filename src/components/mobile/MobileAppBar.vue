@@ -30,12 +30,12 @@ defineProps<{
   flex-shrink: 0;
   background: var(--color-bg);
   border-bottom: 1px solid var(--color-divider, #e9e0cd);
-  padding: 10px 8px;
-  padding-top: max(10px, env(safe-area-inset-top));
+  padding: 12px 8px;
+  padding-top: max(12px, env(safe-area-inset-top));
 }
 
 .mobile-app-bar.large {
-  padding-bottom: 6px;
+  padding-bottom: 8px;
 }
 
 .row {

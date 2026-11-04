@@ -77,8 +77,8 @@ onBeforeUnmount(() => {
 }
 
 .grabber {
-  width: 38px;
-  height: 5px;
+  width: 40px;
+  height: 4px;
   border-radius: 100px;
   background: var(--color-border);
   margin: 8px auto 4px;
@@ -88,7 +88,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px 10px;
+  padding: 8px 12px 12px;
   border-bottom: 1px solid var(--color-divider, #e9e0cd);
 }
 
@@ -105,7 +105,7 @@ onBeforeUnmount(() => {
   background: transparent;
   font-family: inherit;
   font-size: 15px;
-  padding: 8px 6px;
+  padding: 8px 8px;
   cursor: pointer;
 }
 
@@ -116,7 +116,7 @@ onBeforeUnmount(() => {
 .sheet-action.send {
   background: var(--color-accent);
   color: #fff;
-  padding: 8px 14px;
+  padding: 8px 16px;
   border-radius: 100px;
   font-weight: 600;
 }

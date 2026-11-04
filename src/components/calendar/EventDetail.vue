@@ -579,8 +579,8 @@ async function handleDelete() {
   flex-shrink: 0;
   width: 12px;
   height: 12px;
-  border-radius: 3px;
-  margin: 3px 4px 0 4px;
+  border-radius: 4px;
+  margin: 4px 4px 0 4px;
 }
 
 .detail-secondary {
@@ -601,7 +601,7 @@ async function handleDelete() {
   margin: 0;
 }
 
-.edit-mode { display: flex; flex-direction: column; gap: 10px; }
+.edit-mode { display: flex; flex-direction: column; gap: 12px; }
 
 .edit-row { display: flex; gap: 12px; }
 .edit-row .edit-group { flex: 1; }
@@ -637,7 +637,7 @@ async function handleDelete() {
 .checkbox-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 13px;
   cursor: pointer;
 }
@@ -651,20 +651,20 @@ async function handleDelete() {
 }
 
 .btn-edit {
-  padding: 6px 16px;
+  padding: 8px 16px;
   border: 1px solid var(--color-accent);
   color: var(--color-accent);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 12px;
 }
 
 .btn-edit:hover { background: var(--color-accent-light); }
 
 .btn-save {
-  padding: 6px 16px;
+  padding: 8px 16px;
   background: var(--color-accent);
   color: var(--color-bg);
-  border-radius: 6px;
+  border-radius: 8px;
   font-weight: 600;
   font-size: 12px;
 }
@@ -672,17 +672,17 @@ async function handleDelete() {
 .detail-footer button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-cancel {
-  padding: 6px 16px;
+  padding: 8px 16px;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 12px;
 }
 
 .btn-danger {
-  padding: 6px 16px;
+  padding: 8px 16px;
   color: var(--color-danger);
   border: 1px solid var(--color-danger);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 12px;
 }
 

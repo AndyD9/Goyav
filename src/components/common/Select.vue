@@ -244,7 +244,7 @@ onUnmounted(() => {
 .select-trigger {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
   box-sizing: border-box;
   height: var(--input-height, 28px);
@@ -296,7 +296,7 @@ onUnmounted(() => {
   list-style: none;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
@@ -307,7 +307,7 @@ onUnmounted(() => {
 }
 
 .select-option {
-  padding: 6px 10px;
+  padding: 8px 12px;
   border-radius: 4px;
   color: var(--color-text);
   font-size: var(--input-font-size, 13px);

@@ -675,29 +675,29 @@ async function save() {
 <style scoped>
 .scheduling-toggle {
   margin-top: 8px;
-  padding: 5px 10px;
+  padding: 4px 12px;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--color-bg-secondary);
   color: var(--color-text);
   cursor: pointer;
 }
 .scheduling-assistant {
-  margin-top: 10px;
-  padding: 10px;
+  margin-top: 12px;
+  padding: 12px;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--color-bg-secondary);
   font-size: 13px;
 }
-.scheduling-assistant p { margin: 6px 0; }
+.scheduling-assistant p { margin: 8px 0; }
 .scheduling-warning { color: var(--color-warning); }
 .scheduling-error { color: var(--color-danger-text); }
-.scheduling-slots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.scheduling-slots { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .scheduling-slot {
-  padding: 5px 8px;
+  padding: 4px 8px;
   border: 1px solid var(--color-accent);
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--color-accent);
   cursor: pointer;
@@ -705,14 +705,14 @@ async function save() {
 .meet-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
+  gap: 8px;
+  margin-top: 8px;
 }
 .meet-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
+  gap: 8px;
+  padding: 4px 12px;
   font-size: 11px;
   border-radius: 12px;
   border: 1px solid var(--color-border);
@@ -729,21 +729,21 @@ async function save() {
 }
 .meet-error {
   display: block;
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 11px;
   color: var(--color-danger, #c0392b);
 }
 
 .room-suggestions-loading {
   display: block;
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 11px;
   color: var(--color-text-secondary, #666);
 }
 
 .room-availability {
   display: block;
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 11px;
 }
 
@@ -771,7 +771,7 @@ async function save() {
 
 .event-form {
   background: var(--color-bg-secondary);
-  border-radius: 10px;
+  border-radius: 12px;
   width: 672px;
   max-height: 85vh;
   display: flex;

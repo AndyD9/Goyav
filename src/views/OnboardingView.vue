@@ -130,7 +130,7 @@ function skipForNow() {
   align-items: center;
   gap: 8px;
   align-self: flex-start;
-  padding: 6px 10px 6px 6px;
+  padding: 8px 12px 8px 8px;
   border-radius: 100px;
   background: var(--color-accent-light);
   color: var(--color-accent);
@@ -169,7 +169,7 @@ function skipForNow() {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .provider-card {
@@ -177,7 +177,7 @@ function skipForNow() {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 12px;
+  padding: 16px 12px;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-divider, #e9e0cd);
   border-left: 4px solid var(--color-accent);
@@ -190,8 +190,8 @@ function skipForNow() {
 }
 
 .provider-avatar {
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   border-radius: 8px;
   display: inline-flex;
   align-items: center;
@@ -221,8 +221,8 @@ function skipForNow() {
 }
 
 .chevron {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   color: var(--color-text-muted);
   flex-shrink: 0;
 }
@@ -230,7 +230,7 @@ function skipForNow() {
 .skip-link {
   align-self: center;
   margin-top: 8px;
-  padding: 10px 14px;
+  padding: 12px 16px;
   border: 0;
   background: transparent;
   color: var(--color-accent);

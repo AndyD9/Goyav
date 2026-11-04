@@ -369,7 +369,7 @@ function statusLabel(row: OutboxRow): string {
   color: var(--color-text-muted);
   background: none;
   border: 1px solid var(--color-border);
-  padding: 4px 10px;
+  padding: 4px 12px;
   border-radius: 4px;
   cursor: pointer;
 }
@@ -407,9 +407,9 @@ function statusLabel(row: OutboxRow): string {
 .outbox-item {
   display: flex;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 12px 12px;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--color-bg);
   margin-bottom: 8px;
 }
@@ -490,7 +490,7 @@ function statusLabel(row: OutboxRow): string {
 
 .outbox-btn {
   font-size: 11px;
-  padding: 4px 10px;
+  padding: 4px 12px;
   border-radius: 4px;
   border: 1px solid var(--color-border);
   background: var(--color-bg);

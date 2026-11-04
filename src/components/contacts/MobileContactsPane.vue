@@ -198,12 +198,12 @@ function mobileContactInitial(c: Contact): string {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 6px 12px 4px;
+  margin: 8px 12px 4px;
   padding: 0 12px;
   height: 36px;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: 12px;
   color: var(--color-text-muted);
 }
 
@@ -225,8 +225,8 @@ function mobileContactInitial(c: Contact): string {
 .mobile-chips {
   flex-shrink: 0;
   display: flex;
-  gap: 6px;
-  padding: 6px 12px 10px;
+  gap: 8px;
+  padding: 8px 12px 12px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -238,9 +238,9 @@ function mobileContactInitial(c: Contact): string {
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
-  height: 30px;
+  height: 32px;
   padding: 0 12px;
   border: 1px solid var(--color-border);
   border-radius: 999px;
@@ -276,7 +276,7 @@ function mobileContactInitial(c: Contact): string {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-right: 14px; /* leave room for the edge index rail */
+  padding-right: 16px; /* leave room for the edge index rail */
   scroll-behavior: smooth;
 }
 
@@ -284,7 +284,7 @@ function mobileContactInitial(c: Contact): string {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 4px 14px;
+  padding: 4px 16px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.5px;
@@ -299,7 +299,7 @@ function mobileContactInitial(c: Contact): string {
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 10px 14px;
+  padding: 12px 16px;
   border: 0;
   border-bottom: 1px solid var(--color-border);
   background: transparent;
@@ -313,13 +313,13 @@ function mobileContactInitial(c: Contact): string {
 .mobile-row-avatar-wrap {
   position: relative;
   flex-shrink: 0;
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
 }
 
 .mobile-row-avatar {
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: grid;
   place-items: center;

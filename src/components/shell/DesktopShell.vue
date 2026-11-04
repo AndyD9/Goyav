@@ -7,6 +7,7 @@ import StatusBar from "@/components/common/StatusBar.vue";
 import OperationsPanel from "@/components/common/OperationsPanel.vue";
 import LinkPopup from "@/components/common/LinkPopup.vue";
 import WhatsNewDialog from "@/components/changelog/WhatsNewDialog.vue";
+import MailNotifier from "@/components/common/MailNotifier.vue";
 
 const route = useRoute();
 
@@ -52,6 +53,7 @@ const viewHasOwnPanels = computed(
     </div>
     <LinkPopup />
     <WhatsNewDialog />
+    <MailNotifier />
   </div>
 </template>
 

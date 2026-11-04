@@ -134,7 +134,7 @@ function onTextInput() {
 
 .filter-left {
   flex: 1;
-  min-width: 150px;
+  min-width: 152px;
 }
 
 .input-wrapper {
@@ -219,7 +219,7 @@ function onTextInput() {
 .field-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 2px 8px 4px;
 }
 
@@ -231,7 +231,7 @@ function onTextInput() {
 .field-btn {
   padding: 2px 8px;
   border: 1px solid var(--color-border);
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--color-bg);
   color: var(--color-text-secondary);
   font-size: 11px;
@@ -252,14 +252,14 @@ function onTextInput() {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 2px 8px 6px;
+  padding: 2px 8px 8px;
 }
 
 .server-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
+  gap: 8px;
+  padding: 4px 12px;
   border: 1px solid var(--color-border);
   border-radius: 4px;
   background: var(--color-bg);

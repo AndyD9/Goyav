@@ -184,6 +184,15 @@ export const account: Record<string, string> = {
   "What's new in Goyav {version}": "Nouveautés de Goyav {version}",
   "Got it": "Compris",
 
+  // New-mail notifications
+  "{count} new message": "{count} nouveau message",
+  "{count} new messages": "{count} nouveaux messages",
+  "From {senders}": "De {senders}",
+  "From {senders} and {count} more": "De {senders} et {count} autres",
+  "New mail notifications": "Notifications des nouveaux mails",
+  "Show sender, subject and text in notifications":
+    "Afficher l'expéditeur, l'objet et le texte dans les notifications",
+
   // Main menu
   "Preferences…": "Préférences…",
   Quit: "Quitter",

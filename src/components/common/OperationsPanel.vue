@@ -69,7 +69,7 @@ const uiStore = useUiStore();
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
@@ -111,7 +111,7 @@ const uiStore = useUiStore();
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
+  padding: 8px 12px;
   font-size: 12px;
   transition: background 0.1s;
 }
@@ -177,7 +177,7 @@ const uiStore = useUiStore();
 .op-type-badge {
   flex-shrink: 0;
   font-size: 10px;
-  padding: 1px 6px;
+  padding: 1px 8px;
   border-radius: 4px;
   background: var(--color-bg-hover);
   color: var(--color-text-muted);

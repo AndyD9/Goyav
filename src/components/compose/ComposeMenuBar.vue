@@ -201,7 +201,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
 .menu-item {
   position: relative;
   padding: 4px 12px;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
 }
 
@@ -220,7 +220,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
   min-width: 240px;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 4px 0;
   z-index: 1000;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -231,7 +231,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
   grid-template-columns: 18px 1fr auto;
   align-items: center;
   width: 100%;
-  padding: 6px 16px;
+  padding: 8px 16px;
   text-align: left;
   font-size: 12px;
   color: var(--color-text);

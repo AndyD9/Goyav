@@ -826,7 +826,7 @@ function resolveFolderName(path: string): string {
 
 <style scoped>
 .folder-search-scope {
-  padding: 6px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg-secondary);
 }
@@ -872,8 +872,8 @@ function resolveFolderName(path: string): string {
 }
 
 .row-checkbox {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   cursor: pointer;
   accent-color: var(--color-accent);
 }
@@ -903,13 +903,13 @@ function resolveFolderName(path: string): string {
 }
 
 .col-date {
-  width: 110px;
+  width: 112px;
   flex-shrink: 0;
   text-align: left;
 }
 
 .column-headers.cards {
-  height: 34px;
+  height: 36px;
   gap: 2px;
   padding-right: 8px;
   background: var(--color-bg);
@@ -917,7 +917,7 @@ function resolveFolderName(path: string): string {
 
 /* Centre the select-all box over the row avatars (12px pad + 34px). */
 .column-headers.cards .col-check {
-  width: 58px;
+  width: 60px;
 }
 
 .sort-label {
@@ -926,8 +926,8 @@ function resolveFolderName(path: string): string {
 }
 
 .sort-chip {
-  padding: 3px 8px;
-  border-radius: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
   font-size: 11px;
   color: var(--color-text-secondary);
 }
@@ -963,7 +963,7 @@ function resolveFolderName(path: string): string {
 .thread-child {
   background: var(--color-bg-tertiary);
   /* Margin preserves the child layout while applying reply depth. */
-  margin-left: calc(20px + var(--reply-depth, 0) * 22px);
+  margin-left: calc(20px + var(--reply-depth, 0) * 24px);
   border-left: 2px solid var(--color-border);
 }
 
@@ -994,7 +994,7 @@ function resolveFolderName(path: string): string {
 }
 
 .server-results-header {
-  padding: 6px 12px;
+  padding: 8px 12px;
   font-size: 11px;
   font-weight: 600;
   color: var(--color-text-muted);
@@ -1110,7 +1110,7 @@ function resolveFolderName(path: string): string {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 14px;
+  padding: 8px 16px;
   text-align: left;
   font-size: 13px;
   color: var(--color-text);
@@ -1162,6 +1162,6 @@ function resolveFolderName(path: string): string {
 
 .msg-context-menu .ctx-submenu .ctx-item {
   font-size: 13px;
-  padding: 6px 14px;
+  padding: 8px 16px;
 }
 </style>

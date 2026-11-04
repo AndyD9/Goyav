@@ -244,7 +244,7 @@ async function applyMerge() {
 
 .modal {
   background: var(--color-bg-secondary);
-  border-radius: 10px;
+  border-radius: 12px;
   width: 640px;
   max-width: 96vw;
   max-height: 85vh;
@@ -276,7 +276,7 @@ async function applyMerge() {
 
 .form-error {
   padding: 8px 12px; background: rgba(251,44,54,0.06);
-  color: var(--color-danger-text); border-radius: 6px; margin-bottom: 16px; font-size: 12px;
+  color: var(--color-danger-text); border-radius: 8px; margin-bottom: 16px; font-size: 12px;
 }
 
 .btn-cancel {
@@ -305,12 +305,12 @@ async function applyMerge() {
 }
 .merge-field {
   border: 0.8px solid var(--color-border);
-  border-radius: 6px;
-  padding: 8px 12px 10px;
+  border-radius: 8px;
+  padding: 8px 12px 12px;
   margin: 0;
 }
 .merge-field legend {
-  padding: 0 6px;
+  padding: 0 8px;
   font-size: 12px;
   font-weight: 500;
   color: var(--color-text-secondary);
@@ -345,8 +345,8 @@ async function applyMerge() {
 .merge-source-tag {
   font-size: 11px;
   font-weight: 500;
-  padding: 1px 6px;
-  border-radius: 3px;
+  padding: 1px 8px;
+  border-radius: 4px;
   flex-shrink: 0;
 }
 .merge-source-tag.source-keeper {

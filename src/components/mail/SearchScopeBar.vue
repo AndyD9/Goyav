@@ -34,7 +34,7 @@ const scopes = computed<ReadonlyArray<{ value: SearchScope; label: string }>>(()
 .scope-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -44,7 +44,7 @@ const scopes = computed<ReadonlyArray<{ value: SearchScope; label: string }>>(()
 }
 
 .scope-chip {
-  padding: 3px 10px;
+  padding: 4px 12px;
   border: 1px solid var(--color-border);
   border-radius: 12px;
   background: var(--color-bg);

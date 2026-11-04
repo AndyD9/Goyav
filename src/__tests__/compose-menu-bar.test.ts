@@ -126,7 +126,7 @@ describe("ComposeMenuBar", () => {
     expect(sourceLink).not.toBeNull();
     sourceLink?.click();
     expect(openUrlMock).toHaveBeenCalledWith(
-      "https://github.com/SUNET/chithi",
+      "https://github.com/AndyD9/Goyav",
     );
 
     const licenseLink = document.querySelector(
@@ -134,7 +134,7 @@ describe("ComposeMenuBar", () => {
     ) as HTMLElement | null;
     licenseLink?.click();
     expect(openUrlMock).toHaveBeenLastCalledWith(
-      "https://github.com/SUNET/chithi/blob/main/LICENSE",
+      "https://github.com/AndyD9/Goyav/blob/goyav/LICENSE",
     );
 
     // Closing via the X button removes the overlay.

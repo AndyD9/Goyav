@@ -169,7 +169,7 @@ async function syncAll() {
   gap: 4px;
   font-size: 11px;
   color: var(--color-text-muted);
-  padding: 2px 6px;
+  padding: 2px 8px;
   border-radius: 4px;
   transition: background 0.12s;
 }
@@ -193,8 +193,8 @@ async function syncAll() {
 }
 
 .status-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--color-sync-green);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-sync-green) 22%, transparent);
@@ -230,8 +230,8 @@ async function syncAll() {
 }
 
 .op-spinner {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border: 1.5px solid var(--color-border);
   border-top-color: var(--color-accent);
   border-radius: 50%;
@@ -279,15 +279,15 @@ async function syncAll() {
   position: absolute;
   top: -2px;
   right: -2px;
-  min-width: 14px;
-  height: 14px;
-  border-radius: 7px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
   background: var(--color-accent);
   color: #fff;
   font-size: 9px;
   font-weight: 600;
   display: grid;
   place-items: center;
-  padding: 0 3px;
+  padding: 0 4px;
 }
 </style>

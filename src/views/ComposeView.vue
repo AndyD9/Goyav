@@ -1286,7 +1286,7 @@ async function send() {
 .toolbar-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   height: 32px;
   padding: 0 12px;
   background: var(--color-bg-tertiary);
@@ -1442,7 +1442,7 @@ async function send() {
 }
 
 .field-select {
-  width: 306px;
+  width: 308px;
   --input-height: 32px;
   --input-padding: 0 8px;
   --input-border: 0.8px solid var(--color-border);
@@ -1479,7 +1479,7 @@ async function send() {
   z-index: 100;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   margin-top: 2px;
   max-height: 240px;
@@ -1489,7 +1489,7 @@ async function send() {
 .ac-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
   padding: 8px 12px;
   border: none;
@@ -1525,14 +1525,14 @@ async function send() {
   font-size: 10px;
   color: var(--color-text-muted);
   background: var(--color-bg-secondary);
-  padding: 1px 6px;
-  border-radius: 3px;
+  padding: 1px 8px;
+  border-radius: 4px;
   flex-shrink: 0;
 }
 
 .cc-btn {
   height: 24px;
-  padding: 0 6px;
+  padding: 0 8px;
   font-size: 12px;
   font-weight: 600;
   color: var(--color-accent);
@@ -1553,7 +1553,7 @@ async function send() {
 
 .compose-textarea {
   flex: 1;
-  margin: 13px 16px 16px;
+  margin: 12px 16px 16px;
   padding: 12px;
   /* Always-visible amber focus ring per PATCHES §11 */
   border: 2px solid var(--color-accent);
@@ -1594,7 +1594,7 @@ async function send() {
 .attachment-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 12px;
   font-weight: 500;
   color: var(--color-text-muted);
@@ -1610,15 +1610,15 @@ async function send() {
 .attachment-chip {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   height: 32px;
-  padding: 0 8px 0 10px;
+  padding: 0 8px 0 12px;
   background: var(--color-bg-secondary);
   border: 0.8px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 13px;
   color: var(--color-text);
-  max-width: 250px;
+  max-width: 252px;
 }
 
 .attachment-name {

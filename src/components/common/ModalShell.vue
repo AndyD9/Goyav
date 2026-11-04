@@ -62,7 +62,7 @@ const emit = defineEmits<{ close: [] }>();
   color: var(--color-text-muted);
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
 }
@@ -103,8 +103,8 @@ const emit = defineEmits<{ close: [] }>();
   .modal::before {
     content: "";
     display: block;
-    width: 38px;
-    height: 5px;
+    width: 40px;
+    height: 4px;
     border-radius: 100px;
     background: var(--color-border);
     margin: 8px auto 4px;
@@ -112,7 +112,7 @@ const emit = defineEmits<{ close: [] }>();
 
   .modal-header {
     justify-content: center;
-    padding: 4px 16px 10px;
+    padding: 4px 16px 12px;
   }
 
   .modal-header h3 {

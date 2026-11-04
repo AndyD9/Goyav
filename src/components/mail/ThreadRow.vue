@@ -216,7 +216,7 @@ function isReply(): boolean {
 }
 
 .col {
-  padding: 0 6px;
+  padding: 0 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -234,8 +234,8 @@ function isReply(): boolean {
 }
 
 .row-checkbox {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   cursor: pointer;
   accent-color: var(--color-accent);
 }
@@ -244,7 +244,7 @@ function isReply(): boolean {
   display: flex;
   align-items: center;
   gap: 2px;
-  width: 46px;
+  width: 48px;
   flex-shrink: 0;
   padding: 0 2px;
 }
@@ -263,7 +263,7 @@ function isReply(): boolean {
   font-size: 11px;
   color: var(--color-text-muted);
   cursor: pointer;
-  width: 14px;
+  width: 16px;
   text-align: center;
 }
 
@@ -315,7 +315,7 @@ function isReply(): boolean {
 }
 
 .col-date {
-  width: 110px;
+  width: 112px;
   flex-shrink: 0;
   color: var(--color-text-muted);
   font-size: 11px;

@@ -469,8 +469,8 @@ async function unsubscribeThisCalendar() {
 }
 
 .calendar-color {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 2px;
   flex-shrink: 0;
 }
@@ -499,8 +499,8 @@ async function unsubscribeThisCalendar() {
 }
 
 .sync-spinner {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border: 2px solid var(--color-border);
   border-top-color: var(--color-accent);
   border-radius: 50%;
@@ -526,7 +526,7 @@ async function unsubscribeThisCalendar() {
   z-index: 9999;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 4px 0;
   min-width: 180px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
@@ -535,7 +535,7 @@ async function unsubscribeThisCalendar() {
 .cal-context-menu .ctx-item {
   display: block;
   width: 100%;
-  padding: 6px 16px;
+  padding: 8px 16px;
   text-align: left;
   font-size: 12px;
   color: var(--color-text);
@@ -571,11 +571,11 @@ async function unsubscribeThisCalendar() {
 }
 
 .rename-body {
-  padding: 18px 20px 4px;
+  padding: 20px 20px 4px;
 }
 
 .rename-body h3 {
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   font-size: 15px;
   color: var(--color-text);
 }
@@ -588,7 +588,7 @@ async function unsubscribeThisCalendar() {
 
 .rename-input {
   width: 100%;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border: 1px solid var(--color-border);
   border-radius: 4px;
   background: var(--color-bg-secondary);
@@ -610,7 +610,7 @@ async function unsubscribeThisCalendar() {
 .color-swatch {
   width: 100%;
   aspect-ratio: 1 / 1;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 2px solid transparent;
   cursor: pointer;
   transition: transform 0.08s, border-color 0.12s;
@@ -644,7 +644,7 @@ async function unsubscribeThisCalendar() {
 
 .rename-btn-cancel,
 .rename-btn-save {
-  padding: 6px 14px;
+  padding: 8px 16px;
   border-radius: 4px;
   font-size: 13px;
   cursor: pointer;

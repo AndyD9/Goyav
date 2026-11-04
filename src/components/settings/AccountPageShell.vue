@@ -90,7 +90,7 @@ const emit = defineEmits<{ close: [] }>();
 .account-page-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-height: 56px;
   padding: 8px 24px;
   border-bottom: 0.8px solid var(--color-border);
@@ -102,8 +102,8 @@ const emit = defineEmits<{ close: [] }>();
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 30px;
-  padding: 0 10px 0 6px;
+  height: 32px;
+  padding: 0 12px 0 8px;
   border-radius: var(--radius);
   font-size: 13px;
   color: var(--color-text-secondary);
@@ -119,8 +119,8 @@ const emit = defineEmits<{ close: [] }>();
 }
 
 .page-avatar {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -157,7 +157,7 @@ const emit = defineEmits<{ close: [] }>();
   margin-left: auto;
   flex-shrink: 0;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 11px;
   font-weight: 500;
 }
@@ -174,7 +174,7 @@ const emit = defineEmits<{ close: [] }>();
 
 .account-tab {
   position: relative;
-  padding: 10px 12px;
+  padding: 12px 12px;
   font-size: 13px;
   color: var(--color-text-secondary);
   white-space: nowrap;

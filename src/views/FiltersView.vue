@@ -425,7 +425,7 @@ const actionFolderOptions = computed(() => [
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
   height: 36px;
   background: var(--color-accent);
@@ -548,7 +548,7 @@ const actionFolderOptions = computed(() => [
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 48px 24px;
   color: var(--color-text-muted);
   font-size: 13px;
@@ -870,7 +870,7 @@ const actionFolderOptions = computed(() => [
 .btn-delete {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   height: 36px;
   padding: 0 12px;
   background: none;

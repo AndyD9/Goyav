@@ -228,8 +228,8 @@ function doForward() {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 4px 6px;
-  padding-top: max(10px, env(safe-area-inset-top));
+  padding: 4px 8px;
+  padding-top: max(12px, env(safe-area-inset-top));
   border-bottom: 1px solid var(--color-divider, #e9e0cd);
   background: var(--color-bg);
   color: var(--color-accent);
@@ -242,7 +242,7 @@ function doForward() {
 /* Subject block */
 .subject-block {
   flex-shrink: 0;
-  padding: 12px 16px 10px;
+  padding: 12px 16px 12px;
   border-bottom: 1px solid var(--color-divider, #e9e0cd);
   background: var(--color-bg);
 }
@@ -250,7 +250,7 @@ function doForward() {
 .subject-line {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
 }
 
 .subject {
@@ -280,7 +280,7 @@ function doForward() {
 }
 
 .subject-meta {
-  margin-top: 6px;
+  margin-top: 8px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -291,7 +291,7 @@ function doForward() {
 .acct-chip {
   display: inline-flex;
   align-items: center;
-  height: 18px;
+  height: 20px;
   padding: 0 8px;
   border-radius: 999px;
   font-size: 10px;
@@ -320,8 +320,8 @@ function doForward() {
   flex-shrink: 0;
   display: flex;
   gap: 8px;
-  padding: 10px 12px;
-  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  padding: 12px 12px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
   background: var(--color-bg);
   border-top: 1px solid var(--color-divider, #e9e0cd);
 }
@@ -331,10 +331,10 @@ function doForward() {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   height: 40px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--color-accent-light);
   color: var(--color-accent);
   font-family: inherit;

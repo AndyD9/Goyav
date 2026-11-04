@@ -139,7 +139,7 @@ function onTabClick(tab: Tab) {
   height: var(--mobile-tab-bar-h);
   display: flex;
   align-items: stretch;
-  padding: 6px 4px 2px;
+  padding: 8px 4px 2px;
   background: rgba(250, 247, 242, 0.92);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);

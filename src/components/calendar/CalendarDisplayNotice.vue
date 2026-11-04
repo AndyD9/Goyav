@@ -18,7 +18,7 @@ defineProps<{ errors: string[] }>();
   max-height: min(22vh, 160px);
   overflow-y: auto;
   overflow-wrap: anywhere;
-  padding: 6px 14px;
+  padding: 8px 16px;
   font-size: 12px;
   background: var(--color-bg-secondary);
   color: var(--color-text);
@@ -28,9 +28,9 @@ summary {
 }
 ul {
   margin: 8px 0;
-  padding-left: 18px;
+  padding-left: 20px;
 }
 li + li {
-  margin-top: 6px;
+  margin-top: 8px;
 }
 </style>

@@ -641,7 +641,7 @@ const keystoreEmptyHint = computed(() =>
 
 .search {
   width: 100%;
-  padding: 6px 8px;
+  padding: 8px 8px;
   border-radius: var(--radius);
   border: 0.8px solid var(--color-border);
   background: var(--color-bg);
@@ -651,12 +651,12 @@ const keystoreEmptyHint = computed(() =>
 
 .toolbar-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .btn {
-  padding: 4px 10px;
+  padding: 4px 12px;
   border-radius: var(--radius);
   border: 0.8px solid var(--color-border);
   background: var(--color-bg);
@@ -711,7 +711,7 @@ const keystoreEmptyHint = computed(() =>
 }
 
 .key-item {
-  padding: 10px 12px;
+  padding: 12px 12px;
   border-bottom: 0.8px solid var(--color-border);
   cursor: pointer;
 }
@@ -749,7 +749,7 @@ const keystoreEmptyHint = computed(() =>
   display: inline-block;
   font-size: 10px;
   font-weight: 600;
-  padding: 1px 5px;
+  padding: 1px 4px;
   border-radius: 4px;
   background: var(--color-bg-tertiary);
   color: var(--color-text-muted);
@@ -804,11 +804,11 @@ const keystoreEmptyHint = computed(() =>
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .card-item {
-  padding: 6px 8px;
+  padding: 8px 8px;
   margin: 0 -8px;
   font-size: 12px;
   cursor: pointer;
@@ -867,7 +867,7 @@ const keystoreEmptyHint = computed(() =>
   font-family: var(--font-mono, monospace);
   font-size: 12px;
   color: var(--color-text-muted);
-  margin-top: 6px;
+  margin-top: 8px;
   word-break: break-all;
 }
 
@@ -899,7 +899,7 @@ const keystoreEmptyHint = computed(() =>
 .uid-list li {
   padding: 4px 0;
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 

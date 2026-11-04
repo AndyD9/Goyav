@@ -307,7 +307,7 @@ onUnmounted(() => invitesStore.setViewActive(false));
   border-bottom: 1px solid var(--color-divider, #e9e0cd);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .invites-title {
@@ -331,7 +331,7 @@ onUnmounted(() => invitesStore.setViewActive(false));
 }
 
 .seg-btn {
-  height: 30px;
+  height: 32px;
   padding: 0 12px;
   border: 0;
   border-radius: 999px;
@@ -353,16 +353,16 @@ onUnmounted(() => invitesStore.setViewActive(false));
 .sort-control {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 12px;
   color: var(--color-text-secondary);
 }
 
 .sort-control select {
-  height: 30px;
+  height: 32px;
   padding: 0 8px;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--color-bg);
   font-family: inherit;
   font-size: 12px;
@@ -401,7 +401,7 @@ onUnmounted(() => invitesStore.setViewActive(false));
   min-width: 240px;
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
   background: transparent;
   border: 0;
   padding: 0;
@@ -412,10 +412,10 @@ onUnmounted(() => invitesStore.setViewActive(false));
 
 .account-dot {
   flex-shrink: 0;
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  margin-top: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  margin-top: 4px;
 }
 
 .invite-text {
@@ -431,13 +431,13 @@ onUnmounted(() => invitesStore.setViewActive(false));
   color: var(--color-text);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .repeat-badge {
   font-size: 10px;
   font-weight: 600;
-  padding: 1px 6px;
+  padding: 1px 8px;
   border-radius: 999px;
   background: var(--color-bg-tertiary);
   color: var(--color-text-secondary);
@@ -485,13 +485,13 @@ onUnmounted(() => invitesStore.setViewActive(false));
 
 .invite-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
 .invite-actions button {
-  padding: 5px 12px;
-  border-radius: 6px;
+  padding: 4px 12px;
+  border-radius: 8px;
   font-size: 12px;
   font-weight: 500;
   font-family: inherit;

@@ -201,7 +201,7 @@ const contactsIntervalMinutes = makeMinutesField("contacts_sync_interval_seconds
 .interval-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-left: 24px;
   font-size: 12px;
   color: var(--color-text-muted);

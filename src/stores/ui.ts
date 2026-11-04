@@ -78,6 +78,22 @@ export const useUiStore = defineStore("ui", () => {
     localStorage.setItem("chithi-show-invite-badge", String(enabled));
   }
 
+  // New-mail notifications, and whether they show sender, subject and text.
+  const mailNotifications = ref(
+    localStorage.getItem("goyav-mail-notifications") !== "false",
+  );
+  function setMailNotifications(enabled: boolean) {
+    mailNotifications.value = enabled;
+    localStorage.setItem("goyav-mail-notifications", String(enabled));
+  }
+  const notificationPreview = ref(
+    localStorage.getItem("goyav-notification-preview") !== "false",
+  );
+  function setNotificationPreview(enabled: boolean) {
+    notificationPreview.value = enabled;
+    localStorage.setItem("goyav-notification-preview", String(enabled));
+  }
+
   // 0 = Sunday, 1 = Monday, 6 = Saturday.
   const weekStartDay = ref<number>(
     (() => {
@@ -304,5 +320,9 @@ export const useUiStore = defineStore("ui", () => {
     setPreferHtmlBody,
     showInviteBadge,
     setShowInviteBadge,
+    mailNotifications,
+    setMailNotifications,
+    notificationPreview,
+    setNotificationPreview,
   };
 });

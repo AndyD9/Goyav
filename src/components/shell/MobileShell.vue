@@ -6,6 +6,7 @@ import MobileTabBar from "@/components/mobile/MobileTabBar.vue";
 import FolderDrawer from "@/components/mobile/FolderDrawer.vue";
 import ComposeSheet from "@/components/mobile/ComposeSheet.vue";
 import LinkPopup from "@/components/common/LinkPopup.vue";
+import MailNotifier from "@/components/common/MailNotifier.vue";
 import { useUiStore } from "@/stores/ui";
 
 const route = useRoute();
@@ -37,6 +38,7 @@ const showTabBar = computed(() => {
     </div>
     <MobileTabBar v-if="showTabBar" />
     <FolderDrawer />
+    <MailNotifier />
     <ComposeSheet v-if="composeOpen" />
     <LinkPopup />
   </div>

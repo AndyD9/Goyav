@@ -68,7 +68,7 @@ const availableAccountTypes = computed(() =>
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 12px 14px;
+  padding: 12px 16px;
   text-align: left;
   background: var(--color-bg);
   border: 1px solid var(--color-border);

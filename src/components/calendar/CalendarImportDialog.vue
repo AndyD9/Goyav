@@ -285,7 +285,7 @@ watch(
 
 <style scoped>
 .filename {
-  margin: 0 0 14px;
+  margin: 0 0 16px;
   color: var(--color-text-secondary);
   font-size: 13px;
   overflow-wrap: anywhere;
@@ -308,8 +308,8 @@ watch(
 .event-row {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 11px;
+  gap: 12px;
+  padding: 12px;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   cursor: pointer;
@@ -321,7 +321,7 @@ watch(
 }
 
 .event-row input {
-  margin-top: 3px;
+  margin-top: 4px;
 }
 
 .event-details {
@@ -329,7 +329,7 @@ watch(
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   color: var(--color-text-secondary);
   font-size: 12px;
 }
@@ -342,8 +342,8 @@ watch(
 .notice,
 .error {
   margin-top: 12px;
-  padding: 9px 11px;
-  border-radius: 7px;
+  padding: 8px 12px;
+  border-radius: 8px;
   font-size: 12px;
 }
 
@@ -360,15 +360,15 @@ watch(
 .calendar-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   margin-top: 16px;
   color: var(--color-text-secondary);
   font-size: 13px;
 }
 
 .btn {
-  padding: 7px 13px;
-  border-radius: 7px;
+  padding: 8px 12px;
+  border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
 }

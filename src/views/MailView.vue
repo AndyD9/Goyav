@@ -3,7 +3,6 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { storeToRefs } from "pinia";
 import { listen } from "@tauri-apps/api/event";
-import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { useAccountsStore } from "@/stores/accounts";
 import { useFoldersStore } from "@/stores/folders";
 import { useMessagesStore } from "@/stores/messages";
@@ -20,7 +19,7 @@ import OutboxList from "@/components/mail/OutboxList.vue";
 import { OUTBOX_FOLDER } from "@/lib/types";
 import MobileAppBar from "@/components/mobile/MobileAppBar.vue";
 import MobileIconButton from "@/components/mobile/MobileIconButton.vue";
-import { t, tn } from "@/i18n";
+import { t } from "@/i18n";
 
 const accountsStore = useAccountsStore();
 const foldersStore = useFoldersStore();
@@ -216,35 +215,6 @@ async function startBackgroundPrefetch() {
   }
 }
 
-// Desktop notifications for new mail
-let notificationsAllowed = false;
-
-async function initNotifications() {
-  let granted = await isPermissionGranted();
-  if (!granted) {
-    const permission = await requestPermission();
-    granted = permission === "granted";
-  }
-  notificationsAllowed = granted;
-}
-
-function notifyNewMail(accountId: string, count: number) {
-  if (!notificationsAllowed || count === 0) return;
-  // Don't notify if the window is focused — the user is already looking at it
-  if (document.hasFocus()) return;
-
-  const account = accountsStore.accounts.find(a => a.id === accountId);
-  const accountName = account?.display_name || account?.email || t("Account");
-  const body = tn(
-    count,
-    "{count} new message in {account}",
-    "{count} new messages in {account}",
-    { account: accountName },
-  );
-
-  sendNotification({ title: "Goyav", body });
-}
-
 // Periodic sync every 2 minutes
 let syncIntervalId: ReturnType<typeof setInterval> | null = null;
 
@@ -280,12 +250,9 @@ onMounted(async () => {
     await foldersStore.fetchFolders();
   }
 
-  initNotifications();
-
   await listen("sync-complete", async (event) => {
     const payload = event.payload as { account_id: string; total_synced: number };
     console.log("sync-complete:", payload);
-    notifyNewMail(payload.account_id, payload.total_synced);
     // Always refresh folders to update counts
     await foldersStore.fetchFolders();
     // Refresh message list if viewing the synced account
@@ -627,7 +594,7 @@ onUnmounted(() => {
   flex: 1;
   width: 100% !important;
   min-width: 0;
-  min-height: 150px;
+  min-height: 152px;
   box-sizing: border-box;
 }
 
@@ -687,7 +654,7 @@ onUnmounted(() => {
 .tab-activate {
   flex: 1;
   min-width: 0;
-  padding: 0 10px;
+  padding: 0 12px;
   font-family: var(--font-sans);
   font-weight: 500;
   font-size: 12px;
@@ -720,7 +687,7 @@ onUnmounted(() => {
   justify-content: center;
   width: 16px;
   height: 16px;
-  margin-right: 6px;
+  margin-right: 8px;
   font-size: 14px;
   line-height: 1;
   border: none;

@@ -26,7 +26,7 @@ defineProps<{
   border: 0;
   background: transparent;
   color: var(--color-text);
-  border-radius: 10px;
+  border-radius: 12px;
   flex-shrink: 0;
   cursor: pointer;
 }
@@ -41,8 +41,8 @@ defineProps<{
 }
 
 .mobile-icon-button :deep(svg) {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   stroke-width: 1.8;
 }
 </style>

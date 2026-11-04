@@ -484,7 +484,7 @@ async function onMerged(surviving: Contact) {
 .btn-new {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   height: 32px;
   padding: 0 16px;
   background: var(--color-accent);
@@ -506,7 +506,7 @@ async function onMerged(surviving: Contact) {
 .btn-sync {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   height: 32px;
   padding: 0 12px;
   background: var(--color-sync-green);
@@ -607,7 +607,7 @@ async function onMerged(surviving: Contact) {
 
 .modal {
   background: var(--color-bg-secondary);
-  border-radius: 10px;
+  border-radius: 12px;
   width: 540px;
   max-height: 85vh;
   overflow-y: auto;

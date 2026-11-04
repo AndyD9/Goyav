@@ -631,7 +631,7 @@ async function doDeleteFolder() {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 10px 12px;
+  padding: 12px 12px;
   text-align: left;
   transition: background 0.12s;
 }
@@ -693,8 +693,8 @@ async function doDeleteFolder() {
   display: flex;
   align-items: center;
   width: 100%;
-  padding: 5px 8px 5px 12px;
-  border-radius: 6px;
+  padding: 4px 8px 4px 12px;
+  border-radius: 8px;
   gap: 8px;
   text-align: left;
   font-size: 13px;
@@ -728,7 +728,7 @@ async function doDeleteFolder() {
   flex-shrink: 0;
   color: var(--color-text-muted);
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .folder-toggle:hover {
@@ -758,10 +758,10 @@ async function doDeleteFolder() {
   color: white;
   font-size: 10px;
   font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 10px;
+  padding: 1px 8px;
+  border-radius: 12px;
   flex-shrink: 0;
-  min-width: 18px;
+  min-width: 20px;
   text-align: center;
 }
 
@@ -801,7 +801,7 @@ async function doDeleteFolder() {
 .folder-context-menu .ctx-item {
   display: block;
   width: 100%;
-  padding: 7px 16px;
+  padding: 8px 16px;
   text-align: left;
   font-size: 13px;
   color: var(--color-text);
@@ -837,7 +837,7 @@ async function doDeleteFolder() {
 .new-folder-modal {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
   width: 380px;
 }
@@ -864,13 +864,13 @@ async function doDeleteFolder() {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .nf-error {
   color: var(--color-danger-text, #dc2626);
   font-size: 12px;
-  padding: 6px 8px;
+  padding: 8px 8px;
   background: rgba(251, 44, 54, 0.06);
   border-radius: 4px;
 }
@@ -878,7 +878,7 @@ async function doDeleteFolder() {
 .nf-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .nf-field label {
@@ -892,9 +892,9 @@ async function doDeleteFolder() {
   width: 100%;
   box-sizing: border-box;
   height: 36px;
-  padding: 0 10px;
+  padding: 0 12px;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--color-bg);
   color: var(--color-text);
   font-size: 14px;
@@ -922,20 +922,20 @@ async function doDeleteFolder() {
 }
 
 .nf-btn-cancel {
-  height: 34px;
+  height: 36px;
   padding: 0 16px;
   background: var(--color-bg-hover);
   color: var(--color-text);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 13px;
 }
 
 .nf-btn-create {
-  height: 34px;
+  height: 36px;
   padding: 0 16px;
   background: var(--color-accent);
   color: white;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
 }

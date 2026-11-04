@@ -134,7 +134,7 @@ watch([enabled, freq, interval, endType, count, untilDate, byDays], () => emit("
 .toggle-label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 13px;
   cursor: pointer;
   margin-bottom: 8px;

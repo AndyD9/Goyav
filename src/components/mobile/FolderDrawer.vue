@@ -170,7 +170,7 @@ watch(
 }
 
 .brand {
-  padding: 14px 16px 10px;
+  padding: 16px 16px 12px;
 }
 
 .brand-wordmark {
@@ -191,8 +191,8 @@ watch(
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
+  gap: 8px;
+  padding: 8px 12px;
   border-radius: 12px;
   background: transparent;
   border: 1.5px solid transparent;
@@ -246,7 +246,7 @@ watch(
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 12px 16px;
   min-height: var(--touch-min);
   color: var(--color-text);

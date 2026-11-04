@@ -179,6 +179,31 @@ function scrollHighlightedIntoView() {
               />
             </div>
           </div>
+          <div class="prefs-row">
+            <label class="prefs-label" for="prefs-mail-notifications">{{ t('New mail notifications') }}</label>
+            <div class="prefs-toggle">
+              <input
+                id="prefs-mail-notifications"
+                type="checkbox"
+                :checked="uiStore.mailNotifications"
+                data-testid="prefs-mail-notifications"
+                @change="(e) => uiStore.setMailNotifications((e.target as HTMLInputElement).checked)"
+              />
+            </div>
+          </div>
+          <div class="prefs-row">
+            <label class="prefs-label" for="prefs-notification-preview">{{ t('Show sender, subject and text in notifications') }}</label>
+            <div class="prefs-toggle">
+              <input
+                id="prefs-notification-preview"
+                type="checkbox"
+                :checked="uiStore.notificationPreview"
+                :disabled="!uiStore.mailNotifications"
+                data-testid="prefs-notification-preview"
+                @change="(e) => uiStore.setNotificationPreview((e.target as HTMLInputElement).checked)"
+              />
+            </div>
+          </div>
         </section>
 
         <!-- Date and Time -->
@@ -299,7 +324,7 @@ function scrollHighlightedIntoView() {
   color: var(--color-text-muted);
   font-size: 22px;
   cursor: pointer;
-  padding: 0 6px;
+  padding: 0 8px;
 }
 
 .prefs-close:hover {
@@ -359,7 +384,7 @@ function scrollHighlightedIntoView() {
   grid-template-columns: 180px 1fr;
   align-items: center;
   gap: 16px;
-  padding: 10px 0;
+  padding: 12px 0;
 }
 
 .prefs-label {
@@ -369,12 +394,12 @@ function scrollHighlightedIntoView() {
 
 .prefs-radio-group {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .prefs-radio {
-  padding: 5px 14px;
+  padding: 4px 16px;
   font-size: 12px;
   border: 1px solid var(--color-border);
   border-radius: 4px;
@@ -408,7 +433,7 @@ function scrollHighlightedIntoView() {
 
 .tz-search-input {
   width: 100%;
-  padding: 5px 10px;
+  padding: 4px 12px;
   font-size: 12px;
   border: 1px solid var(--color-border);
   border-radius: 4px;
@@ -444,7 +469,7 @@ function scrollHighlightedIntoView() {
 .tz-option {
   display: block;
   width: 100%;
-  padding: 5px 10px;
+  padding: 4px 12px;
   text-align: left;
   font-size: 12px;
   color: var(--color-text-secondary);

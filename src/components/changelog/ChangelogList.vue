@@ -53,14 +53,14 @@ function formatDate(iso: string): string {
 
 .release {
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-panel, 10px);
+  border-radius: var(--radius-panel, 12px);
   overflow: hidden;
 }
 
 .release-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 12px 16px;
   background: var(--color-bg-secondary);
   border-bottom: 1px solid var(--color-divider);
@@ -73,7 +73,7 @@ function formatDate(iso: string): string {
 
 .release-current {
   padding: 1px 8px;
-  border-radius: 10px;
+  border-radius: 12px;
   font-size: 11px;
   font-weight: 500;
   background: var(--color-accent-light);
@@ -89,14 +89,14 @@ function formatDate(iso: string): string {
 .changes {
   list-style: none;
   margin: 0;
-  padding: 6px 0;
+  padding: 8px 0;
 }
 
 .change {
   display: flex;
   align-items: baseline;
   gap: 12px;
-  padding: 7px 16px;
+  padding: 8px 16px;
   font-size: 13px;
   line-height: 1.5;
 }
@@ -105,7 +105,7 @@ function formatDate(iso: string): string {
   flex: 0 0 76px;
   text-align: center;
   padding: 1px 0;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 11px;
   font-weight: 600;
 }

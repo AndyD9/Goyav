@@ -167,7 +167,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .link-popup-title {
@@ -195,7 +195,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
   background: var(--color-bg-secondary, var(--color-bg-hover));
   border: 1px solid var(--color-border);
   border-radius: 4px;
-  padding: 6px 8px;
+  padding: 8px 8px;
 }
 
 .link-popup-url.clean {
@@ -224,7 +224,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
 
 .link-popup-btn {
   font-size: 12px;
-  padding: 6px 12px;
+  padding: 8px 12px;
   border-radius: 4px;
   border: 1px solid var(--color-border);
   background: var(--color-bg);

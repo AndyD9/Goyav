@@ -243,7 +243,7 @@ function onCellDrop(day: Date) {
 .month-day-name {
   flex: 1;
   text-align: center;
-  padding: 10px 0;
+  padding: 12px 0;
   font-size: 11px;
   font-weight: 600;
   color: var(--color-text-muted);
@@ -282,7 +282,7 @@ function onCellDrop(day: Date) {
 .month-cell.today .day-number {
   background: var(--color-accent);
   color: white;
-  border-radius: 7px;
+  border-radius: 8px;
   width: 24px;
   height: 24px;
   display: inline-flex;
@@ -317,7 +317,7 @@ function onCellDrop(day: Date) {
   background: color-mix(in srgb, var(--ev) 20%, var(--color-bg));
   border-left: 3px solid var(--ev);
   color: color-mix(in srgb, var(--ev) 40%, var(--color-text));
-  padding: 1px 5px;
+  padding: 1px 4px;
   border-radius: 4px;
   overflow: hidden;
   text-overflow: ellipsis;

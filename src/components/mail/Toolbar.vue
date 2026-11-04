@@ -139,13 +139,15 @@ async function markNotSpam() {
 .compose-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  gap: 8px;
   background: var(--color-accent);
   color: white;
   font-weight: 500;
   font-size: 13px;
-  border-radius: 18px;
-  padding: 6px 16px;
+  border-radius: 20px;
+  padding: 8px 16px;
   transition: all 0.15s;
 }
 
@@ -156,13 +158,15 @@ async function markNotSpam() {
 .not-spam-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  gap: 8px;
   background: var(--color-bg-hover);
   color: var(--color-text);
   font-weight: 500;
   font-size: 13px;
-  border-radius: 18px;
-  padding: 6px 16px;
+  border-radius: 20px;
+  padding: 8px 16px;
   transition: all 0.15s;
 }
 
@@ -182,17 +186,17 @@ async function markNotSpam() {
 
 .search-icon {
   position: absolute;
-  left: 10px;
+  left: 12px;
   color: var(--color-text-muted);
   pointer-events: none;
 }
 
 .search-input {
   width: 100%;
-  height: 30px;
-  padding: 0 28px 0 30px;
+  height: 32px;
+  padding: 0 28px 0 32px;
   border: 1px solid var(--color-border);
-  border-radius: 15px;
+  border-radius: 16px;
   background: var(--color-bg-tertiary);
   color: var(--color-text);
   font-size: 12.5px;
@@ -217,7 +221,7 @@ async function markNotSpam() {
 
 .search-clear {
   position: absolute;
-  right: 6px;
+  right: 8px;
   width: 20px;
   height: 20px;
   display: flex;

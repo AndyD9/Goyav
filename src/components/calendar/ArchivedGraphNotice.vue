@@ -34,7 +34,7 @@ defineEmits<{ retry: []; acknowledge: [] }>();
 <style scoped>
 .archived-graph-notice {
   flex-shrink: 0;
-  padding: 6px 14px;
+  padding: 8px 16px;
   font-size: 12px;
   background: var(--color-bg-secondary);
   color: var(--color-text);

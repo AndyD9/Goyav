@@ -1291,7 +1291,7 @@ async function signInWithVisio() {
    section-specific rules live in their section components. */
 
 .account-form :deep(.form-group) {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .account-form :deep(.form-group label) {
@@ -1400,7 +1400,7 @@ async function signInWithVisio() {
 .account-form :deep(.oauth-status) {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   height: 40px;
   padding: 0 12px;
   background: rgba(0, 166, 62, 0.06);
@@ -1434,7 +1434,7 @@ async function signInWithVisio() {
   padding: 8px 12px;
   background: rgba(220, 53, 69, 0.06);
   color: var(--color-danger);
-  border-radius: 6px;
+  border-radius: 8px;
   margin-bottom: 16px;
   font-size: 12px;
 }
@@ -1444,7 +1444,7 @@ async function signInWithVisio() {
 .type-readonly {
   padding: 8px 12px;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--color-bg-secondary);
   color: var(--color-text);
   font-size: 13px;
@@ -1466,15 +1466,15 @@ async function signInWithVisio() {
 
 .btn-primary.compact,
 .btn-secondary.compact {
-  height: 34px;
+  height: 36px;
   font-size: 14px;
 }
 
 .info-box {
-  padding: 10px 12px;
+  padding: 12px 12px;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 12px;
   color: var(--color-text-muted);
 }

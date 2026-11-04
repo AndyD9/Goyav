@@ -20,6 +20,32 @@ export interface ChangelogRelease {
 
 export const CHANGELOG: readonly ChangelogRelease[] = [
   {
+    version: "0.3.0",
+    date: "2026-11-04",
+    changes: [
+      {
+        kind: "new",
+        en: "New-mail notifications show the sender, subject and start of the message, from any view. Previews can be turned off in Preferences.",
+        fr: "Les notifications de nouveaux mails affichent l'expéditeur, l'objet et le début du message, quelle que soit la vue ouverte. L'aperçu peut être désactivé dans les Préférences.",
+      },
+      {
+        kind: "fixed",
+        en: "After an update, Goyav reopens in its pinned Dock icon instead of a second one.",
+        fr: "Après une mise à jour, Goyav se rouvre dans son icône épinglée du Dock au lieu d'en créer une seconde.",
+      },
+      {
+        kind: "improved",
+        en: "Spacing across the app follows a consistent 4px grid, and long French labels no longer wrap.",
+        fr: "Les espacements de toute l'app suivent une grille régulière de 4px, et les libellés français longs ne passent plus à la ligne.",
+      },
+      {
+        kind: "fixed",
+        en: "About links to the Goyav repository.",
+        fr: "« À propos » renvoie vers le dépôt de Goyav.",
+      },
+    ],
+  },
+  {
     version: "0.2.0",
     date: "2026-11-04",
     changes: [

@@ -170,7 +170,7 @@ function onKeydown(e: KeyboardEvent) {
   flex: 1;
 }
 .btn {
-  padding: 6px 12px;
+  padding: 8px 12px;
   border-radius: var(--radius);
   border: 0.8px solid var(--color-border);
   background: var(--color-bg);

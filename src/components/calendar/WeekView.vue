@@ -620,12 +620,12 @@ onUnmounted(() => {
 }
 
 .all-day-scroll::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 .all-day-scroll::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .all-day-row {
@@ -635,7 +635,7 @@ onUnmounted(() => {
 
 .all-day-resizer {
   flex-shrink: 0;
-  height: 6px;
+  height: 8px;
   border-bottom: 2px solid var(--color-border);
   cursor: row-resize;
   transition: border-color 0.1s;
@@ -660,7 +660,7 @@ onUnmounted(() => {
 .all-day-cell {
   flex: 1;
   min-width: 0;
-  padding: 3px 2px;
+  padding: 4px 2px;
   border-left: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
@@ -678,8 +678,8 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--ev) 20%, var(--color-bg));
   border-left: 3px solid var(--ev);
   color: color-mix(in srgb, var(--ev) 40%, var(--color-text));
-  padding: 2px 6px;
-  border-radius: 6px;
+  padding: 2px 8px;
+  border-radius: 8px;
   cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -692,13 +692,13 @@ onUnmounted(() => {
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
   background: var(--color-bg);
-  padding-right: 6px;
+  padding-right: 8px;
 }
 
 .day-header {
   flex: 1;
   text-align: center;
-  padding: 8px 0 10px;
+  padding: 8px 0 12px;
   border-left: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
@@ -732,9 +732,9 @@ onUnmounted(() => {
 .day-num.today-badge {
   background: var(--color-accent);
   color: white;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -765,7 +765,7 @@ onUnmounted(() => {
   text-align: right;
   line-height: 1;
   position: relative;
-  top: -7px;
+  top: -8px;
 }
 
 .hour-label.current-hour {
@@ -829,7 +829,8 @@ onUnmounted(() => {
   content: "";
   position: absolute;
   left: -4px;
-  top: -3px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 8px;
   height: 8px;
   background: var(--color-accent);
@@ -853,8 +854,8 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--ev) 20%, var(--color-bg));
   border-left: 3px solid var(--ev);
   color: color-mix(in srgb, var(--ev) 40%, var(--color-text));
-  padding: 3px 6px;
-  border-radius: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
   cursor: pointer;
   overflow: hidden;
   line-height: 1.3;
@@ -888,11 +889,11 @@ onUnmounted(() => {
 }
 
 .time-grid::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 .time-grid::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 </style>

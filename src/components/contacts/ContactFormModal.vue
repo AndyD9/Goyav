@@ -227,7 +227,7 @@ async function saveContact() {
 
 .modal {
   background: var(--color-bg-secondary);
-  border-radius: 10px;
+  border-radius: 12px;
   width: 540px;
   max-height: 85vh;
   overflow-y: auto;
@@ -258,7 +258,7 @@ async function saveContact() {
 
 .form-error {
   padding: 8px 12px; background: rgba(251,44,54,0.06);
-  color: var(--color-danger-text); border-radius: 6px; margin-bottom: 16px; font-size: 12px;
+  color: var(--color-danger-text); border-radius: 8px; margin-bottom: 16px; font-size: 12px;
 }
 
 .form-group {
@@ -284,7 +284,7 @@ async function saveContact() {
 .name-row { display: flex; gap: 8px; margin-bottom: 16px; }
 .name-row .form-group { flex: 1; margin-bottom: 0; }
 
-.multi-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.multi-row { display: flex; gap: 8px; margin-bottom: 8px; }
 .multi-row input { flex: 1; }
 .multi-row .label-select { width: 100px; flex-shrink: 0; }
 

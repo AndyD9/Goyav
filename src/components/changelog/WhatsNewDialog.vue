@@ -38,9 +38,9 @@ function close() {
 
 <style scoped>
 .whats-new-ok {
-  height: 34px;
-  padding: 0 18px;
-  border-radius: 6px;
+  height: 36px;
+  padding: 0 20px;
+  border-radius: 8px;
   background: var(--color-accent);
   color: white;
   font-size: 14px;

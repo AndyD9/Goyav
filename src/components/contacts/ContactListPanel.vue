@@ -132,7 +132,7 @@ function startMerge() {
   padding: 0 12px;
   background: var(--color-bg-secondary);
   border: 0.8px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--color-text-muted);
   flex-shrink: 0;
 }
@@ -179,7 +179,7 @@ function startMerge() {
 }
 .merge-toolbar-cancel {
   height: 28px;
-  padding: 0 10px;
+  padding: 0 12px;
   border-radius: 4px;
   background: transparent;
   color: var(--color-text-muted);

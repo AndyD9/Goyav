@@ -240,7 +240,7 @@ async function open(hit: LocalSearchHit) {
   background: var(--color-bg-secondary);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
@@ -248,7 +248,7 @@ async function open(hit: LocalSearchHit) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -289,7 +289,7 @@ async function open(hit: LocalSearchHit) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 48px 24px;
   text-align: center;
   color: var(--color-text-muted);
@@ -306,7 +306,7 @@ async function open(hit: LocalSearchHit) {
   flex-direction: column;
   gap: 2px;
   width: 100%;
-  padding: 9px 14px 9px 16px;
+  padding: 8px 16px 8px 16px;
   border-bottom: 1px solid var(--color-divider);
   text-align: left;
   transition: background 0.1s;
@@ -325,14 +325,14 @@ async function open(hit: LocalSearchHit) {
   left: 0;
   top: 8px;
   bottom: 8px;
-  width: 3px;
+  width: 4px;
   border-radius: 2px;
 }
 
 .hit-line {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .hit-from {
@@ -381,7 +381,7 @@ async function open(hit: LocalSearchHit) {
 .hit-meta {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin-top: 2px;
   font-size: 11px;
   color: var(--color-text-muted);
@@ -404,7 +404,7 @@ mark {
 }
 
 .section-title {
-  padding: 10px 14px 4px;
+  padding: 12px 16px 4px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;

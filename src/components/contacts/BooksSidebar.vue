@@ -63,7 +63,7 @@ function avatarStyle(accountId: string) {
   gap: 8px;
   width: 100%;
   padding: 8px;
-  border-radius: 6px;
+  border-radius: 8px;
   text-align: left;
   transition: background 0.12s;
   margin-bottom: 2px;
@@ -75,8 +75,8 @@ function avatarStyle(accountId: string) {
 }
 
 .book-avatar {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: grid;
   place-items: center;

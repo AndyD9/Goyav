@@ -56,10 +56,59 @@ async fn check(app: &AppHandle, manual: bool) -> Result<()> {
         .await
         .map_err(|e| Error::Other(e.to_string()))?;
     log::info!("Update installed, restarting");
+    // On macOS, relaunch only once this process is gone; otherwise the new
+    // instance shows up as a second Dock icon next to the pinned one.
+    #[cfg(target_os = "macos")]
+    if relaunch_after_exit() {
+        app.exit(0);
+        return Ok(());
+    }
     // Goes through the ExitRequested handler in lib.rs, so account
     // workers stop cleanly before the new version starts.
     app.request_restart();
     Ok(())
+}
+
+/// Start a detached helper that waits for this process to exit, then opens
+/// the app bundle through LaunchServices. Tauri's own restart runs
+/// `open -n` while the old instance is still alive, which macOS treats as a
+/// separate app instance: the Dock then shows the new version beside the
+/// pinned icon. Returns false when the app is not running from a bundle.
+#[cfg(target_os = "macos")]
+fn relaunch_after_exit() -> bool {
+    use std::os::unix::process::CommandExt;
+    use std::process::{Command, Stdio};
+
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+    // <bundle>.app/Contents/MacOS/<binary>
+    let Some(bundle) = exe
+        .ancestors()
+        .nth(3)
+        .filter(|path| path.extension().is_some_and(|ext| ext == "app"))
+    else {
+        return false;
+    };
+    let script = r#"while kill -0 "$1" 2>/dev/null; do sleep 0.2; done; exec /usr/bin/open "$2""#;
+    match Command::new("/bin/sh")
+        .arg("-c")
+        .arg(script)
+        .arg("goyav-relaunch")
+        .arg(std::process::id().to_string())
+        .arg(bundle)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .process_group(0)
+        .spawn()
+    {
+        Ok(_) => true,
+        Err(e) => {
+            log::warn!("Could not schedule the relaunch, using Tauri's restart: {e}");
+            false
+        }
+    }
 }
 
 async fn ask(app: &AppHandle, message: String) -> bool {

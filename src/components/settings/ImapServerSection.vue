@@ -199,7 +199,7 @@ async function discoverMailServers() {
 .mail-discovery-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 

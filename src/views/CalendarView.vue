@@ -590,7 +590,7 @@ onMounted(() => {
           <template v-if="isToday(parseCalendarDay(calendarStore.displayDate))">
             <span
               class="now-dot"
-              :style="{ top: nowTopOffset() - 5 + 'px' }"
+              :style="{ top: nowTopOffset() + 1 + 'px' }"
               aria-hidden="true"
             />
             <div
@@ -862,10 +862,10 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 16px;
+  padding: 8px 16px;
   background: var(--color-accent);
   color: white;
-  border-radius: 18px;
+  border-radius: 20px;
   font-size: 13px;
   font-weight: 500;
   transition: background 0.12s;
@@ -876,7 +876,7 @@ onMounted(() => {
 }
 
 .btn-today {
-  padding: 5px 14px;
+  padding: 4px 16px;
   background: transparent;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -921,11 +921,11 @@ onMounted(() => {
 }
 
 .view-btn {
-  padding: 3px 14px;
+  padding: 4px 16px;
   font-size: 13px;
   font-weight: 500;
   color: var(--color-text-secondary);
-  border-radius: 6px;
+  border-radius: 8px;
   transition: all 0.12s;
 }
 
@@ -948,7 +948,7 @@ onMounted(() => {
 .calendar-load-error,
 .calendar-incomplete {
   flex-shrink: 0;
-  padding: 6px 14px;
+  padding: 8px 16px;
   font-size: 12px;
   background: var(--color-bg-secondary);
   color: var(--color-text-muted);
@@ -989,7 +989,7 @@ onMounted(() => {
   flex-shrink: 0;
   display: flex;
   gap: 4px;
-  padding: 6px 12px;
+  padding: 8px 12px;
   background: var(--color-bg);
   border-bottom: 1px solid var(--color-divider);
 }
@@ -1027,14 +1027,14 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  padding: 6px 10px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--color-divider);
   background: var(--color-bg-secondary);
 }
 
 .all-day-chip {
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 4px 8px;
   font-size: 11px;
   font-weight: 600;
@@ -1062,8 +1062,8 @@ onMounted(() => {
 
 .hour-label {
   position: absolute;
-  top: -7px;
-  right: 6px;
+  top: -8px;
+  right: 8px;
   font-size: 10px;
   color: var(--color-text-muted);
 }
@@ -1087,9 +1087,11 @@ onMounted(() => {
 
 .now-dot {
   position: absolute;
-  left: -5px;
-  width: 10px;
-  height: 10px;
+  left: -4px;
+  width: 8px;
+  height: 8px;
+  /* Centered on the 2px now-line: top is the line's midline. */
+  transform: translateY(-50%);
   border-radius: 50%;
   background: var(--color-accent);
   z-index: 3;
@@ -1106,12 +1108,12 @@ onMounted(() => {
 
 .day-event {
   position: absolute;
-  left: 6px;
-  right: 6px;
+  left: 8px;
+  right: 8px;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 6px 10px;
+  padding: 8px 12px;
   color: #fff;
   border: 0;
   border-radius: 8px;
@@ -1171,8 +1173,8 @@ onMounted(() => {
 }
 
 .week-date-pill {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -1246,7 +1248,7 @@ onMounted(() => {
   flex-shrink: 0;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  padding: 6px 0;
+  padding: 8px 0;
   background: var(--color-bg-secondary);
   font-size: 11px;
   font-weight: 600;
@@ -1269,7 +1271,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 4px 4px 6px;
+  padding: 4px 4px 8px;
   background: var(--color-bg);
   border: 0;
   min-height: 52px;
@@ -1283,8 +1285,8 @@ onMounted(() => {
 }
 
 .month-date-pill {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1301,7 +1303,7 @@ onMounted(() => {
 }
 
 .month-event-strip {
-  height: 3px;
+  height: 4px;
   border-radius: 2px;
 }
 
@@ -1312,7 +1314,7 @@ onMounted(() => {
 
 .month-today {
   flex-shrink: 0;
-  padding: 10px 14px 16px;
+  padding: 12px 16px 16px;
   border-top: 1px solid var(--color-divider);
 }
 
@@ -1322,7 +1324,7 @@ onMounted(() => {
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--color-text-muted);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .month-today-empty {
@@ -1333,9 +1335,9 @@ onMounted(() => {
 .month-today-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 6px 4px;
+  padding: 8px 4px;
   background: transparent;
   border: 0;
   border-bottom: 1px solid var(--color-border-soft, var(--color-border));

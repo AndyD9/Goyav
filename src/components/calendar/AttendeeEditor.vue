@@ -176,7 +176,7 @@ function onKeydown(event: KeyboardEvent) {
   background: var(--color-bg-tertiary);
   border: 1px solid var(--color-border);
   border-radius: 16px;
-  padding: 3px 6px 3px 10px;
+  padding: 4px 8px 4px 12px;
   font-size: 12px;
 }
 
@@ -185,8 +185,8 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .remove-btn {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   font-size: 13px;
   color: var(--color-text-muted);
@@ -202,21 +202,21 @@ function onKeydown(event: KeyboardEvent) {
 
 .add-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 .add-row input {
   flex: 1;
-  padding: 5px 8px;
+  padding: 4px 8px;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--color-bg);
   font-size: 12px;
 }
 
 .add-btn {
-  padding: 5px 12px;
-  border-radius: 6px;
+  padding: 4px 12px;
+  border-radius: 8px;
   font-size: 12px;
   font-weight: 500;
   color: var(--color-accent);
@@ -237,7 +237,7 @@ function onKeydown(event: KeyboardEvent) {
   list-style: none;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   z-index: 20;
   max-height: 240px;
   overflow-y: auto;
@@ -247,7 +247,7 @@ function onKeydown(event: KeyboardEvent) {
 .ac-item {
   display: flex;
   flex-direction: column;
-  padding: 6px 10px;
+  padding: 8px 12px;
   cursor: pointer;
   font-size: 12px;
 }

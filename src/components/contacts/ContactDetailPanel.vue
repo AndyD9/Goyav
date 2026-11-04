@@ -138,7 +138,7 @@ function onPhoneClick(number: string) {
 .action-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   height: 32px;
   padding: 0 12px;
   background: var(--color-bg-tertiary);
@@ -157,13 +157,13 @@ function onPhoneClick(number: string) {
 .field-row {
   display: flex;
   gap: 12px;
-  padding: 10px 0;
+  padding: 12px 0;
   border-bottom: 0.8px solid var(--color-border);
   align-items: baseline;
 }
 
 .field-label {
-  width: 70px;
+  width: 72px;
   flex-shrink: 0;
   font-size: 12px;
   font-weight: 500;
