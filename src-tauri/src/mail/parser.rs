@@ -31,6 +31,58 @@ fn mail_address_to_list(addr: &MailAddress<'_>) -> Vec<Address> {
     }
 }
 
+/// Sender shown by the reader and used as the Reply target.
+///
+/// RFC 5322 allows one From field, but a sender can emit several. mail-parser's
+/// `from()` returns the *last* instance, while the list, notifications, filters
+/// and the PGP signer check use the sender stored at sync time (`hint`: the
+/// first instance for IMAP, the server's choice for JMAP/Graph). To show one
+/// identity everywhere, the From instance that carries the stored address wins,
+/// and otherwise the first instance. Within it, the first mailbox with an
+/// address is used.
+fn reader_sender(parsed: &mail_parser::Message<'_>, hint: &str) -> Address {
+    let instances: Vec<Vec<Address>> = parsed
+        .headers()
+        .iter()
+        .filter(|header| matches!(header.name, mail_parser::HeaderName::From))
+        .filter_map(|header| match &header.value {
+            HeaderValue::Address(address) => Some(mail_address_to_list(address)),
+            _ => None,
+        })
+        .collect();
+    let hint = hint.trim();
+    let chosen = instances
+        .iter()
+        .find(|list| {
+            !hint.is_empty() && list.iter().any(|a| a.email.trim().eq_ignore_ascii_case(hint))
+        })
+        .or(instances.first());
+    let matching_mailbox = chosen.and_then(|list| {
+        list.iter()
+            .find(|a| !hint.is_empty() && a.email.trim().eq_ignore_ascii_case(hint))
+            .or_else(|| list.iter().find(|a| !a.email.trim().is_empty()))
+    });
+    matching_mailbox.cloned().unwrap_or(Address {
+        name: None,
+        email: hint.to_string(),
+    })
+}
+
+/// Subject shown by the reader: the first Subject field, matching the subject
+/// stored at sync time (mail-parser's `subject()` returns the last one).
+fn reader_subject(parsed: &mail_parser::Message<'_>) -> Option<String> {
+    parsed
+        .headers()
+        .iter()
+        .find(|header| matches!(header.name, mail_parser::HeaderName::Subject))
+        .and_then(|header| match &header.value {
+            HeaderValue::Text(text) => Some(text.to_string()),
+            HeaderValue::TextList(list) => Some(list.join(" ")),
+            _ => None,
+        })
+        .or_else(|| parsed.subject().map(|s| s.to_string()))
+}
+
 /// Parse a raw message into a full MessageBody for the reader view.
 pub fn parse_message_body(
     message_id: &str,
@@ -44,20 +96,13 @@ pub fn parse_message_body(
 ) -> Option<MessageBody> {
     let parsed = MessageParser::default().parse(raw)?;
 
-    let from_list = parsed
-        .from()
-        .map(|a| mail_address_to_list(a))
-        .unwrap_or_default();
-    let from_addr = from_list.into_iter().next().unwrap_or(Address {
-        name: None,
-        email: from_email_hint.to_string(),
-    });
+    let from_addr = reader_sender(&parsed, from_email_hint);
 
     let to: Vec<Address> = serde_json::from_str(to_json).unwrap_or_default();
     let cc: Vec<Address> = serde_json::from_str(cc_json).unwrap_or_default();
     let flags: Vec<String> = serde_json::from_str(flags_json).unwrap_or_default();
 
-    let subject = parsed.subject().map(|s| s.to_string());
+    let subject = reader_subject(&parsed);
     let date = parsed.date().map(|d| d.to_rfc3339()).unwrap_or_default();
 
     // Grab raw HTML once for both image detection and sanitization
@@ -161,6 +206,37 @@ mod tests {
     use super::{mail_address_to_list, parse_html_with_images, parse_message_body};
     use crate::message::MessageBody;
     use mail_parser::MessageParser;
+
+    const DOUBLE_FROM: &[u8] = b"From: news@attacker.example\r\n\
+From: \"Bank Security\" <security@bank.example>\r\n\
+Subject: A\r\n\
+Subject: B\r\n\
+To: me@x.test\r\n\
+\r\n\
+hi\r\n";
+
+    fn reader(raw: &[u8], hint: &str) -> MessageBody {
+        parse_message_body("m1", raw, hint, "[]", "[]", "[]", false, false).unwrap()
+    }
+
+    #[test]
+    fn repeated_from_shows_the_same_sender_as_the_list() {
+        // IMAP stores the first From; the reader must not show the last one.
+        let body = reader(DOUBLE_FROM, "news@attacker.example");
+        assert_eq!(body.from.email, "news@attacker.example");
+        assert_eq!(body.subject.as_deref(), Some("A"));
+        // A server that stored the other instance gets that one, consistently.
+        let body = reader(DOUBLE_FROM, "security@bank.example");
+        assert_eq!(body.from.email, "security@bank.example");
+        // Without a stored sender, the first instance is used.
+        assert_eq!(reader(DOUBLE_FROM, "").from.email, "news@attacker.example");
+    }
+
+    #[test]
+    fn sender_skips_mailboxes_without_an_address() {
+        let raw = b"From: undisclosed-recipients:;, real@x.test\r\nSubject: s\r\n\r\nbody\r\n";
+        assert_eq!(reader(raw, "").from.email, "real@x.test");
+    }
 
     const ADDRESSES: &[u8] = include_bytes!("../../../tests/fixtures/eai-test-messages/addresses");
     const ATTACHMENT: &[u8] =
