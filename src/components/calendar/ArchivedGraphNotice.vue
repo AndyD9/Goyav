@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "@/i18n";
 import type { ArchivedGraphCalendar } from "@/lib/types";
 import ArchivedGraphSummary from "./ArchivedGraphSummary.vue";
 
@@ -14,18 +15,16 @@ defineEmits<{ retry: []; acknowledge: [] }>();
 <template>
   <div v-if="calendars.length || error || acknowledgementError" class="archived-graph-notice" role="alert">
     <span v-if="error">
-      {{ error }} <button @click="$emit('retry')">Retry</button>
+      {{ error }} <button @click="$emit('retry')">{{ t('Retry') }}</button>
     </span>
     <span v-if="acknowledgementError">{{ acknowledgementError }}</span>
     <div v-if="calendars.length">
-      {{ calendars.length }} Graph calendar(s) no longer reported by the provider
-      were archived. Their cached events and action history are preserved
-      read-only, not shown in the live calendar.
+      {{ t("{count} Graph calendar(s) no longer reported by the provider were archived. Their cached events and action history are preserved read-only, not shown in the live calendar.", { count: calendars.length }) }}
       <button :disabled="acknowledging" @click="$emit('acknowledge')">
-        {{ acknowledging ? 'Acknowledging…' : 'Acknowledge' }}
+        {{ acknowledging ? t('Acknowledging…') : t('Acknowledge') }}
       </button>
       <details>
-        <summary>Archived calendar summary</summary>
+        <summary>{{ t('Archived calendar summary') }}</summary>
         <ArchivedGraphSummary :calendars="calendars" />
       </details>
     </div>

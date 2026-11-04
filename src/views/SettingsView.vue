@@ -13,6 +13,8 @@ import AccountTypePicker from "@/components/settings/AccountTypePicker.vue";
 import AccountFormModal from "@/components/settings/AccountFormModal.vue";
 import ArchivedGraphSummary from "@/components/calendar/ArchivedGraphSummary.vue";
 import logoUrl from "@/assets/goyav-logo.png";
+import ChangelogList from "@/components/changelog/ChangelogList.vue";
+import { t, locale, setLocale, LOCALES } from "@/i18n";
 import {
   accountSecondaryLabel,
   accountTypeLabel,
@@ -45,31 +47,62 @@ function setBlockRemoteImages(v: boolean) {
 }
 
 const themeLabel = computed(() =>
-  uiStore.theme === "dark" ? "Dark" : "Light",
+  uiStore.theme === "dark" ? t("Dark") : t("Light"),
 );
+
+const localeLabel = computed(
+  () => LOCALES.find((option) => option.value === locale.value)?.label ?? "",
+);
+
+function cycleLocale() {
+  const index = LOCALES.findIndex((option) => option.value === locale.value);
+  setLocale(LOCALES[(index + 1) % LOCALES.length].value);
+}
 
 // Desktop: section navigation on the left, one section shown at a time.
-type SettingsSection = "accounts" | "appearance" | "calendars" | "about";
+type SettingsSection = "accounts" | "appearance" | "calendars" | "whatsnew" | "about";
+const SECTION_IDS: readonly SettingsSection[] = ["accounts", "appearance", "calendars", "whatsnew", "about"];
 const activeSection = ref<SettingsSection>("accounts");
-const sections: ReadonlyArray<{ id: SettingsSection; label: string }> = [
-  { id: "accounts", label: "Accounts" },
-  { id: "appearance", label: "Appearance" },
-  { id: "calendars", label: "Archived calendars" },
-  { id: "about", label: "About" },
-];
-const activeSectionLabel = computed(
-  () => sections.find((section) => section.id === activeSection.value)?.label ?? "",
+const sections = computed<ReadonlyArray<{ id: SettingsSection; label: string }>>(() => [
+  { id: "accounts", label: t("Accounts") },
+  { id: "appearance", label: t("Appearance") },
+  { id: "calendars", label: t("Archived calendars") },
+  { id: "whatsnew", label: t("What's new") },
+  { id: "about", label: t("About") },
+]);
+
+// On desktop the account form fills the settings panel as a page.
+const accountFormOpen = ref(false);
+
+function selectSection(section: SettingsSection) {
+  if (accountFormOpen.value) formModal.value?.cancel();
+  activeSection.value = section;
+}
+
+// Help → What's new links here with ?section=whatsnew.
+watch(
+  () => route.query.section,
+  (section) => {
+    if (typeof section === "string" && (SECTION_IDS as readonly string[]).includes(section)) {
+      selectSection(section as SettingsSection);
+    }
+  },
+  { immediate: true },
 );
 
-const themeOptions: ReadonlyArray<{ value: Theme; label: string }> = [
-  { value: "system", label: "System" },
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-];
-const listLayoutOptions: ReadonlyArray<{ value: MessageListLayout; label: string }> = [
-  { value: "cards", label: "Cards" },
-  { value: "table", label: "Compact table" },
-];
+const activeSectionLabel = computed(
+  () => sections.value.find((section) => section.id === activeSection.value)?.label ?? "",
+);
+
+const themeOptions = computed<ReadonlyArray<{ value: Theme; label: string }>>(() => [
+  { value: "system", label: t("System") },
+  { value: "light", label: t("Light") },
+  { value: "dark", label: t("Dark") },
+]);
+const listLayoutOptions = computed<ReadonlyArray<{ value: MessageListLayout; label: string }>>(() => [
+  { value: "cards", label: t("Cards") },
+  { value: "table", label: t("Compact table") },
+]);
 
 const version = __APP_VERSION__;
 
@@ -207,12 +240,12 @@ watch([
 <template>
   <!-- Mobile: section-card layout with uppercase muted labels -->
   <div v-if="isMobile" class="settings-view mobile">
-    <MobileAppBar large title="Settings" />
+    <MobileAppBar large :title="t('Settings')" />
 
     <div class="mobile-scroll">
       <!-- Accounts -->
       <div class="section">
-        <div class="section-label">Accounts</div>
+        <div class="section-label">{{ t("Accounts") }}</div>
         <div class="section-card">
           <div
             v-for="account in accountsStore.accounts"
@@ -223,7 +256,7 @@ watch([
             <button
               type="button"
               class="mobile-account-row"
-              :aria-label="`Edit ${account.display_name}`"
+              :aria-label="t('Edit {name}', { name: account.display_name })"
               data-testid="mobile-account-edit"
               @click="openEditForm(account.id)"
             >
@@ -244,7 +277,7 @@ watch([
             <button
               type="button"
               class="mobile-account-delete"
-              :aria-label="`Delete ${account.display_name}`"
+              :aria-label="t('Delete {name}', { name: account.display_name })"
               data-testid="mobile-account-delete"
               @click="confirmDelete(account.id)"
             >
@@ -252,7 +285,7 @@ watch([
                 <polyline points="3 6 5 6 21 6" />
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
               </svg>
-              <span>Delete</span>
+              <span>{{ t("Delete") }}</span>
             </button>
           </div>
           <button class="mobile-add-account" @click="openNewForm">
@@ -262,30 +295,37 @@ watch([
               <line x1="20" y1="8" x2="20" y2="14" />
               <line x1="23" y1="11" x2="17" y2="11" />
             </svg>
-            <span>Add account</span>
+            <span>{{ t("Add account") }}</span>
           </button>
         </div>
       </div>
 
       <!-- General -->
       <div class="section">
-        <div class="section-label">General</div>
+        <div class="section-label">{{ t("General") }}</div>
         <div class="section-card">
           <button class="mobile-setting-row" @click="uiStore.setTheme(uiStore.theme === 'dark' ? 'light' : 'dark')">
-            <span class="mobile-setting-label">Appearance</span>
+            <span class="mobile-setting-label">{{ t("Appearance") }}</span>
             <span class="mobile-setting-value">{{ themeLabel }}</span>
             <svg class="mobile-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </button>
           <div class="mobile-setting-row static">
-            <span class="mobile-setting-label">Time format</span>
+            <span class="mobile-setting-label">{{ t("Time format") }}</span>
             <span class="mobile-setting-value">
-              {{ uiStore.timeFormat === "auto" ? "Auto" : uiStore.timeFormat === "12" ? "12-hour" : "24-hour" }}
+              {{ uiStore.timeFormat === "auto" ? t("Auto") : uiStore.timeFormat === "12" ? t("12-hour") : t("24-hour") }}
             </span>
           </div>
+          <button class="mobile-setting-row" data-testid="mobile-locale" @click="cycleLocale">
+            <span class="mobile-setting-label">{{ t("Language") }}</span>
+            <span class="mobile-setting-value">{{ localeLabel }}</span>
+            <svg class="mobile-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
           <div class="mobile-setting-row static">
-            <span class="mobile-setting-label">Default account</span>
+            <span class="mobile-setting-label">{{ t("Default account") }}</span>
             <span class="mobile-setting-value">
               {{ accountsStore.activeAccount()?.email ?? "—" }}
             </span>
@@ -295,15 +335,15 @@ watch([
 
       <!-- Archived calendars -->
       <div class="section">
-        <div class="section-label">Archived Graph calendars</div>
+        <div class="section-label">{{ t("Archived Graph calendars") }}</div>
         <div class="section-card archive-settings">
           <p v-if="calendarStore.archivedGraphCalendarsError" role="alert">
             {{ calendarStore.archivedGraphCalendarsError }}
-            <button @click="calendarStore.retryNavigation()">Retry</button>
+            <button @click="calendarStore.retryNavigation()">{{ t("Retry") }}</button>
           </p>
-          <p v-else-if="!calendarStore.archivedGraphCalendars.length">No archived Graph calendars.</p>
+          <p v-else-if="!calendarStore.archivedGraphCalendars.length">{{ t("No archived Graph calendars.") }}</p>
           <template v-if="calendarStore.archivedGraphCalendars.length">
-            <p>Cached events and action history are retained read-only.</p>
+            <p>{{ t("Cached events and action history are retained read-only.") }}</p>
             <ArchivedGraphSummary :calendars="calendarStore.archivedGraphCalendars" />
           </template>
         </div>
@@ -311,10 +351,10 @@ watch([
 
       <!-- Privacy & storage -->
       <div class="section">
-        <div class="section-label">Privacy &amp; storage</div>
+        <div class="section-label">{{ t("Privacy & storage") }}</div>
         <div class="section-card">
           <label class="mobile-setting-row toggle">
-            <span class="mobile-setting-label">Block remote images</span>
+            <span class="mobile-setting-label">{{ t("Block remote images") }}</span>
             <input
               type="checkbox"
               class="toggle-input"
@@ -326,7 +366,7 @@ watch([
             </span>
           </label>
           <div class="mobile-setting-row static">
-            <span class="mobile-setting-label">Cache size</span>
+            <span class="mobile-setting-label">{{ t("Cache size") }}</span>
             <span class="mobile-setting-value">—</span>
           </div>
         </div>
@@ -334,11 +374,11 @@ watch([
 
       <!-- About -->
       <div class="section">
-        <div class="section-label">About</div>
+        <div class="section-label">{{ t("About") }}</div>
         <div class="section-card">
           <div class="mobile-setting-row static">
-            <span class="mobile-setting-label">Version</span>
-            <span class="mobile-setting-value">0.1.0</span>
+            <span class="mobile-setting-label">{{ t("Version") }}</span>
+            <span class="mobile-setting-value">{{ version }}</span>
           </div>
         </div>
       </div>
@@ -349,7 +389,7 @@ watch([
   <!-- Desktop: section navigation panel + content panel -->
   <div v-else class="settings-view settings-desktop">
     <nav class="settings-nav app-panel" aria-label="Settings sections">
-      <div class="app-sidebar-header">Settings</div>
+      <div class="app-sidebar-header">{{ t("Settings") }}</div>
       <div class="settings-nav-list">
         <button
           v-for="section in sections"
@@ -358,7 +398,7 @@ watch([
           :class="{ active: activeSection === section.id }"
           :aria-current="activeSection === section.id ? 'page' : undefined"
           :data-testid="`settings-nav-${section.id}`"
-          @click="activeSection = section.id"
+          @click="selectSection(section.id)"
         >
           <svg v-if="section.id === 'accounts'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="8" r="4" /><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1" />
@@ -368,6 +408,9 @@ watch([
           </svg>
           <svg v-else-if="section.id === 'calendars'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+          </svg>
+          <svg v-else-if="section.id === 'whatsnew'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15.5l-1.9-4.6L5.5 9l4.6-1.4z" /><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" />
           </svg>
           <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="9" /><path d="M12 16v-5M12 8h.01" />
@@ -382,6 +425,13 @@ watch([
     </nav>
 
     <div class="settings-main app-panel">
+      <AccountFormModal
+        v-if="!isMobile"
+        ref="formModal"
+        variant="page"
+        @open-change="accountFormOpen = $event"
+      />
+      <template v-if="!accountFormOpen">
       <header class="settings-toolbar">
         <h1 class="settings-title">{{ activeSectionLabel }}</h1>
         <button
@@ -390,7 +440,7 @@ watch([
           @click="openNewForm"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-          Add account
+          {{ t("Add account") }}
         </button>
       </header>
 
@@ -399,14 +449,13 @@ watch([
         <section v-if="activeSection === 'accounts'" class="settings-section">
           <div v-if="!accountsStore.accounts.length" class="accounts-empty" data-testid="accounts-empty">
             <img :src="logoUrl" alt="" class="accounts-empty-logo" />
-            <h2 class="accounts-empty-title">Connect your first account</h2>
+            <h2 class="accounts-empty-title">{{ t("Connect your first account") }}</h2>
             <p class="accounts-empty-text">
-              Goyav keeps your mail, calendars and contacts on this device.
-              Add an IMAP, JMAP, Gmail or Microsoft 365 account to get started.
+              {{ t("Goyav keeps your mail, calendars and contacts on this device. Add an IMAP, JMAP, Gmail or Microsoft 365 account to get started.") }}
             </p>
             <button class="btn-add btn-add-lg" @click="openNewForm">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-              Add account
+              {{ t("Add account") }}
             </button>
           </div>
 
@@ -414,7 +463,12 @@ watch([
             <div
               v-for="account in accountsStore.accounts"
               :key="account.id"
-              class="account-card"
+              class="account-card clickable"
+              role="button"
+              tabindex="0"
+              :aria-label="t('Open settings for {name}', { name: account.display_name })"
+              @click="openEditForm(account.id)"
+              @keydown.enter.self.prevent="openEditForm(account.id)"
             >
               <span
                 class="account-avatar"
@@ -428,13 +482,13 @@ watch([
                 class="account-card-type"
                 :style="{ color: acctColor(account.id).fill, background: acctColor(account.id).soft }"
               >{{ accountTypeLabel(account) }}</span>
-              <div class="account-card-actions">
-                <button class="icon-btn-sm" title="Edit" :aria-label="`Edit ${account.display_name}`" @click="openEditForm(account.id)">
+              <div class="account-card-actions" @click.stop>
+                <button class="icon-btn-sm" title="Edit" :aria-label="t('Edit {name}', { name: account.display_name })" @click="openEditForm(account.id)">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
                   </svg>
                 </button>
-                <button class="icon-btn-sm danger" title="Delete" :aria-label="`Delete ${account.display_name}`" @click="confirmDelete(account.id)">
+                <button class="icon-btn-sm danger" :title="t('Delete')" :aria-label="t('Delete {name}', { name: account.display_name })" @click="confirmDelete(account.id)">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                   </svg>
@@ -449,10 +503,10 @@ watch([
           <div class="settings-group">
             <div class="settings-row">
               <div class="settings-row-text">
-                <span class="settings-row-label">Theme</span>
-                <span class="settings-row-hint">System follows your macOS appearance.</span>
+                <span class="settings-row-label">{{ t("Theme") }}</span>
+                <span class="settings-row-hint">{{ t("System follows your macOS appearance.") }}</span>
               </div>
-              <div class="segmented" role="radiogroup" aria-label="Theme">
+              <div class="segmented" role="radiogroup" :aria-label="t('Theme')">
                 <button
                   v-for="opt in themeOptions"
                   :key="opt.value"
@@ -467,10 +521,10 @@ watch([
             </div>
             <div class="settings-row">
               <div class="settings-row-text">
-                <span class="settings-row-label">Message list</span>
-                <span class="settings-row-hint">Cards show the sender and a preview; the table fits more rows.</span>
+                <span class="settings-row-label">{{ t("Message list") }}</span>
+                <span class="settings-row-hint">{{ t("Cards show the sender and a preview; the table fits more rows.") }}</span>
               </div>
-              <div class="segmented" role="radiogroup" aria-label="Message list">
+              <div class="segmented" role="radiogroup" :aria-label="t('Message list')">
                 <button
                   v-for="opt in listLayoutOptions"
                   :key="opt.value"
@@ -483,9 +537,28 @@ watch([
                 >{{ opt.label }}</button>
               </div>
             </div>
+            <div class="settings-row">
+              <div class="settings-row-text">
+                <span class="settings-row-label">{{ t("Language") }}</span>
+                <span class="settings-row-hint">{{ t("Language of menus, buttons and messages in Goyav.") }}</span>
+              </div>
+              <div class="segmented" role="radiogroup" :aria-label="t('Language')">
+                <button
+                  v-for="opt in LOCALES"
+                  :key="opt.value"
+                  class="segmented-btn"
+                  :class="{ active: locale === opt.value }"
+                  role="radio"
+                  :aria-checked="locale === opt.value"
+                  :lang="opt.value"
+                  :data-testid="`settings-locale-${opt.value}`"
+                  @click="setLocale(opt.value)"
+                >{{ opt.label }}</button>
+              </div>
+            </div>
           </div>
           <button class="settings-link" @click="router.push('/preferences')">
-            Date, time and window options are in Preferences
+            {{ t("Date, time and window options are in Preferences") }}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
           </button>
         </section>
@@ -495,17 +568,21 @@ watch([
           <div class="settings-group archive-settings desktop-archive-settings">
             <p v-if="calendarStore.archivedGraphCalendarsError" role="alert">
               {{ calendarStore.archivedGraphCalendarsError }}
-              <button @click="calendarStore.retryNavigation()">Retry</button>
+              <button @click="calendarStore.retryNavigation()">{{ t("Retry") }}</button>
             </p>
             <p v-else-if="!calendarStore.archivedGraphCalendars.length">
-              No archived Graph calendars. Calendars removed from a Microsoft 365
-              account keep their cached events here, read-only.
+              {{ t("No archived Graph calendars. Calendars removed from a Microsoft 365 account keep their cached events here, read-only.") }}
             </p>
             <template v-if="calendarStore.archivedGraphCalendars.length">
-              <p>Cached events and action history are retained read-only.</p>
+              <p>{{ t("Cached events and action history are retained read-only.") }}</p>
               <ArchivedGraphSummary :calendars="calendarStore.archivedGraphCalendars" />
             </template>
           </div>
+        </section>
+
+        <!-- What's new -->
+        <section v-else-if="activeSection === 'whatsnew'" class="settings-section">
+          <ChangelogList :current="version" />
         </section>
 
         <!-- About -->
@@ -514,12 +591,13 @@ watch([
             <img :src="logoUrl" alt="" class="about-card-logo" />
             <div>
               <div class="about-card-name">Goyav</div>
-              <div class="about-card-meta">Version {{ version }} · A personal mail and calendar client</div>
-              <div class="about-card-meta">Built on Chithi. Everything is stored on this device.</div>
+              <div class="about-card-meta">{{ t("Version {version} · A personal mail and calendar client", { version }) }}</div>
+              <div class="about-card-meta">{{ t("Built on Chithi. Everything is stored on this device.") }}</div>
             </div>
           </div>
         </section>
       </div>
+      </template>
     </div>
   </div>
 
@@ -531,8 +609,8 @@ watch([
     @cancel="cancelPicker"
   />
 
-  <!-- Add/Edit Account Modal (shared by mobile + desktop) -->
-  <AccountFormModal ref="formModal" />
+  <!-- Add/Edit Account dialog on mobile; desktop renders it as a page above. -->
+  <AccountFormModal v-if="isMobile" ref="formModal" />
 
 
     <!-- Delete Confirmation Modal -->
@@ -540,18 +618,16 @@ watch([
       <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="closeDeleteConfirm">
         <div class="modal modal-sm">
           <div class="modal-body">
-            <h3 class="confirm-title">Delete Account</h3>
-            <p class="confirm-text">Are you sure you want to delete this account? This action cannot be undone.</p>
+            <h3 class="confirm-title">{{ t("Delete Account") }}</h3>
+            <p class="confirm-text">{{ t("Are you sure you want to delete this account? This action cannot be undone.") }}</p>
             <div
               v-if="deletingZoomAccount"
               class="zoom-abandon-warning"
               data-testid="zoom-abandon-warning"
             >
-              <strong>Remote Zoom meetings may remain.</strong>
+              <strong>{{ t("Remote Zoom meetings may remain.") }}</strong>
               <p>
-                If normal deletion cannot clean up Zoom, you can remove only
-                the local account. Meetings already created in Zoom may remain
-                active and must be removed from Zoom separately.
+                {{ t("If normal deletion cannot clean up Zoom, you can remove only the local account. Meetings already created in Zoom may remain active and must be removed from Zoom separately.") }}
               </p>
               <label class="zoom-abandon-acknowledgement">
                 <input
@@ -559,7 +635,7 @@ watch([
                   type="checkbox"
                   data-testid="zoom-abandon-checkbox"
                 />
-                I understand that remote Zoom meetings may remain
+                {{ t("I understand that remote Zoom meetings may remain") }}
               </label>
             </div>
             <div
@@ -567,10 +643,9 @@ watch([
               class="zoom-abandon-warning"
               data-testid="delete-provider-lookup-warning"
             >
-              <strong>Remote resource status could not be checked.</strong>
+              <strong>{{ t("Remote resource status could not be checked.") }}</strong>
               <p>
-                The account configuration could not be loaded. Deleting the
-                local account may leave remote meetings or rooms behind.
+                {{ t("The account configuration could not be loaded. Deleting the local account may leave remote meetings or rooms behind.") }}
               </p>
             </div>
             <div
@@ -578,24 +653,21 @@ watch([
               class="zoom-abandon-warning"
               data-testid="visio-delete-warning"
             >
-              <strong>Remote Visio rooms will remain.</strong>
+              <strong>{{ t("Remote Visio rooms will remain.") }}</strong>
               <p>
-                Deleting this local account does not delete rooms already
-                created in La Suite Visio. Goyav will forget its associations
-                with those rooms, so remove them from Visio separately if they
-                should no longer be available.
+                {{ t("Deleting this local account does not delete rooms already created in La Suite Visio. Goyav will forget its associations with those rooms, so remove them from Visio separately if they should no longer be available.") }}
               </p>
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn-secondary" @click="closeDeleteConfirm">Cancel</button>
+            <button class="btn-secondary" @click="closeDeleteConfirm">{{ t("Cancel") }}</button>
             <button
               class="btn-danger"
               data-testid="delete-account-confirm"
               :disabled="deleteProviderLoading"
               @click="doDelete"
             >
-              {{ deleteProviderLoading ? "Checking…" : deletingZoomAccount && abandonZoomAcknowledged ? "Delete locally" : "Delete" }}
+              {{ deleteProviderLoading ? t("Checking…") : deletingZoomAccount && abandonZoomAcknowledged ? t("Delete locally") : t("Delete") }}
             </button>
           </div>
         </div>
@@ -767,6 +839,15 @@ watch([
 
 .account-card:last-child {
   border-bottom: none;
+}
+
+.account-card.clickable {
+  cursor: pointer;
+}
+
+.account-card:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
 }
 
 .account-card:hover {

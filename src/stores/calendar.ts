@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { ref, computed, watch, onScopeDispose } from "vue";
 import { listen } from "@tauri-apps/api/event";
+import { t } from "@/i18n";
 import type {
   ArchivedGraphCalendar,
   Calendar,
@@ -229,7 +230,7 @@ export const useCalendarStore = defineStore("calendar", () => {
     const originalStart = occurrence.selection.original_start;
     const originalDate = originalStart ? new Date(originalStart) : null;
     if (originalDate && !Number.isFinite(originalDate.getTime())) {
-      throw new Error("Calendar occurrence has an invalid original position.");
+      throw new Error(t("Calendar occurrence has an invalid original position."));
     }
     return {
       ...master,
@@ -298,7 +299,7 @@ export const useCalendarStore = defineStore("calendar", () => {
     if (accountId) {
       // calendar-changed refreshes the UI after this per-account sync.
       if (calendarSyncIsCoolingDown(accountId)) {
-        throw new Error("Graph calendar sync is waiting for its Retry-After cooldown.");
+        throw new Error(t("Graph calendar sync is waiting for its Retry-After cooldown."));
       }
       try {
         await api.syncCalendars(accountId);
@@ -366,7 +367,7 @@ export const useCalendarStore = defineStore("calendar", () => {
         }
       } else {
         archivedGraphCalendarsError.value =
-          "Could not check archived Graph calendars. Please retry.";
+          t("Could not check archived Graph calendars. Please retry.");
       }
       if (active.status === "rejected") throw active.reason;
       calendars.value = active.value
@@ -375,7 +376,7 @@ export const useCalendarStore = defineStore("calendar", () => {
       calendarsError.value = null;
     } catch (error) {
       if (request !== calendarListRequest) return;
-      calendarsError.value = "Could not load calendars. Please retry.";
+      calendarsError.value = t("Could not load calendars. Please retry.");
       throw error;
     }
   }
@@ -403,7 +404,7 @@ export const useCalendarStore = defineStore("calendar", () => {
       }
     } catch (error) {
       archivedGraphAcknowledgementError.value =
-        "Could not acknowledge every archived calendar. Please retry.";
+        t("Could not acknowledge every archived calendar. Please retry.");
       console.error("Archived Graph calendar acknowledgement failed:", error);
     } finally {
       acknowledgingArchivedGraphCalendars.value = false;
@@ -433,9 +434,9 @@ export const useCalendarStore = defineStore("calendar", () => {
         const projectedIds = new Set<string>();
         const projected = page.occurrences.map((occurrence) => {
           const master = masters.get(occurrence.event_id);
-          if (!master) throw new Error("Calendar occurrence has no matching local master event.");
+          if (!master) throw new Error(t("Calendar occurrence has no matching local master event."));
           const event = occurrenceEvent(occurrence, master);
-          if (projectedIds.has(event.id)) throw new Error("Calendar occurrence projection contains duplicate IDs.");
+          if (projectedIds.has(event.id)) throw new Error(t("Calendar occurrence projection contains duplicate IDs."));
           projectedIds.add(event.id);
           return event;
         });
@@ -454,8 +455,8 @@ export const useCalendarStore = defineStore("calendar", () => {
         const { events, page, projected: dates } = result.value;
         rawEvents.push(...events);
         projected.push(...dates);
-        if (page.has_more) errors.push(`${accounts[index].display_name}: the visible range exceeds the display limit; some events are not shown.`);
-        for (const error of page.display_errors ?? []) errors.push(`${accounts[index].display_name}: event ${error.event_id} could not be displayed: ${error.message}`);
+        if (page.has_more) errors.push(t("{account}: the visible range exceeds the display limit; some events are not shown.", { account: accounts[index].display_name }));
+        for (const error of page.display_errors ?? []) errors.push(t("{account}: event {id} could not be displayed: {message}", { account: accounts[index].display_name, id: error.event_id, message: error.message }));
         for (const row of page.unresolved) unresolved.set(row.event_id, row);
         for (const id of page.needs_hydration) needsHydration.add(id);
       }
@@ -467,7 +468,7 @@ export const useCalendarStore = defineStore("calendar", () => {
       if (request !== rangeRequest) return;
       const activeRange = getDateRange();
       if (activeRange.start !== range.start || activeRange.end !== range.end) {
-        throw new Error("Calendar display range changed during the read. Please retry.");
+        throw new Error(t("Calendar display range changed during the read. Please retry."));
       }
       // An exact read may have completed while the range request was pending.
       const selectedId = selectedEvent.value?.id;
@@ -497,7 +498,7 @@ export const useCalendarStore = defineStore("calendar", () => {
           viewMode.value = pendingDisplay.value.mode;
           pendingDisplay.value = null;
         }
-        eventsError.value = "Could not load calendar dates. Please retry.";
+        eventsError.value = t("Could not load calendar dates. Please retry.");
         displayErrors.value = [String(error)];
       }
       if (request === rangeRequest) throw error;
@@ -533,10 +534,10 @@ export const useCalendarStore = defineStore("calendar", () => {
     try {
       const fresh = await api.getCalendarEvent(eventId);
       if (singleEventRequests.get(eventId) !== request) {
-        throw new Error("Calendar data changed while refreshing. Please try again.");
+        throw new Error(t("Calendar data changed while refreshing. Please try again."));
       }
       if (fresh.id !== eventId) {
-        throw new Error("The refreshed calendar event has an unexpected ID.");
+        throw new Error(t("The refreshed calendar event has an unexpected ID."));
       }
       // Replace an existing range row, but never append out-of-range details.
       const index = events.value.findIndex((event) => event.id === eventId);
@@ -599,14 +600,13 @@ export const useCalendarStore = defineStore("calendar", () => {
     if (pending.length === 0) return false;
     if (pending.length !== 1) {
       throw new Error(
-        "Multiple unfinished calendar actions own this event. " +
-        "Resolve them before editing it again.",
+        t("Multiple unfinished calendar actions own this event. Resolve them before editing it again."),
       );
     }
     const action = pending[0];
     if (requiresConfirmation(action.requires)) {
       throw new Error(
-        "The unfinished calendar action requires confirmation before recovery.",
+        t("The unfinished calendar action requires confirmation before recovery."),
       );
     }
     const result = await api.executeCalendarAction(action.operation_id, {
@@ -615,7 +615,7 @@ export const useCalendarStore = defineStore("calendar", () => {
     });
     if (result.stage !== "completed") {
       throw new Error(
-        "The unfinished occurrence edit still needs reconciliation.",
+        t("The unfinished occurrence edit still needs reconciliation."),
       );
     }
     await fetchEvents({ refreshSelected: false });
@@ -628,14 +628,14 @@ export const useCalendarStore = defineStore("calendar", () => {
   ): Promise<void> {
     const support = calendarEditSupport(event);
     if (!support.supported || !support.occurrence) {
-      throw new Error(support.reason || "The selected event is not an occurrence.");
+      throw new Error(support.reason || t("The selected event is not an occurrence."));
     }
     const anchorId = eventAnchorId(event);
     if (await resumePendingOccurrenceAction(event, anchorId)) return;
     const originalStart = selectedOriginalStart(event);
     if (!originalStart) {
       throw new Error(
-        "The selected occurrence has no trusted original position. Refresh and try again.",
+        t("The selected occurrence has no trusted original position. Refresh and try again."),
       );
     }
     const plan = await api.planCalendarOccurrenceAction(
@@ -653,7 +653,7 @@ export const useCalendarStore = defineStore("calendar", () => {
       edit,
     );
     if (requiresConfirmation(plan.requires)) {
-      throw new Error("This occurrence edit requires unsupported confirmation.");
+      throw new Error(t("This occurrence edit requires unsupported confirmation."));
     }
     const result = await api.executeCalendarAction(plan.operation_id, {
       replacement_meeting_identity: false,
@@ -661,7 +661,7 @@ export const useCalendarStore = defineStore("calendar", () => {
     });
     if (result.stage !== "completed") {
       throw new Error(
-        "The occurrence edit needs reconciliation before it can be shown.",
+        t("The occurrence edit needs reconciliation before it can be shown."),
       );
     }
     await fetchEvents({ refreshSelected: false });
@@ -674,14 +674,14 @@ export const useCalendarStore = defineStore("calendar", () => {
   ): Promise<CalendarActionPlan> {
     const support = calendarScopedEditSupport(event);
     if (!support.supported || !support.scopes.includes("entire-series")) {
-      throw new Error(support.reason || "The selected event has no editable series.");
+      throw new Error(support.reason || t("The selected event has no editable series."));
     }
     const anchorId = eventAnchorId(event);
     const start = event.start_time;
     const end = event.end_time;
     const view = await api.readCalendarEventSet(anchorId, start, end, 1);
     if (view.master.selection.event_id !== anchorId || !view.master.selection.token) {
-      throw new Error("The recurring event identity changed. Refresh and try again.");
+      throw new Error(t("The recurring event identity changed. Refresh and try again."));
     }
     return api.planCalendarAction({
       selection: {
@@ -712,7 +712,7 @@ export const useCalendarStore = defineStore("calendar", () => {
     if (resumable.length === 0) return null;
     if (resumable.length !== 1) {
       throw new Error(
-        "Multiple unfinished calendar actions own this series. Resolve them before editing it again.",
+        t("Multiple unfinished calendar actions own this series. Resolve them before editing it again."),
       );
     }
     const action = resumable[0];
@@ -721,7 +721,7 @@ export const useCalendarStore = defineStore("calendar", () => {
       reset_exceptions: action.requires.reset_exceptions,
     });
     if (result.stage !== "completed") {
-      throw new Error("The unfinished recurring action still needs reconciliation.");
+      throw new Error(t("The unfinished recurring action still needs reconciliation."));
     }
     await fetchEvents({ refreshSelected: false });
     return result.event_id;
@@ -733,7 +733,7 @@ export const useCalendarStore = defineStore("calendar", () => {
   ): Promise<string> {
     const result = await api.executeCalendarAction(plan.operation_id, confirmations);
     if (result.stage !== "completed") {
-      throw new Error("The recurring event action still needs reconciliation.");
+      throw new Error(t("The recurring event action still needs reconciliation."));
     }
     await fetchEvents({ refreshSelected: false });
     return result.event_id;

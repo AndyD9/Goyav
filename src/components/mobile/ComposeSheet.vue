@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount } from "vue";
 import { useUiStore } from "@/stores/ui";
+import { t } from "@/i18n";
 
 const uiStore = useUiStore();
 
@@ -24,14 +25,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="compose-sheet-root" role="dialog" aria-label="New message">
+  <div class="compose-sheet-root" role="dialog" :aria-label="t('New message')">
     <div class="scrim" @click="close" />
     <section class="sheet">
       <div class="grabber" aria-hidden="true" />
       <header class="sheet-header">
-        <button class="sheet-action muted" @click="close">Cancel</button>
-        <div class="sheet-title">New Message</div>
-        <button class="sheet-action send" disabled>Send</button>
+        <button class="sheet-action muted" @click="close">{{ t('Cancel') }}</button>
+        <div class="sheet-title">{{ t('New Message') }}</div>
+        <button class="sheet-action send" disabled>{{ t('Send') }}</button>
       </header>
 
       <div class="sheet-body">
@@ -39,8 +40,7 @@ onBeforeUnmount(() => {
              the mobile iteration pass (§8 of PATCHES-MOBILE.md). The
              desktop path still uses openComposeWindow(). -->
         <p class="placeholder">
-          Mobile compose sheet placeholder — full implementation tracked in
-          PATCHES-MOBILE §8.
+          {{ t("Mobile compose sheet placeholder — full implementation tracked in PATCHES-MOBILE §8.") }}
         </p>
       </div>
     </section>

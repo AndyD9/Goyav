@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "@/i18n";
 import { computed, ref, onUnmounted } from "vue";
 import { useCalendarStore } from "@/stores/calendar";
 import { useUiStore } from "@/stores/ui";
@@ -69,7 +70,7 @@ function getEventColor(event: { calendar_id: string }): string {
 const allDayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const dayNames = computed(() => {
   const s = uiStore.weekStartDay;
-  return [...allDayNames.slice(s), ...allDayNames.slice(0, s)];
+  return [...allDayNames.slice(s), ...allDayNames.slice(0, s)].map((name) => t(name));
 });
 
 const dragStartPos = ref<{ x: number; y: number } | null>(null);
@@ -211,13 +212,13 @@ function onCellDrop(day: Date) {
               @click.stop="emit('eventClick', event.id)"
               @mousedown="onEventMouseDown($event, event)"
             >
-              {{ event.title || '(No title)' }}
+              {{ event.title || t('(No title)') }}
             </div>
             <div
               v-if="getEventsForDay(day).length > 3"
               class="month-more"
             >
-              +{{ getEventsForDay(day).length - 3 }} more
+              {{ t("+{count} more", { count: getEventsForDay(day).length - 3 }) }}
             </div>
           </div>
         </div>

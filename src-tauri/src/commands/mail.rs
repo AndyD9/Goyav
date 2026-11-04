@@ -104,6 +104,28 @@ pub async fn get_messages(
     Ok(result)
 }
 
+/// Search the local message cache across every folder. `account_ids` limits
+/// the search to those accounts; `None` searches every account with mail.
+#[tauri::command]
+pub async fn search_messages_local(
+    state: State<'_, AppState>,
+    account_ids: Option<Vec<String>>,
+    filter: db::messages::QuickFilter,
+    limit: Option<u32>,
+) -> Result<db::messages::LocalSearchPage> {
+    let conn = state.db.reader();
+    let ids = match account_ids {
+        Some(ids) => ids,
+        None => db::accounts::list_accounts(&conn)?
+            .into_iter()
+            .filter(|a| !a.mail_protocol.is_empty())
+            .map(|a| a.id)
+            .collect(),
+    };
+    let limit = limit.unwrap_or(200).clamp(1, 1000);
+    db::messages::search_local_messages(&conn, &ids, &filter, limit)
+}
+
 /// Run a server-side search across all folders of an account.
 /// Provider credentials and wire behavior stay behind [`MailBackend`].
 #[tauri::command]

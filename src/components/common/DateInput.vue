@@ -4,6 +4,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useUiStore } from "@/stores/ui";
 import { calendarDay, parseCalendarDay } from "@/lib/calendar-days";
+import { t, dateLocale } from "@/i18n";
 
 const props = defineProps<{
   modelValue: string;
@@ -66,7 +67,10 @@ const weeks = computed<Date[][]>(() => {
 });
 
 const dayNames = computed(() => {
-  const base = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  // 2023-01-01 was a Sunday.
+  const base = Array.from({ length: 7 }, (_, i) =>
+    new Date(2023, 0, 1 + i).toLocaleDateString(dateLocale(), { weekday: "short" }),
+  );
   const rotated = [...base];
   for (let i = 0; i < uiStore.weekStartDay; i++) rotated.push(rotated.shift()!);
   return rotated;
@@ -74,7 +78,7 @@ const dayNames = computed(() => {
 
 const monthLabel = computed(() => {
   const d = new Date(viewYear.value, viewMonth.value, 1);
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return d.toLocaleDateString(dateLocale(), { month: "long", year: "numeric" });
 });
 
 function moveMonth(offset: -1 | 1) {
@@ -151,7 +155,7 @@ onUnmounted(() => {
       :data-testid="testid"
       @click="open ? closePicker() : openPicker()"
     >
-      <span class="date-value">{{ modelValue || "Select date" }}</span>
+      <span class="date-value">{{ modelValue || t("Select date") }}</span>
       <svg
         class="cal-icon"
         width="14"
@@ -170,12 +174,12 @@ onUnmounted(() => {
         <line x1="3" y1="10" x2="21" y2="10" />
       </svg>
     </button>
-    <div v-if="open" class="date-picker-popup" role="dialog" aria-label="Choose a date">
+    <div v-if="open" class="date-picker-popup" role="dialog" :aria-label="t('Choose a date')">
       <div class="date-picker-header">
         <button
           type="button"
           class="nav-btn"
-          aria-label="Previous month"
+          :aria-label="t('Previous month')"
           data-testid="date-picker-prev"
           @click="goPrev"
         >
@@ -187,7 +191,7 @@ onUnmounted(() => {
         <button
           type="button"
           class="nav-btn"
-          aria-label="Next month"
+          :aria-label="t('Next month')"
           data-testid="date-picker-next"
           @click="goNext"
         >

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "@/i18n";
 import { useAccountsStore } from "@/stores/accounts";
 import type { ContactBook } from "@/lib/types";
 import { acctColor } from "@/lib/account-colors";
@@ -23,7 +24,7 @@ function avatarStyle(accountId: string) {
 
 <template>
   <div class="books-sidebar" data-testid="contacts-book-select">
-    <div class="app-sidebar-header">Address Books</div>
+    <div class="app-sidebar-header">{{ t('Address Books') }}</div>
     <div
       v-for="book in books"
       :key="book.id"
@@ -43,7 +44,7 @@ function avatarStyle(accountId: string) {
       </span>
       <svg class="book-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
     </div>
-    <div v-if="books.length === 0" class="empty-text">No contact books</div>
+    <div v-if="books.length === 0" class="empty-text">{{ t('No contact books') }}</div>
   </div>
 </template>
 

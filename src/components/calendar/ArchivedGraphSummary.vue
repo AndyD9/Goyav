@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "@/i18n";
 import type { ArchivedGraphCalendar } from "@/lib/types";
 import { useAccountsStore } from "@/stores/accounts";
 
@@ -15,9 +16,8 @@ function accountName(accountId: string): string {
   <ul class="archived-graph-summary">
     <li v-for="calendar in calendars" :key="calendar.id">
       {{ accountName(calendar.account_id) }} · {{ calendar.name }}:
-      {{ calendar.retained_event_count }} cached event(s),
-      {{ calendar.replay_address_count }} replay address(es)
-      <span v-if="calendar.acknowledged">· Acknowledged</span>
+      {{ t("{events} cached event(s), {addresses} replay address(es)", { events: calendar.retained_event_count, addresses: calendar.replay_address_count }) }}
+      <span v-if="calendar.acknowledged">· {{ t('Acknowledged') }}</span>
     </li>
   </ul>
 </template>

@@ -1,4 +1,5 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { t } from "@/i18n";
 
 let composeCounter = 0;
 
@@ -42,10 +43,10 @@ export function openComposeWindow(params: ComposeParams = {}) {
   const queryString = query.toString();
   const url = queryString ? `/compose?${queryString}` : "/compose";
 
-  const titleSuffix = params.subject || "(no subject)";
+  const titleSuffix = params.subject || t("(no subject)");
   const composeWindow = new WebviewWindow(label, {
     url,
-    title: `Write ${titleSuffix} - Goyav`,
+    title: t("Write {subject} - Goyav", { subject: titleSuffix }),
     width: 1024,
     height: 700,
     center: true,

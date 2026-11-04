@@ -4,6 +4,7 @@
 
 import { computed, ref, watch } from "vue";
 import { useUiStore } from "@/stores/ui";
+import { dateLocale } from "@/i18n";
 
 const props = defineProps<{
   min?: string;
@@ -39,7 +40,7 @@ function toDisplay(hhmm: string): string {
   if (isNaN(h) || isNaN(m)) return hhmm;
   const d = new Date();
   d.setHours(h, m, 0, 0);
-  return d.toLocaleTimeString(undefined, {
+  return d.toLocaleTimeString(dateLocale(), {
     hour: "numeric",
     minute: "2-digit",
     hour12: uiStore.hour12,

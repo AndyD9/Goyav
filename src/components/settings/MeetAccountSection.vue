@@ -7,6 +7,7 @@
 /// reference — inputs here bind straight into it (deliberate nested
 /// prop mutation; all cross-type mutation stays in the modal).
 import { computed } from "vue";
+import { t } from "@/i18n";
 import type { AccountConfig } from "@/lib/types";
 
 const props = withDefaults(defineProps<{
@@ -26,18 +27,18 @@ const provider = computed(() => {
   switch (props.accountType) {
     case "matrix":
       return {
-        urlLabel: "Homeserver URL",
+        urlLabel: t("Homeserver URL"),
         placeholder: "https://matrix.example.org",
-        urlHint: "Base URL of your Matrix homeserver. SSO will open in your browser.",
-        signIn: "Sign in with Matrix",
+        urlHint: t("Base URL of your Matrix homeserver. SSO will open in your browser."),
+        signIn: t("Sign in with Matrix"),
         name: "Matrix",
       };
     case "visio":
       return {
-        urlLabel: "Visio instance URL",
+        urlLabel: t("Visio instance URL"),
         placeholder: "https://visio.example.org",
-        urlHint: "Site root of your La Suite Visio instance. Sign-in opens in a restricted Chithi window.",
-        signIn: "Sign in with Visio",
+        urlHint: t("Site root of your La Suite Visio instance. Sign-in opens in a restricted Chithi window."),
+        signIn: t("Sign in with Visio"),
         name: "Visio",
       };
     case "zoom":
@@ -45,15 +46,15 @@ const provider = computed(() => {
         urlLabel: "",
         placeholder: "",
         urlHint: "",
-        signIn: "Sign in with Zoom",
+        signIn: t("Sign in with Zoom"),
         name: "Zoom",
       };
     case "talk":
       return {
-        urlLabel: "Nextcloud URL",
+        urlLabel: t("Nextcloud URL"),
         placeholder: "https://cloud.example.org",
-        urlHint: "Base URL of your Nextcloud server. Login Flow v2 will open in your browser.",
-        signIn: "Sign in with Nextcloud",
+        urlHint: t("Base URL of your Nextcloud server. Login Flow v2 will open in your browser."),
+        signIn: t("Sign in with Nextcloud"),
         name: "Nextcloud",
       };
   }
@@ -99,19 +100,19 @@ const signInDisabled = computed(
       </svg>
       {{
         signingIn
-          ? 'Waiting for browser…'
+          ? t('Waiting for browser…')
           : editing
-            ? `Sign in again with ${provider.name}`
+            ? t('Sign in again with {name}', { name: provider.name })
             : provider.signIn
       }}
     </button>
     <span class="field-hint">
-      Opens your browser to authenticate. {{
+      {{ t('Opens your browser to authenticate.') }} {{
         accountType === 'zoom'
-          ? 'Chithi receives an OAuth token tied to your Zoom account.'
+          ? t('Chithi receives an OAuth token tied to your Zoom account.')
           : accountType === 'visio'
-            ? 'Chithi stores a short-lived room-creation token in your OS keyring. Sign in again after it expires. Visio rooms remain on the server when calendar events are deleted.'
-          : 'Your real password never reaches Chithi — we keep a long-lived app token tied to this device.'
+            ? t('Chithi stores a short-lived room-creation token in your OS keyring. Sign in again after it expires. Visio rooms remain on the server when calendar events are deleted.')
+          : t('Your real password never reaches Chithi — we keep a long-lived app token tied to this device.')
       }}
     </span>
     <span v-if="authStatus" class="field-hint" data-testid="meet-auth-status">
@@ -120,12 +121,12 @@ const signInDisabled = computed(
   </div>
   <div v-else-if="authenticationSupported === false" class="form-group">
     <span class="field-hint">
-      La Suite Visio sign-in is available in the desktop app. You can still rename or delete this account here.
+      {{ t('La Suite Visio sign-in is available in the desktop app. You can still rename or delete this account here.') }}
     </span>
   </div>
   <div v-else class="form-group">
     <span class="field-hint">
-      To re-authenticate, delete this account and add it again. The session token is stored once and stays valid until you sign out from the {{ accountType === 'matrix' ? 'Matrix' : 'Nextcloud' }} server.
+      {{ t('To re-authenticate, delete this account and add it again. The session token is stored once and stays valid until you sign out from the {server} server.', { server: accountType === 'matrix' ? 'Matrix' : 'Nextcloud' }) }}
     </span>
   </div>
 </template>

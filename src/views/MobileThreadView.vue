@@ -10,6 +10,7 @@ import MessageReader from "@/components/mail/MessageReader.vue";
 import MobileIconButton from "@/components/mobile/MobileIconButton.vue";
 import { acctColor } from "@/lib/account-colors";
 import * as api from "@/lib/tauri";
+import { t, dateLocale } from "@/i18n";
 
 const route = useRoute();
 const router = useRouter();
@@ -63,16 +64,16 @@ const starred = computed(() =>
   (activeMessage.value?.flags ?? []).includes("flagged"),
 );
 
-const subject = computed(() => activeMessage.value?.subject ?? "(no subject)");
+const subject = computed(() => activeMessage.value?.subject ?? t("(no subject)"));
 
 const headerMeta = computed(() => {
   if (!activeMessage.value) return "";
   const d = new Date(activeMessage.value.date);
   const isToday = d.toDateString() === new Date().toDateString();
-  const whenLabel = isToday
-    ? "today"
-    : d.toLocaleDateString([], { month: "short", day: "numeric" });
-  return `1 message · ${whenLabel}`;
+  if (isToday) return t("1 message · today");
+  return t("1 message · {date}", {
+    date: d.toLocaleDateString(dateLocale(), { month: "short", day: "numeric" }),
+  });
 });
 
 function toggleStar() {
@@ -127,26 +128,26 @@ function doForward() {
   <div class="mobile-thread-view">
     <!-- Top app bar: back + archive + trash + overflow -->
     <header class="thread-bar">
-      <MobileIconButton aria-label="Back" @click="onClose">
+      <MobileIconButton :aria-label="t('Back')" @click="onClose">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="15 18 9 12 15 6" />
         </svg>
       </MobileIconButton>
       <div class="bar-spacer" />
-      <MobileIconButton aria-label="Archive" @click="archiveThread">
+      <MobileIconButton :aria-label="t('Archive')" @click="archiveThread">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="21 8 21 21 3 21 3 8" />
           <rect x="1" y="3" width="22" height="5" />
           <line x1="10" y1="12" x2="14" y2="12" />
         </svg>
       </MobileIconButton>
-      <MobileIconButton aria-label="Delete" @click="deleteThread">
+      <MobileIconButton :aria-label="t('Delete')" @click="deleteThread">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="3 6 5 6 21 6" />
           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
         </svg>
       </MobileIconButton>
-      <MobileIconButton aria-label="More">
+      <MobileIconButton :aria-label="t('More')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="5" r="1.5" />
           <circle cx="12" cy="12" r="1.5" />
@@ -162,7 +163,7 @@ function doForward() {
         <button
           class="subject-star"
           :class="{ on: starred }"
-          :aria-label="starred ? 'Unstar' : 'Star'"
+          :aria-label="starred ? t('Unstar') : t('Star')"
           @click="toggleStar"
         >
           {{ starred ? "\u2605" : "\u2606" }}
@@ -192,7 +193,7 @@ function doForward() {
           <polyline points="9 17 4 12 9 7" />
           <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
         </svg>
-        <span>Reply</span>
+        <span>{{ t("Reply") }}</span>
       </button>
       <button class="dock-btn" @click="doReplyAll">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
@@ -200,14 +201,14 @@ function doForward() {
           <polyline points="12 17 7 12 12 7" />
           <path d="M22 18v-2a4 4 0 0 0-4-4H7" />
         </svg>
-        <span>Reply all</span>
+        <span>{{ t("Reply all") }}</span>
       </button>
       <button class="dock-btn" @click="doForward">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="15 17 20 12 15 7" />
           <path d="M4 18v-2a4 4 0 0 1 4-4h12" />
         </svg>
-        <span>Forward</span>
+        <span>{{ t("Forward") }}</span>
       </button>
     </div>
   </div>

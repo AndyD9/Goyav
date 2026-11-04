@@ -9,6 +9,7 @@
 /// Switching back to Basic also emits `reauth` so the modal clears
 /// its signed-in status, matching the pre-split inline handler.
 import type { AccountConfig } from "@/lib/types";
+import { t } from "@/i18n";
 
 defineProps<{
   form: AccountConfig;
@@ -22,14 +23,14 @@ const emit = defineEmits<{ oidcSignIn: []; reauth: [] }>();
 
 <template>
   <div class="form-group">
-    <label>Authentication</label>
+    <label>{{ t("Authentication") }}</label>
     <div class="type-selector">
       <button
         class="type-btn"
         :class="{ active: form.jmap_auth_method === 'basic' }"
         :disabled="editing"
         @click="form.jmap_auth_method = 'basic'; emit('reauth')"
-      >Password</button>
+      >{{ t("Password") }}</button>
       <button
         class="type-btn"
         :class="{ active: form.jmap_auth_method === 'oidc' }"
@@ -39,34 +40,34 @@ const emit = defineEmits<{ oidcSignIn: []; reauth: [] }>();
     </div>
   </div>
   <div v-if="form.jmap_auth_method === 'basic'" class="form-group">
-    <label>Username</label>
+    <label>{{ t("Username") }}</label>
     <input
       v-model="form.username"
       type="text"
-      placeholder="Login name on the JMAP server"
+      :placeholder="t('Login name on the JMAP server')"
       data-testid="jmap-username"
     />
-    <span class="field-hint">Leave blank to use the email address.</span>
+    <span class="field-hint">{{ t("Leave blank to use the email address.") }}</span>
   </div>
   <div class="form-group">
     <label>JMAP URL</label>
     <input v-model="form.jmap_url" type="url" placeholder="https://mail.example.com" />
-    <span class="field-hint">Leave blank for auto-discovery via .well-known/jmap</span>
+    <span class="field-hint">{{ t("Leave blank for auto-discovery via .well-known/jmap") }}</span>
   </div>
   <template v-if="form.jmap_auth_method === 'oidc'">
     <div class="form-group">
-      <label>OIDC Sign In</label>
+      <label>{{ t("OIDC Sign In") }}</label>
       <div v-if="oauthStatus" class="oauth-row">
         <div class="oauth-status">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00a63e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
           {{ oauthStatus }}
         </div>
-        <button class="btn-reauth" @click="emit('reauth')">Sign in again</button>
+        <button class="btn-reauth" @click="emit('reauth')">{{ t("Sign in again") }}</button>
       </div>
       <div v-else-if="oidcUserCode" class="oidc-device-code">
-        <p class="device-code-label">Enter this code in your browser:</p>
+        <p class="device-code-label">{{ t("Enter this code in your browser:") }}</p>
         <p class="device-code-value">{{ oidcUserCode }}</p>
-        <p class="device-code-hint">Waiting for authorization...</p>
+        <p class="device-code-hint">{{ t("Waiting for authorization...") }}</p>
       </div>
       <button
         v-else
@@ -77,9 +78,9 @@ const emit = defineEmits<{ oidcSignIn: []; reauth: [] }>();
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
         </svg>
-        {{ oauthInProgress ? "Starting..." : "Sign in with OIDC" }}
+        {{ oauthInProgress ? t("Starting...") : t("Sign in with OIDC") }}
       </button>
-      <span class="field-hint">Opens your browser to authenticate with your identity provider.</span>
+      <span class="field-hint">{{ t("Opens your browser to authenticate with your identity provider.") }}</span>
     </div>
   </template>
 </template>

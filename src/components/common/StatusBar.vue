@@ -9,6 +9,7 @@ import { useAccountsStore } from "@/stores/accounts";
 import { useFoldersStore } from "@/stores/folders";
 import { useCalendarStore } from "@/stores/calendar";
 import * as api from "@/lib/tauri";
+import { t, tn } from "@/i18n";
 
 const route = useRoute();
 const activityStore = useActivityStore();
@@ -60,9 +61,9 @@ onUnmounted(() => {
 const lastSyncLabel = computed(() => {
   if (!lastSyncTime.value) return "";
   const diff = Math.floor((Date.now() - lastSyncTime.value.getTime()) / 1000);
-  if (diff < 60) return "Last sync just now";
-  if (diff < 3600) return `Last sync ${Math.floor(diff / 60)} minutes ago`;
-  return `Last sync ${Math.floor(diff / 3600)} hours ago`;
+  if (diff < 60) return t("Last sync just now");
+  if (diff < 3600) return tn(Math.floor(diff / 60), "Last sync {count} minute ago", "Last sync {count} minutes ago");
+  return tn(Math.floor(diff / 3600), "Last sync {count} hour ago", "Last sync {count} hours ago");
 });
 
 async function syncAll() {
@@ -99,13 +100,13 @@ async function syncAll() {
 <template>
   <div class="status-bar">
     <div class="status-left">
-      <button class="sync-btn" title="Sync" @click="syncAll">
+      <button class="sync-btn" :title="t('Sync')" @click="syncAll">
         <span class="sync-icon" :class="{ spinning: activityStore.hasActiveOperations }">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" />
           </svg>
         </span>
-        Sync
+        {{ t("Sync") }}
       </button>
       <span v-if="activityStore.hasActiveOperations" class="op-spinner"></span>
       <span
@@ -120,16 +121,16 @@ async function syncAll() {
         :title="uiStore.hoverUrl"
       >{{ uiStore.hoverUrl }}</span>
       <span v-else-if="syncError" class="sync-error-msg" data-testid="sync-error">{{ syncError }}</span>
-      <button v-else-if="opsStore.hasFailures" class="sync-error-msg" data-testid="op-failure" @click="opsStore.clearFailures()" title="Click to dismiss">{{ opsStore.recentFailures[0]?.error }}</button>
-      <span v-else-if="connectionStatus === 'disconnected'" class="disconnect-msg">Offline, reconnecting...</span>
-      <span v-else class="account-info">{{ accountsStore.accounts.length }} account{{ accountsStore.accounts.length !== 1 ? 's' : '' }} connected</span>
+      <button v-else-if="opsStore.hasFailures" class="sync-error-msg" data-testid="op-failure" @click="opsStore.clearFailures()" :title="t('Click to dismiss')">{{ opsStore.recentFailures[0]?.error }}</button>
+      <span v-else-if="connectionStatus === 'disconnected'" class="disconnect-msg">{{ t("Offline, reconnecting...") }}</span>
+      <span v-else class="account-info">{{ tn(accountsStore.accounts.length, '{count} account connected', '{count} accounts connected') }}</span>
     </div>
     <div class="status-right">
       <span v-if="lastSyncLabel" class="last-sync">{{ lastSyncLabel }}</span>
       <button
         class="ops-toggle-btn"
         :class="{ active: uiStore.operationsPanelOpen }"
-        title="Operations"
+        :title="t('Operations')"
         data-testid="ops-toggle-btn"
         @click="uiStore.toggleOperationsPanel()"
       >

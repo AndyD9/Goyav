@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { dateLocale, t, tn } from "@/i18n";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import ModalShell from "@/components/common/ModalShell.vue";
 import Select from "@/components/common/Select.vue";
@@ -81,7 +82,7 @@ function formatAllDayDate(value: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
   if (!match) return value;
   const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  return date.toLocaleDateString(undefined, {
+  return date.toLocaleDateString(dateLocale(), {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -195,17 +196,17 @@ watch(
 <template>
   <ModalShell
     :open="true"
-    title="Import calendar events"
+    :title="t('Import calendar events')"
     modal-class="calendar-import-modal"
     role="dialog"
     aria-modal="true"
-    aria-label="Import calendar events"
+    :aria-label="t('Import calendar events')"
     data-testid="calendar-import-dialog"
     @close="close"
   >
-    <p class="filename">{{ attachment.filename || "Calendar attachment" }}</p>
+    <p class="filename">{{ attachment.filename || t("Calendar attachment") }}</p>
 
-    <div v-if="loading" class="state">Reading calendar attachment…</div>
+    <div v-if="loading" class="state">{{ t("Reading calendar attachment…") }}</div>
     <div v-else-if="error && previews.length === 0" class="error">
       {{ error }}
     </div>
@@ -229,45 +230,42 @@ watch(
             <span>{{ formatRange(event) }}</span>
             <span v-if="event.location">{{ event.location }}</span>
             <span v-if="event.component_count > 1">
-              Recurring series with {{ event.component_count - 1 }} exception{{
-                event.component_count === 2 ? "" : "s"
-              }}
+              {{ tn(event.component_count - 1, "Recurring series with {count} exception", "Recurring series with {count} exceptions") }}
             </span>
             <span v-if="!event.importable">
-              {{ event.import_error || `${event.method} messages cannot be imported.` }}
+              {{ event.import_error || t("{method} messages cannot be imported.", { method: event.method }) }}
             </span>
           </span>
         </label>
       </div>
 
       <div v-if="previews.some((event) => event.attendee_count > 0)" class="notice">
-        Imported events are personal copies. Importing does not RSVP or notify
-        the organizer and attendees.
+        {{ t("Imported events are personal copies. Importing does not RSVP or notify the organizer and attendees.") }}
       </div>
 
       <label class="calendar-field">
-        <span>Destination calendar</span>
+        <span>{{ t("Destination calendar") }}</span>
         <Select
           v-model="calendarId"
           :options="calendarOptions"
-          placeholder="Choose a calendar"
-          aria-label="Destination calendar"
+          :placeholder="t('Choose a calendar')"
+          :aria-label="t('Destination calendar')"
           testid="calendar-import-calendar"
         />
       </label>
 
       <div v-if="calendarOptions.length === 0" class="error">
-        No subscribed calendar is available.
+        {{ t("No subscribed calendar is available.") }}
       </div>
       <div v-else-if="error" class="error">{{ error }}</div>
     </template>
 
     <template #footer>
       <button class="btn secondary" :disabled="importing" @click="emit('download')">
-        Download instead
+        {{ t("Download instead") }}
       </button>
       <button class="btn secondary" :disabled="importing" @click="close">
-        Cancel
+        {{ t("Cancel") }}
       </button>
       <button
         class="btn primary"
@@ -277,8 +275,8 @@ watch(
       >
         {{
           importing
-            ? "Importing…"
-            : `Import ${selectedCount} event${selectedCount === 1 ? "" : "s"}`
+            ? t("Importing…")
+            : tn(selectedCount, "Import {count} event", "Import {count} events")
         }}
       </button>
     </template>

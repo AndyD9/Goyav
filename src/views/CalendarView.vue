@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { dateLocale, t } from "@/i18n";
 import { onMounted, onActivated, nextTick, ref, computed, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { useCalendarStore } from "@/stores/calendar";
@@ -36,7 +37,7 @@ const platformStore = usePlatformStore();
 const uiStore = useUiStore();
 const { isMobile } = storeToRefs(platformStore);
 const displayIssues = computed(() => [
-  ...Object.values(calendarStore.syncErrors).map((error) => `Calendar sync could not display every remote resource: ${error}`),
+  ...Object.values(calendarStore.syncErrors).map((error) => t("Calendar sync could not display every remote resource: {error}", { error })),
   ...calendarStore.displayErrors,
 ]);
 const showEventForm = ref(false);
@@ -61,7 +62,7 @@ const WEEK_HOURS = Array.from({ length: 24 }, (_, h) => h);
 const mobileHeader = computed(() => {
   const d = parseCalendarDay(calendarStore.displayDate);
   if (calendarStore.displayViewMode === "day") {
-    return d.toLocaleDateString(undefined, {
+    return d.toLocaleDateString(dateLocale(), {
       weekday: "long",
       month: "long",
       day: "numeric",
@@ -73,11 +74,11 @@ const mobileHeader = computed(() => {
     end.setDate(end.getDate() + 6);
     const sameMonth = start.getMonth() === end.getMonth();
     if (sameMonth) {
-      return `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${end.getDate()}`;
+      return `${start.toLocaleDateString(dateLocale(), { month: "short", day: "numeric" })} – ${end.getDate()}`;
     }
-    return `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${end.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+    return `${start.toLocaleDateString(dateLocale(), { month: "short", day: "numeric" })} – ${end.toLocaleDateString(dateLocale(), { month: "short", day: "numeric" })}`;
   }
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return d.toLocaleDateString(dateLocale(), { month: "long", year: "numeric" });
 });
 
 function weekStart(d: Date): Date {
@@ -188,7 +189,7 @@ function todayEvents(): CalendarEvent[] {
 }
 
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], {
+  return new Date(iso).toLocaleTimeString(dateLocale(), {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -245,15 +246,19 @@ function onMobileEventClick(event: CalendarEvent) {
   calendarStore.selectEvent(event);
 }
 
+function modeLabel(mode: CalendarViewMode): string {
+  return t(mode.charAt(0).toUpperCase() + mode.slice(1));
+}
+
 function formatCurrentDate(): string {
   const d = parseCalendarDay(calendarStore.displayDate);
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return d.toLocaleDateString(dateLocale(), { month: "long", year: "numeric" });
 }
 
 function loadingLabel(): string {
-  if (!calendarStore.navigationPending) return "Refreshing calendar…";
+  if (!calendarStore.navigationPending) return t("Refreshing calendar…");
   const date = parseCalendarDay(calendarStore.currentDate);
-  return `Loading ${date.toLocaleDateString(undefined, { month: "long", year: "numeric" })}…`;
+  return t("Loading {month}…", { month: date.toLocaleDateString(dateLocale(), { month: "long", year: "numeric" }) });
 }
 
 function onTimeSlotClick(dateTime: string) {
@@ -297,17 +302,17 @@ async function promptAttendeeNotification(
     const fresh = await refreshTarget();
     if (selectionVersion !== version || tryParseAttendees(fresh.attendees_json).length === 0 ||
       !isOrganizer(fresh.account_id, fresh.organizer_email)) return;
-    const send = await confirm("This event has attendees. Send an update notification?");
+    const send = await confirm(t("This event has attendees. Send an update notification?"));
     if (!send || selectionVersion !== version) return;
     const target = await refreshTarget();
     if (selectionVersion !== version || tryParseAttendees(target.attendees_json).length === 0 ||
       !isOrganizer(target.account_id, target.organizer_email)) return;
     await api.notifyCalendarEvent(eventId);
-    showToast("Update sent to attendees", "success");
+    showToast(t("Update sent to attendees"), "success");
   } catch (e) {
     if (selectionVersion !== version) return;
     const msg = e instanceof Error ? e.message : String(e);
-    showToast(`Failed to send updates. Please try again. ${msg}`, "error", 5000);
+    showToast(t("Failed to send updates. Please try again. {message}", { message: msg }), "error", 5000);
   }
 }
 
@@ -322,7 +327,7 @@ async function onEventReschedule(payload: {
   const scopedSupport = calendarScopedEditSupport(event);
   if (!event || !scopedSupport.supported) return;
   const version = selectionVersion;
-  const toastId = showToast("Moving event...", "info", 0);
+  const toastId = showToast(t("Moving event..."), "info", 0);
   try {
     if (scopedSupport.scopes.includes("standalone")) {
       await calendarStore.updateEvent(payload.eventId, {
@@ -345,7 +350,7 @@ async function onEventReschedule(payload: {
       } else {
         if (await calendarStore.resumePendingCalendarAction(event)) {
           dismissToast(toastId);
-          showToast("Previous recurring action completed", "success");
+          showToast(t("Previous recurring action completed"), "success");
           return;
         }
         const plan = await calendarStore.planEntireSeriesAction(event, {
@@ -362,7 +367,7 @@ async function onEventReschedule(payload: {
       }
     }
     dismissToast(toastId);
-    showToast("Event rescheduled", "success");
+    showToast(t("Event rescheduled"), "success");
 
     if (scopedSupport.scopes.includes("standalone")) {
       await promptAttendeeNotification(payload.eventId, version);
@@ -370,7 +375,7 @@ async function onEventReschedule(payload: {
   } catch (e) {
     dismissToast(toastId);
     const msg = e instanceof Error ? e.message : String(e);
-    showToast(`Failed to reschedule: ${msg}`, "error", 5000);
+    showToast(t("Failed to reschedule: {message}", { message: msg }), "error", 5000);
   }
 }
 
@@ -386,7 +391,7 @@ async function onCalendarDrop(payload: {
   if (!event || !scopedSupport.supported) return;
   const version = selectionVersion;
 
-  const toastId = showToast("Moving to calendar...", "info", 0);
+  const toastId = showToast(t("Moving to calendar..."), "info", 0);
   try {
     let newId: string;
     if (scopedSupport.scopes.includes("standalone")) {
@@ -399,7 +404,7 @@ async function onCalendarDrop(payload: {
       const resumedId = await calendarStore.resumePendingCalendarAction(event);
       if (resumedId) {
         dismissToast(toastId);
-        showToast("Previous recurring action completed", "success");
+        showToast(t("Previous recurring action completed"), "success");
         return;
       }
       const plan = await calendarStore.planEntireSeriesAction(
@@ -416,7 +421,7 @@ async function onCalendarDrop(payload: {
       newId = await calendarStore.executeCalendarPlan(plan, confirmations);
     }
     dismissToast(toastId);
-    showToast("Event moved to calendar", "success");
+    showToast(t("Event moved to calendar"), "success");
     // Resolve notification eligibility from the persisted destination.
     if (scopedSupport.scopes.includes("standalone")) {
       await promptAttendeeNotification(newId, version);
@@ -424,7 +429,7 @@ async function onCalendarDrop(payload: {
   } catch (e) {
     dismissToast(toastId);
     const msg = e instanceof Error ? e.message : String(e);
-    showToast(`Failed to move event: ${msg}`, "error", 5000);
+    showToast(t("Failed to move event: {message}", { message: msg }), "error", 5000);
   }
 }
 
@@ -466,7 +471,7 @@ onMounted(() => {
   <div v-if="isMobile" class="calendar-view mobile">
     <MobileAppBar :title="mobileHeader">
       <template #leading>
-        <MobileIconButton aria-label="Today" @click="calendarStore.goToday()">
+        <MobileIconButton :aria-label="t('Today')" @click="calendarStore.goToday()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="9" />
             <line x1="12" y1="8" x2="12" y2="12" />
@@ -475,17 +480,17 @@ onMounted(() => {
         </MobileIconButton>
       </template>
       <template #trailing>
-        <MobileIconButton aria-label="Previous" @click="calendarStore.goPrev()">
+        <MobileIconButton :aria-label="t('Previous')" @click="calendarStore.goPrev()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </MobileIconButton>
-        <MobileIconButton aria-label="Next" @click="calendarStore.goNext()">
+        <MobileIconButton :aria-label="t('Next')" @click="calendarStore.goNext()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="9 18 15 12 9 6" />
           </svg>
         </MobileIconButton>
-        <MobileIconButton aria-label="New event" @click="showEventForm = true">
+        <MobileIconButton :aria-label="t('New event')" @click="showEventForm = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
@@ -505,7 +510,7 @@ onMounted(() => {
         :aria-selected="calendarStore.displayViewMode === mode"
         @click="setMobileViewMode(mode)"
       >
-        {{ mode.charAt(0).toUpperCase() + mode.slice(1) }}
+        {{ modeLabel(mode) }}
       </button>
     </div>
 
@@ -514,7 +519,7 @@ onMounted(() => {
     </div>
     <div v-if="calendarStore.loadError" class="calendar-load-error" role="alert">
       {{ calendarStore.loadError }}
-      <button @click="calendarStore.retryNavigation()">Retry</button>
+      <button @click="calendarStore.retryNavigation()">{{ t("Retry") }}</button>
     </div>
     <ArchivedGraphNotice
       :calendars="calendarStore.unacknowledgedArchivedGraphCalendars"
@@ -526,17 +531,15 @@ onMounted(() => {
     />
     <CalendarDisplayNotice :errors="displayIssues" />
     <div v-if="calendarStore.unverifiedSeriesIds.length" class="calendar-incomplete" role="alert">
-      {{ calendarStore.unverifiedSeriesIds.length }} recurring series need a provider refresh.
-      Cached dates may be outdated or missing. Sync calendars to verify them.
+      {{ t("{count} recurring series need a provider refresh. Cached dates may be outdated or missing. Sync calendars to verify them.", { count: calendarStore.unverifiedSeriesIds.length }) }}
     </div>
     <div v-if="calendarStore.unresolvedOccurrences.length" class="calendar-incomplete" role="alert">
-      {{ calendarStore.unresolvedOccurrences.length }} recurring event(s) could not be placed.
-      Some recurring dates may be incomplete until verified.
+      {{ t("{count} recurring event(s) could not be placed. Some recurring dates may be incomplete until verified.", { count: calendarStore.unresolvedOccurrences.length }) }}
       <button :disabled="calendarStore.repairingOccurrences || calendarStore.repairRetryAt !== null" @click="calendarStore.repairIncompleteOccurrences()">
-        {{ calendarStore.repairingOccurrences ? 'Verifying…' : 'Verify with provider' }}
+        {{ calendarStore.repairingOccurrences ? t('Verifying…') : t('Verify with provider') }}
       </button>
       <span v-if="calendarStore.repairRetryAt !== null">
-        Graph is throttling verification. Try again after {{ new Date(calendarStore.repairRetryAt).toLocaleString() }}.
+        {{ t("Graph is throttling verification. Try again after {time}.", { time: new Date(calendarStore.repairRetryAt).toLocaleString(dateLocale()) }) }}
       </span>
     </div>
 
@@ -609,7 +612,7 @@ onMounted(() => {
             }"
             @click.stop="onMobileEventClick(pe.event)"
           >
-            <span class="day-event-title">{{ pe.event.title || '(No title)' }}</span>
+            <span class="day-event-title">{{ pe.event.title || t('(No title)') }}</span>
             <span class="day-event-time">
               {{ formatTime(pe.event.start_time) }} – {{ formatTime(pe.event.end_time) }}
             </span>
@@ -628,7 +631,7 @@ onMounted(() => {
           :class="{ today: isToday(d) }"
           @click="jumpToDay(d)"
         >
-          <span class="week-dow">{{ d.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 2) }}</span>
+          <span class="week-dow">{{ d.toLocaleDateString(dateLocale(), { weekday: "short" }).slice(0, 2) }}</span>
           <span class="week-date-pill">{{ d.getDate() }}</span>
         </button>
       </div>
@@ -657,7 +660,7 @@ onMounted(() => {
             }"
             @click="onMobileEventClick(pe.event)"
           >
-            <span class="week-event-title">{{ pe.event.title || '(No title)' }}</span>
+            <span class="week-event-title">{{ pe.event.title || t('(No title)') }}</span>
           </button>
         </div>
       </div>
@@ -666,7 +669,7 @@ onMounted(() => {
     <!-- MONTH VIEW -->
     <div v-else class="month-view" :inert="calendarStore.navigationPending">
       <div class="month-dow">
-        <span v-for="d in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']" :key="d">{{ d }}</span>
+        <span v-for="d in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']" :key="d">{{ t(d) }}</span>
       </div>
       <div class="month-grid">
         <button
@@ -691,8 +694,8 @@ onMounted(() => {
         </button>
       </div>
       <div class="month-today">
-        <div class="month-today-label">Today</div>
-        <div v-if="todayEvents().length === 0" class="month-today-empty">No events</div>
+        <div class="month-today-label">{{ t("Today") }}</div>
+        <div v-if="todayEvents().length === 0" class="month-today-empty">{{ t("No events") }}</div>
         <button
           v-for="ev in todayEvents()"
           :key="ev.id"
@@ -700,7 +703,7 @@ onMounted(() => {
           @click="onMobileEventClick(ev)"
         >
           <span class="month-today-swatch" :style="{ background: calendarColor(ev) }" />
-          <span class="month-today-time">{{ ev.all_day ? "All day" : formatTime(ev.start_time) }}</span>
+          <span class="month-today-time">{{ ev.all_day ? t("All day") : formatTime(ev.start_time) }}</span>
           <span class="month-today-title">{{ ev.title }}</span>
         </button>
       </div>
@@ -719,10 +722,10 @@ onMounted(() => {
         <div class="toolbar-left">
           <button class="btn-new-event" data-testid="cal-btn-new-event" @click="showEventForm = true">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-            Event
+            {{ t("Event") }}
           </button>
           <div class="toolbar-divider"></div>
-          <button class="btn-today" data-testid="cal-btn-today" @click="calendarStore.goToday()">Today</button>
+          <button class="btn-today" data-testid="cal-btn-today" @click="calendarStore.goToday()">{{ t("Today") }}</button>
           <button class="btn-nav" data-testid="cal-btn-prev" @click="calendarStore.goPrev()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
           </button>
@@ -740,7 +743,7 @@ onMounted(() => {
               :class="{ active: calendarStore.displayViewMode === mode }"
               :data-testid="`cal-view-${mode}`"
               @click="calendarStore.setViewMode(mode)"
-            >{{ mode.charAt(0).toUpperCase() + mode.slice(1) }}</button>
+            >{{ modeLabel(mode) }}</button>
           </div>
         </div>
       </div>
@@ -751,7 +754,7 @@ onMounted(() => {
       </div>
       <div v-if="calendarStore.loadError" class="calendar-load-error" role="alert">
         {{ calendarStore.loadError }}
-        <button @click="calendarStore.retryNavigation()">Retry</button>
+        <button @click="calendarStore.retryNavigation()">{{ t("Retry") }}</button>
       </div>
       <ArchivedGraphNotice
         :calendars="calendarStore.unacknowledgedArchivedGraphCalendars"
@@ -770,10 +773,10 @@ onMounted(() => {
         {{ calendarStore.unresolvedOccurrences.length }} recurring event(s) could not be placed.
         Some recurring dates may be incomplete until verified.
         <button :disabled="calendarStore.repairingOccurrences || calendarStore.repairRetryAt !== null" @click="calendarStore.repairIncompleteOccurrences()">
-          {{ calendarStore.repairingOccurrences ? 'Verifying…' : 'Verify with provider' }}
+          {{ calendarStore.repairingOccurrences ? t('Verifying…') : t('Verify with provider') }}
         </button>
         <span v-if="calendarStore.repairRetryAt !== null">
-          Graph is throttling verification. Try again after {{ new Date(calendarStore.repairRetryAt).toLocaleString() }}.
+          {{ t("Graph is throttling verification. Try again after {time}.", { time: new Date(calendarStore.repairRetryAt).toLocaleString(dateLocale()) }) }}
         </span>
       </div>
       <div class="calendar-content" :inert="calendarStore.navigationPending">

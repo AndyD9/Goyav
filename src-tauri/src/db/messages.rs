@@ -329,6 +329,191 @@ fn get_messages_inner(
     })
 }
 
+/// One row of a cross-folder / cross-account local search.
+#[derive(Debug, Clone, Serialize)]
+pub struct LocalSearchHit {
+    pub account_id: String,
+    pub folder_path: String,
+    #[serde(flatten)]
+    pub message: MessageSummary,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LocalSearchPage {
+    pub hits: Vec<LocalSearchHit>,
+    /// Total matches, which may exceed `hits.len()` when capped by `limit`.
+    pub total: i64,
+}
+
+/// Split the search text into words, each matched as a prefix. Every word
+/// must match (in any of the selected columns), so "invoice march" finds
+/// "March invoice" too.
+fn search_words(text: &str) -> Vec<String> {
+    text.split_whitespace()
+        .map(|w| w.trim_matches(|c: char| c == '"' || c == '*'))
+        .filter(|w| !w.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+fn search_columns(fields: &[String]) -> Vec<&'static str> {
+    let all = fields.is_empty();
+    let has = |name: &str| all || fields.iter().any(|f| f == name);
+    let mut cols = Vec::new();
+    if has("sender") {
+        cols.extend(["from_name", "from_email"]);
+    }
+    if has("recipients") {
+        cols.extend(["to_addresses", "cc_addresses"]);
+    }
+    if has("subject") {
+        cols.push("subject");
+    }
+    if has("body") {
+        cols.push("snippet");
+    }
+    cols
+}
+
+/// Builds the WHERE fragment for the word-based search. Returns `None` when
+/// there is nothing to search (no words or no columns selected).
+fn build_word_search_clause(words: &[String], cols: &[&str], use_fts: bool) -> Option<String> {
+    if words.is_empty() || cols.is_empty() {
+        return None;
+    }
+    if use_fts {
+        let col_filter = format!("{{{}}}", cols.join(" "));
+        let terms: Vec<String> = words
+            .iter()
+            .map(|w| {
+                let escaped = w.replace('"', "\"\"").replace('\'', "''");
+                format!("{} : \"{}\"*", col_filter, escaped)
+            })
+            .collect();
+        Some(format!(
+            "rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH '{}')",
+            terms.join(" AND ")
+        ))
+    } else {
+        let per_word: Vec<String> = words
+            .iter()
+            .map(|w| {
+                let like = w
+                    .replace('\\', "\\\\")
+                    .replace('\'', "''")
+                    .replace('%', "\\%")
+                    .replace('_', "\\_");
+                let ors: Vec<String> = cols
+                    .iter()
+                    .map(|c| format!("{} LIKE '%{}%' ESCAPE '\\'", c, like))
+                    .collect();
+                format!("({})", ors.join(" OR "))
+            })
+            .collect();
+        Some(per_word.join(" AND "))
+    }
+}
+
+/// Search the local message cache across every folder of the given accounts.
+/// Results are newest first and capped at `limit`.
+pub fn search_local_messages(
+    conn: &Connection,
+    account_ids: &[String],
+    filter: &QuickFilter,
+    limit: u32,
+) -> Result<LocalSearchPage> {
+    match search_local_messages_inner(conn, account_ids, filter, limit, true) {
+        Ok(page) => Ok(page),
+        Err(e) => {
+            log::warn!("FTS5 search failed, retrying with LIKE fallback: {}", e);
+            search_local_messages_inner(conn, account_ids, filter, limit, false)
+        }
+    }
+}
+
+fn search_local_messages_inner(
+    conn: &Connection,
+    account_ids: &[String],
+    filter: &QuickFilter,
+    limit: u32,
+    use_fts: bool,
+) -> Result<LocalSearchPage> {
+    let empty = LocalSearchPage {
+        hits: Vec::new(),
+        total: 0,
+    };
+    if account_ids.is_empty() {
+        return Ok(empty);
+    }
+    let words = search_words(&filter.text);
+    let cols = search_columns(&filter.text_fields);
+    let Some(text_clause) = build_word_search_clause(&words, &cols, use_fts) else {
+        return Ok(empty);
+    };
+
+    // Flag filters reuse the folder-list builder; the text and contact parts
+    // are handled here (contact matching is per account, so it is skipped).
+    let flag_filter = QuickFilter {
+        unread: filter.unread,
+        starred: filter.starred,
+        has_attachment: filter.has_attachment,
+        ..Default::default()
+    };
+    let flag_sql = build_filter_clauses(&flag_filter, "", use_fts);
+
+    let placeholders: Vec<String> = (1..=account_ids.len()).map(|i| format!("?{}", i)).collect();
+    let where_sql = format!(
+        "account_id IN ({}) AND {}{}",
+        placeholders.join(", "),
+        text_clause,
+        flag_sql
+    );
+
+    let total: i64 = conn.query_row(
+        &format!("SELECT COUNT(*) FROM messages WHERE {}", where_sql),
+        rusqlite::params_from_iter(account_ids.iter()),
+        |row| row.get(0),
+    )?;
+
+    let query = format!(
+        "SELECT id, subject, from_name, from_email, date, flags,
+                has_attachments, is_encrypted, is_signed, snippet,
+                message_id, in_reply_to, account_id, folder_path
+         FROM messages
+         WHERE {}
+         ORDER BY date DESC
+         LIMIT {}",
+        where_sql, limit
+    );
+    let mut stmt = conn.prepare(&query)?;
+    let hits = stmt
+        .query_map(rusqlite::params_from_iter(account_ids.iter()), |row| {
+            let flags_json: String = row.get(5)?;
+            let flags: Vec<String> = serde_json::from_str(&flags_json).unwrap_or_default();
+            Ok(LocalSearchHit {
+                account_id: row.get(12)?,
+                folder_path: row.get(13)?,
+                message: MessageSummary {
+                    id: row.get(0)?,
+                    subject: row.get(1)?,
+                    from_name: row.get(2)?,
+                    from_email: row.get(3)?,
+                    date: row.get(4)?,
+                    flags,
+                    has_attachments: row.get(6)?,
+                    is_encrypted: row.get(7)?,
+                    is_signed: row.get(8)?,
+                    snippet: row.get(9)?,
+                    message_id: row.get(10)?,
+                    in_reply_to: row.get(11)?,
+                },
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+
+    Ok(LocalSearchPage { hits, total })
+}
+
 pub fn get_message_metadata(
     conn: &Connection,
     account_id: &str,
@@ -1491,5 +1676,95 @@ mod tests {
             None,
         );
         assert_eq!(tid.as_deref(), Some("<bug@list>"));
+    }
+
+    fn insert_search_row(
+        conn: &Connection,
+        id: &str,
+        account_id: &str,
+        folder: &str,
+        subject: &str,
+        from_email: &str,
+        date: &str,
+    ) {
+        conn.execute(
+            "INSERT INTO messages (id, account_id, folder_path, subject, from_email, to_addresses,
+                                   cc_addresses, date, snippet, flags)
+             VALUES (?1, ?2, ?3, ?4, ?5, '', '', ?6, '', '[]')",
+            params![id, account_id, folder, subject, from_email, date],
+        )
+        .unwrap();
+    }
+
+    fn search_fixture(with_fts: bool) -> Connection {
+        let conn = setup_db();
+        if with_fts {
+            conn.execute_batch(
+                "CREATE VIRTUAL TABLE messages_fts USING fts5(
+                    subject, from_name, from_email, to_addresses, cc_addresses, snippet,
+                    content=messages, content_rowid=rowid
+                );
+                CREATE TRIGGER messages_fts_insert AFTER INSERT ON messages BEGIN
+                    INSERT INTO messages_fts(rowid, subject, from_name, from_email, to_addresses, cc_addresses, snippet)
+                    VALUES (new.rowid, new.subject, new.from_name, new.from_email, new.to_addresses, new.cc_addresses, new.snippet);
+                END;",
+            )
+            .unwrap();
+        }
+        insert_search_row(&conn, "m1", "acc1", "INBOX", "March invoice", "billing@shop.test", "2026-03-02T00:00:00Z");
+        insert_search_row(&conn, "m2", "acc1", "Archive", "Invoice for March", "billing@shop.test", "2026-03-05T00:00:00Z");
+        insert_search_row(&conn, "m3", "acc2", "INBOX", "Invoice April", "other@shop.test", "2026-04-01T00:00:00Z");
+        insert_search_row(&conn, "m4", "acc1", "INBOX", "Lunch", "friend@mail.test", "2026-04-02T00:00:00Z");
+        conn
+    }
+
+    fn text_filter(text: &str) -> QuickFilter {
+        QuickFilter {
+            text: text.to_string(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn local_search_spans_folders_and_matches_all_words() {
+        for with_fts in [true, false] {
+            let conn = search_fixture(with_fts);
+            let accounts = vec!["acc1".to_string()];
+            let page =
+                search_local_messages(&conn, &accounts, &text_filter("march invoice"), 50).unwrap();
+            let ids: Vec<_> = page.hits.iter().map(|h| h.message.id.as_str()).collect();
+            assert_eq!(ids, vec!["m2", "m1"], "fts={with_fts}");
+            assert_eq!(page.total, 2);
+            assert_eq!(page.hits[0].folder_path, "Archive");
+        }
+    }
+
+    #[test]
+    fn local_search_respects_account_scope_and_limit() {
+        let conn = search_fixture(true);
+        let both = vec!["acc1".to_string(), "acc2".to_string()];
+        let page = search_local_messages(&conn, &both, &text_filter("invoice"), 2).unwrap();
+        assert_eq!(page.total, 3);
+        assert_eq!(page.hits.len(), 2);
+        assert_eq!(page.hits[0].message.id, "m3");
+        assert_eq!(page.hits[0].account_id, "acc2");
+
+        let none = search_local_messages(&conn, &[], &text_filter("invoice"), 50).unwrap();
+        assert!(none.hits.is_empty());
+    }
+
+    #[test]
+    fn local_search_ignores_blank_text_and_quotes() {
+        let conn = search_fixture(true);
+        let accounts = vec!["acc1".to_string()];
+        assert_eq!(
+            search_local_messages(&conn, &accounts, &text_filter("   "), 50).unwrap().total,
+            0
+        );
+        let quoted =
+            search_local_messages(&conn, &accounts, &text_filter("\"lunch\" ' x"), 50).unwrap();
+        assert_eq!(quoted.total, 0);
+        let lunch = search_local_messages(&conn, &accounts, &text_filter("\"lunch\""), 50).unwrap();
+        assert_eq!(lunch.total, 1);
     }
 }

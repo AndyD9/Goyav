@@ -1,32 +1,33 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from "vue";
+import { t, tn } from "@/i18n";
 import { useFiltersStore } from "@/stores/filters";
 import { useAccountsStore } from "@/stores/accounts";
 import { useFoldersStore } from "@/stores/folders";
 import type { FilterRule, FilterAction } from "@/lib/types";
 import Select from "@/components/common/Select.vue";
 
-const MATCH_TYPE_OPTIONS = [
-  { value: "all", label: "All conditions (AND)" },
-  { value: "any", label: "Any condition (OR)" },
-];
+const MATCH_TYPE_OPTIONS = computed(() => [
+  { value: "all", label: t("All conditions (AND)") },
+  { value: "any", label: t("Any condition (OR)") },
+]);
 
-const ACTION_TYPE_OPTIONS = [
-  { value: "move", label: "Move to folder" },
-  { value: "copy", label: "Copy to folder" },
-  { value: "delete", label: "Delete" },
-  { value: "flag", label: "Add flag" },
-  { value: "unflag", label: "Remove flag" },
-  { value: "mark_read", label: "Mark as read" },
-  { value: "mark_unread", label: "Mark as unread" },
-  { value: "stop", label: "Stop processing" },
-];
+const ACTION_TYPE_OPTIONS = computed(() => [
+  { value: "move", label: t("Move to folder") },
+  { value: "copy", label: t("Copy to folder") },
+  { value: "delete", label: t("Delete") },
+  { value: "flag", label: t("Add flag") },
+  { value: "unflag", label: t("Remove flag") },
+  { value: "mark_read", label: t("Mark as read") },
+  { value: "mark_unread", label: t("Mark as unread") },
+  { value: "stop", label: t("Stop processing") },
+]);
 
-const FLAG_OPTIONS = [
-  { value: "flagged", label: "Flagged" },
-  { value: "seen", label: "Seen" },
-  { value: "answered", label: "Answered" },
-];
+const FLAG_OPTIONS = computed(() => [
+  { value: "flagged", label: t("Flagged") },
+  { value: "seen", label: t("Seen") },
+  { value: "answered", label: t("Answered") },
+]);
 
 const filtersStore = useFiltersStore();
 const accountsStore = useAccountsStore();
@@ -40,14 +41,14 @@ function actionSummary(rule: FilterRule): string {
   const first = rule.actions[0];
   if (!first) return "";
   switch (first.action) {
-    case "move": return `Move to ${first.target || "..."}`;
-    case "copy": return `Copy to ${first.target || "..."}`;
-    case "delete": return "Delete";
-    case "flag": return "Add flag";
-    case "unflag": return "Remove flag";
-    case "mark_read": return "Mark as read";
-    case "mark_unread": return "Mark as unread";
-    case "stop": return "Stop processing";
+    case "move": return t("Move to {target}", { target: first.target || "..." });
+    case "copy": return t("Copy to {target}", { target: first.target || "..." });
+    case "delete": return t("Delete");
+    case "flag": return t("Add flag");
+    case "unflag": return t("Remove flag");
+    case "mark_read": return t("Mark as read");
+    case "mark_unread": return t("Mark as unread");
+    case "stop": return t("Stop processing");
   }
 }
 
@@ -157,10 +158,10 @@ async function applyToFolder() {
   if (!accountId || !folder) return;
   try {
     const count = await filtersStore.applyToFolder(accountId, folder);
-    applyResult.value = `Filters applied: ${count} messages affected`;
+    applyResult.value = t("Filters applied: {count} messages affected", { count });
     setTimeout(() => (applyResult.value = null), 5000);
   } catch (e) {
-    applyResult.value = `Error: ${e}`;
+    applyResult.value = t("Error: {error}", { error: String(e) });
   }
 }
 
@@ -171,41 +172,37 @@ onMounted(() => {
   }
 });
 
-const fieldLabels: Record<string, string> = {
-  from: "From",
-  to: "To",
-  cc: "CC",
-  to_cc: "To/CC",
-  subject: "Subject",
-  size: "Size (bytes)",
-  has_attachment: "Has Attachment",
-};
+const FIELD_OPTIONS = computed(() => [
+  { value: "from", label: t("From") },
+  { value: "to", label: t("To") },
+  { value: "cc", label: t("CC") },
+  { value: "to_cc", label: t("To/CC") },
+  { value: "subject", label: t("Subject") },
+  { value: "size", label: t("Size (bytes)") },
+  { value: "has_attachment", label: t("Has Attachment") },
+]);
 
-const FIELD_OPTIONS = Object.entries(fieldLabels).map(([value, label]) => ({ value, label }));
-
-const opLabels: Record<string, string> = {
-  contains: "contains",
-  not_contains: "does not contain",
-  equals: "equals",
-  not_equals: "does not equal",
-  matches_regex: "matches regex",
-  greater_than: "greater than",
-  less_than: "less than",
-};
-
-const OP_OPTIONS = Object.entries(opLabels).map(([value, label]) => ({ value, label }));
+const OP_OPTIONS = computed(() => [
+  { value: "contains", label: t("contains") },
+  { value: "not_contains", label: t("does not contain") },
+  { value: "equals", label: t("equals") },
+  { value: "not_equals", label: t("does not equal") },
+  { value: "matches_regex", label: t("matches regex") },
+  { value: "greater_than", label: t("greater than") },
+  { value: "less_than", label: t("less than") },
+]);
 
 const accountOptions = computed(() =>
   accountsStore.accounts.map((a) => ({ value: a.id, label: a.display_name })),
 );
 
 const folderOptions = computed(() => [
-  { value: null as string | null, label: "Select folder…", disabled: true },
+  { value: null as string | null, label: t("Select folder…"), disabled: true },
   ...foldersStore.getFlatFolders().map((f) => ({ value: f.path, label: f.name })),
 ]);
 
 const actionFolderOptions = computed(() => [
-  { value: "", label: "Select folder…", disabled: true },
+  { value: "", label: t("Select folder…"), disabled: true },
   ...foldersStore.getFlatFolders().map((f) => ({ value: f.path, label: f.name })),
 ]);
 </script>
@@ -214,7 +211,7 @@ const actionFolderOptions = computed(() => [
   <div class="filters-view">
     <!-- Left Panel: filter list -->
     <div class="filters-left">
-      <div class="app-sidebar-header">Filters</div>
+      <div class="app-sidebar-header">{{ t('Filters') }}</div>
       <div class="left-header">
         <Select
           :model-value="accountsStore.activeAccountId ?? ''"
@@ -224,7 +221,7 @@ const actionFolderOptions = computed(() => [
         />
         <button class="btn-new-filter" :disabled="!accountsStore.activeAccountId" data-testid="filter-new-btn" @click="newFilter">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-          New Filter
+          {{ t('New Filter') }}
         </button>
       </div>
 
@@ -241,9 +238,9 @@ const actionFolderOptions = computed(() => [
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="6" r="1" /><circle cx="15" cy="6" r="1" /><circle cx="9" cy="12" r="1" /><circle cx="15" cy="12" r="1" /><circle cx="9" cy="18" r="1" /><circle cx="15" cy="18" r="1" /></svg>
           </div>
           <div class="filter-info">
-            <span class="filter-name">{{ rule.name || "(unnamed)" }}</span>
+            <span class="filter-name">{{ rule.name || t("(unnamed)") }}</span>
             <span class="filter-summary">
-              {{ rule.conditions.length }} condition{{ rule.conditions.length !== 1 ? "s" : "" }}
+              {{ tn(rule.conditions.length, "{count} condition", "{count} conditions") }}
               &rarr; {{ actionSummary(rule) }}
             </span>
           </div>
@@ -261,16 +258,16 @@ const actionFolderOptions = computed(() => [
               <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
             </svg>
           </span>
-          <span>No filters configured</span>
-          <span class="empty-hint">Create your first filter to automatically organize incoming mail</span>
+          <span>{{ t('No filters configured') }}</span>
+          <span class="empty-hint">{{ t('Create your first filter to automatically organize incoming mail') }}</span>
         </div>
       </div>
 
       <div class="apply-section">
-        <label class="apply-label">Apply filters to folder</label>
+        <label class="apply-label">{{ t('Apply filters to folder') }}</label>
         <Select v-model="applyingFolder" :options="folderOptions" class="apply-select" />
         <button class="btn-apply" :disabled="!applyingFolder" data-testid="filter-apply-btn" @click="applyToFolder">
-          Apply Filters to Folder
+          {{ t('Apply Filters to Folder') }}
         </button>
         <span v-if="applyResult" class="apply-result">{{ applyResult }}</span>
       </div>
@@ -279,47 +276,47 @@ const actionFolderOptions = computed(() => [
     <!-- Right Panel: editor -->
     <div class="filters-right">
       <div v-if="!editingRule" class="editor-empty">
-        <span>Select a filter to edit or create a new one</span>
+        <span>{{ t('Select a filter to edit or create a new one') }}</span>
       </div>
       <div v-else class="editor-form">
         <!-- Basics -->
         <div class="form-group">
-          <label class="field-label">Filter Name *</label>
-          <input v-model="editingRule.name" type="text" class="field-input" placeholder="Enter filter name" />
+          <label class="field-label">{{ t('Filter Name *') }}</label>
+          <input v-model="editingRule.name" type="text" class="field-input" :placeholder="t('Enter filter name')" />
         </div>
 
         <div class="basics-row">
           <div class="form-group priority-group">
-            <label class="field-label">Priority</label>
+            <label class="field-label">{{ t('Priority') }}</label>
             <input v-model.number="editingRule.priority" type="number" class="field-input" />
           </div>
           <div class="form-group match-group">
-            <label class="field-label">Match Type</label>
+            <label class="field-label">{{ t('Match Type') }}</label>
             <Select v-model="editingRule.match_type" :options="MATCH_TYPE_OPTIONS" class="field-select" />
           </div>
           <label class="checkbox-label">
             <input v-model="editingRule.enabled" type="checkbox" />
-            Enabled
+            {{ t('Enabled') }}
           </label>
         </div>
 
         <div class="options-row">
           <label class="checkbox-label">
             <input v-model="editingRule.stop_processing" type="checkbox" />
-            Stop processing after this filter matches
+            {{ t('Stop processing after this filter matches') }}
           </label>
           <span class="badge-local">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
-            Local
+            {{ t('Local') }}
           </span>
         </div>
 
         <!-- Conditions -->
         <div class="section-header">
-          <span class="section-title">Conditions</span>
+          <span class="section-title">{{ t('Conditions') }}</span>
           <button class="btn-add-link" @click="addCondition">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-            Add Condition
+            {{ t('Add Condition') }}
           </button>
         </div>
         <div
@@ -329,7 +326,7 @@ const actionFolderOptions = computed(() => [
         >
           <Select v-model="cond.field" :options="FIELD_OPTIONS" class="field-select cond-field" />
           <Select v-model="cond.op" :options="OP_OPTIONS" class="field-select cond-op" />
-          <input v-model="cond.value" type="text" class="field-input cond-value" placeholder="Value" />
+          <input v-model="cond.value" type="text" class="field-input cond-value" :placeholder="t('Value')" />
           <button class="btn-remove" @click="removeCondition(i)">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
@@ -337,10 +334,10 @@ const actionFolderOptions = computed(() => [
 
         <!-- Actions -->
         <div class="section-header">
-          <span class="section-title">Actions</span>
+          <span class="section-title">{{ t('Actions') }}</span>
           <button class="btn-add-link" @click="addAction">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-            Add Action
+            {{ t('Add Action') }}
           </button>
         </div>
         <div
@@ -377,11 +374,11 @@ const actionFolderOptions = computed(() => [
         <div class="editor-footer">
           <button v-if="editingRule.id && filtersStore.filters.some(f => f.id === editingRule?.id)" class="btn-delete" data-testid="filter-delete-btn" @click="deleteFilter(editingRule.id)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-            Delete
+            {{ t('Delete') }}
           </button>
           <div class="footer-right">
-            <button class="btn-cancel" @click="editingRule = null">Cancel</button>
-            <button class="btn-save" data-testid="filter-save-btn" @click="saveFilter">Save Filter</button>
+            <button class="btn-cancel" @click="editingRule = null">{{ t('Cancel') }}</button>
+            <button class="btn-save" data-testid="filter-save-btn" @click="saveFilter">{{ t('Save Filter') }}</button>
           </div>
         </div>
       </div>

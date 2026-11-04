@@ -9,6 +9,7 @@ import { dragMessageIds, dragSourceAccountId, isDragging } from "@/lib/drag-stat
 import { showToast, dismissToast } from "@/lib/toast";
 import { acctColor } from "@/lib/account-colors";
 import Select from "@/components/common/Select.vue";
+import { t } from "@/i18n";
 
 const foldersStore = useFoldersStore();
 const accountsStore = useAccountsStore();
@@ -228,14 +229,14 @@ function buildParentOptions(): { label: string; value: string }[] {
   function addFolders(folders: Folder[], accountId: string, accountEmail: string, prefix: string) {
     for (const folder of folders) {
       const label = prefix ? `${prefix}/${folder.name}` : folder.name;
-      options.push({ label: `${label} on ${accountEmail}`, value: `${accountId}|${folder.path}` });
+      options.push({ label: t("{label} on {email}", { label, email: accountEmail }), value: `${accountId}|${folder.path}` });
       addFolders(folder.children, accountId, accountEmail, label);
     }
   }
 
   // Calendar- and contacts-only accounts have no folders.
   for (const account of accountsStore.mailAccounts) {
-    options.push({ label: `${account.display_name} (root)`, value: `${account.id}|` });
+    options.push({ label: t("{name} (root)", { name: account.display_name }), value: `${account.id}|` });
     addFolders(foldersStore.getAccountFolders(account.id), account.id, account.email, "");
   }
   return options;
@@ -244,12 +245,12 @@ function buildParentOptions(): { label: string; value: string }[] {
 async function createNewFolder() {
   const folderName = newFolderName.value.trim();
   if (!folderName) {
-    newFolderError.value = "Folder name is required";
+    newFolderError.value = t("Folder name is required");
     return;
   }
   const [accountId, parentPath] = newFolderParent.value.split("|", 2);
   if (!accountId) {
-    newFolderError.value = "Select a location";
+    newFolderError.value = t("Select a location");
     return;
   }
   const folderPath = parentPath
@@ -258,7 +259,7 @@ async function createNewFolder() {
 
   newFolderSaving.value = true;
   newFolderError.value = null;
-  const createToastId = showToast("Creating folder...", "info", 0);
+  const createToastId = showToast(t("Creating folder..."), "info", 0);
   try {
     await api.createFolder(accountId, folderPath);
     showNewFolderModal.value = false;
@@ -304,8 +305,13 @@ async function onFolderMouseUp(accountId: string, folderPath: string) {
 
   const messageIds = [...dragMessageIds.value];
   const isCrossAccount = sourceAccountId !== accountId;
-  const label = isCrossAccount ? "Moving (cross-account)" : "Moving";
-  const moveToastId = showToast(`${label} ${messageIds.length} message(s)...`, "info", 0);
+  const moveToastId = showToast(
+    isCrossAccount
+      ? t("Moving (cross-account) {count} message(s)...", { count: messageIds.length })
+      : t("Moving {count} message(s)...", { count: messageIds.length }),
+    "info",
+    0,
+  );
   try {
     if (isCrossAccount) {
       await api.moveMessagesCrossAccount(sourceAccountId, messageIds, accountId, folderPath);
@@ -322,7 +328,7 @@ async function onFolderMouseUp(accountId: string, folderPath: string) {
   } catch (error) {
     console.error("Drag-and-drop move failed:", error);
     const message = error instanceof Error ? error.message : String(error);
-    showToast(`Move failed: ${message}`, "error", 5000);
+    showToast(t("Move failed: {error}", { error: message }), "error", 5000);
   } finally {
     dismissToast(moveToastId);
   }
@@ -360,7 +366,7 @@ async function doDeleteFolder() {
   const { accountId, folder } = deletingFolder.value;
   deletingFolder.value = null;
 
-  const deleteToastId = showToast(`Deleting "${folder.name}"...`, "info", 0);
+  const deleteToastId = showToast(t('Deleting "{name}"...', { name: folder.name }), "info", 0);
   try {
     await api.deleteFolder(accountId, folder.path);
     await foldersStore.fetchAllAccountFolders();
@@ -369,11 +375,11 @@ async function doDeleteFolder() {
       const inbox = folders.find((candidate) => candidate.folder_type === "inbox");
       foldersStore.setActiveFolder(inbox?.path ?? folders[0]?.path ?? "");
     }
-    showToast(`Deleted "${folder.name}"`, "success");
+    showToast(t('Deleted "{name}"', { name: folder.name }), "success");
   } catch (error) {
     console.error("Delete folder failed:", error);
     const message = error instanceof Error ? error.message : String(error);
-    showToast(`Failed to delete "${folder.name}": ${message}`, "error", 5000);
+    showToast(t('Failed to delete "{name}": {error}', { name: folder.name, error: message }), "error", 5000);
   } finally {
     dismissToast(deleteToastId);
   }
@@ -382,7 +388,7 @@ async function doDeleteFolder() {
 
 <template>
   <div class="folder-tree" @click="closeContextMenu">
-    <div class="app-sidebar-header">Mailboxes</div>
+    <div class="app-sidebar-header">{{ t("Mailboxes") }}</div>
     <div
       v-for="account in accountsStore.mailAccounts"
       :key="account.id"
@@ -512,7 +518,7 @@ async function doDeleteFolder() {
             <path fill="currentColor" d="M3 13h5l1 2h6l1-2h5v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Z"/>
             <path fill="currentColor" opacity=".55" d="m12 3 5 6h-3v4h-4V9H7l5-6Z"/>
           </svg>
-          <span class="folder-name">Outbox</span>
+          <span class="folder-name">{{ t("Outbox") }}</span>
         </button>
       </div>
     </div>
@@ -526,14 +532,14 @@ async function doDeleteFolder() {
         data-testid="folder-context-menu"
         :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
       >
-        <button class="ctx-item" data-testid="ctx-new-folder" @click="openNewFolderModal">New Folder...</button>
+        <button class="ctx-item" data-testid="ctx-new-folder" @click="openNewFolderModal">{{ t("New Folder...") }}</button>
         <div class="ctx-separator"></div>
-        <button class="ctx-item" data-testid="ctx-mark-read" @click="markFolderRead">Mark Folder Read</button>
+        <button class="ctx-item" data-testid="ctx-mark-read" @click="markFolderRead">{{ t("Mark Folder Read") }}</button>
         <div class="ctx-separator"></div>
-        <button class="ctx-item danger" data-testid="ctx-delete-folder" @click="confirmDeleteFolder">Delete Folder</button>
+        <button class="ctx-item danger" data-testid="ctx-delete-folder" @click="confirmDeleteFolder">{{ t("Delete Folder") }}</button>
         <div class="ctx-separator"></div>
         <button class="ctx-item" data-testid="ctx-sync-folder" @click="syncThisFolder">
-          Sync "{{ contextMenu.folder.name }}"
+          {{ t('Sync "{name}"', { name: contextMenu.folder.name }) }}
         </button>
       </div>
     </Teleport>
@@ -545,8 +551,8 @@ async function doDeleteFolder() {
         class="folder-context-menu"
         :style="{ left: accountMenu.x + 'px', top: accountMenu.y + 'px' }"
       >
-        <button class="ctx-item" data-testid="ctx-account-mark-read" @click="markAccountRead">Mark All Read</button>
-        <button class="ctx-item" data-testid="ctx-account-new-folder" @click="openNewFolderFromAccount">New Folder...</button>
+        <button class="ctx-item" data-testid="ctx-account-mark-read" @click="markAccountRead">{{ t("Mark All Read") }}</button>
+        <button class="ctx-item" data-testid="ctx-account-new-folder" @click="openNewFolderFromAccount">{{ t("New Folder...") }}</button>
       </div>
     </Teleport>
 
@@ -554,30 +560,30 @@ async function doDeleteFolder() {
       <div v-if="showNewFolderModal" class="modal-overlay" @click.self="showNewFolderModal = false">
         <div class="new-folder-modal">
           <div class="nf-header">
-            <h3>New Folder</h3>
+            <h3>{{ t("New Folder") }}</h3>
             <button class="nf-close" @click="showNewFolderModal = false">&times;</button>
           </div>
           <div class="nf-body">
             <div v-if="newFolderError" class="nf-error">{{ newFolderError }}</div>
             <div class="nf-field">
-              <label>Name:</label>
+              <label>{{ t("Name:") }}</label>
               <input
                 v-model="newFolderName"
                 type="text"
                 class="nf-input"
-                placeholder="Folder name"
+                :placeholder="t('Folder name')"
                 @keydown.enter="createNewFolder"
               />
             </div>
             <div class="nf-field">
-              <label>Create as a subfolder of:</label>
+              <label>{{ t("Create as a subfolder of:") }}</label>
               <Select v-model="newFolderParent" :options="buildParentOptions()" class="nf-select" />
             </div>
           </div>
           <div class="nf-footer">
-            <button class="nf-btn-cancel" @click="showNewFolderModal = false">Cancel</button>
+            <button class="nf-btn-cancel" @click="showNewFolderModal = false">{{ t("Cancel") }}</button>
             <button class="nf-btn-create" :disabled="newFolderSaving" @click="createNewFolder">
-              {{ newFolderSaving ? "Creating..." : "Create Folder" }}
+              {{ newFolderSaving ? t("Creating...") : t("Create Folder") }}
             </button>
           </div>
         </div>
@@ -588,17 +594,17 @@ async function doDeleteFolder() {
       <div v-if="deletingFolder" class="modal-overlay" @click.self="deletingFolder = null">
         <div class="new-folder-modal">
           <div class="nf-body" style="padding: 20px">
-            <h3 style="margin: 0 0 8px">Delete Folder</h3>
+            <h3 style="margin: 0 0 8px">{{ t("Delete Folder") }}</h3>
             <p style="font-size: 13px; color: var(--color-text-secondary); line-height: 1.5; margin: 0 0 4px">
-              Are you sure you want to delete "{{ deletingFolder.folder.name }}"?
+              {{ t('Are you sure you want to delete "{name}"?', { name: deletingFolder.folder.name }) }}
             </p>
             <p style="font-size: 12px; color: var(--color-text-muted); margin: 0">
-              All messages in this folder will be permanently deleted.
+              {{ t("All messages in this folder will be permanently deleted.") }}
             </p>
           </div>
           <div class="nf-footer">
-            <button class="nf-btn-cancel" @click="deletingFolder = null">Cancel</button>
-            <button class="nf-btn-create" style="background: var(--color-danger, #dc2626)" @click="doDeleteFolder">Delete</button>
+            <button class="nf-btn-cancel" @click="deletingFolder = null">{{ t("Cancel") }}</button>
+            <button class="nf-btn-create" style="background: var(--color-danger, #dc2626)" @click="doDeleteFolder">{{ t("Delete") }}</button>
           </div>
         </div>
       </div>

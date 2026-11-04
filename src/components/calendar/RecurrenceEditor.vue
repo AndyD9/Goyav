@@ -1,21 +1,22 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { t } from "@/i18n";
+import { computed, ref, watch } from "vue";
 import DateInput from "@/components/common/DateInput.vue";
 import Select from "@/components/common/Select.vue";
 import { parseRRule } from "@/lib/rrule";
 
-const freqOptions = [
-  { value: "DAILY", label: "day(s)" },
-  { value: "WEEKLY", label: "week(s)" },
-  { value: "MONTHLY", label: "month(s)" },
-  { value: "YEARLY", label: "year(s)" },
-];
+const freqOptions = computed(() => [
+  { value: "DAILY", label: t("day(s)") },
+  { value: "WEEKLY", label: t("week(s)") },
+  { value: "MONTHLY", label: t("month(s)") },
+  { value: "YEARLY", label: t("year(s)") },
+]);
 
-const endTypeOptions = [
-  { value: "never", label: "Never" },
-  { value: "count", label: "After N times" },
-  { value: "until", label: "On date" },
-];
+const endTypeOptions = computed(() => [
+  { value: "never", label: t("Never") },
+  { value: "count", label: t("After N times") },
+  { value: "until", label: t("On date") },
+]);
 
 const props = defineProps<{
   modelValue: string | null;
@@ -33,15 +34,15 @@ const count = ref(10);
 const untilDate = ref("");
 const byDays = ref<string[]>([]);
 
-const dayOptions = [
-  { label: "Mon", value: "MO" },
-  { label: "Tue", value: "TU" },
-  { label: "Wed", value: "WE" },
-  { label: "Thu", value: "TH" },
-  { label: "Fri", value: "FR" },
-  { label: "Sat", value: "SA" },
-  { label: "Sun", value: "SU" },
-];
+const dayOptions = computed(() => [
+  { label: t("Mon"), value: "MO" },
+  { label: t("Tue"), value: "TU" },
+  { label: t("Wed"), value: "WE" },
+  { label: t("Thu"), value: "TH" },
+  { label: t("Fri"), value: "FR" },
+  { label: t("Sat"), value: "SA" },
+  { label: t("Sun"), value: "SU" },
+]);
 
 const parsedRule = props.modelValue ? parseRRule(props.modelValue) : null;
 if (parsedRule) {
@@ -79,12 +80,12 @@ watch([enabled, freq, interval, endType, count, untilDate, byDays], () => emit("
   <div class="recurrence-editor">
     <label class="toggle-label">
       <input type="checkbox" v-model="enabled" />
-      Repeat
+      {{ t("Repeat") }}
     </label>
 
     <template v-if="enabled">
       <div class="recurrence-row">
-        <label>Every</label>
+        <label>{{ t("Every") }}</label>
         <input type="number" v-model.number="interval" min="1" max="99" class="num-input" />
         <Select v-model="freq" :options="freqOptions" class="freq-select" />
       </div>
@@ -107,7 +108,7 @@ watch([enabled, freq, interval, endType, count, untilDate, byDays], () => emit("
       </div>
 
       <div class="recurrence-row">
-        <label>Ends</label>
+        <label>{{ t("Ends") }}</label>
         <Select v-model="endType" :options="endTypeOptions" class="end-type-select" />
         <input
           v-if="endType === 'count'"

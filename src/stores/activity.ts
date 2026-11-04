@@ -3,6 +3,7 @@ import { ref, computed, onScopeDispose } from "vue";
 import { listen } from "@tauri-apps/api/event";
 import type { Event, UnlistenFn } from "@tauri-apps/api/event";
 import { showToast, dismissToast } from "@/lib/toast";
+import { t } from "@/i18n";
 
 const COMPLETED_OPERATION_RETENTION_MS = 60_000;
 const FAILED_OPERATION_RETENTION_MS = 5 * 60_000;
@@ -288,13 +289,14 @@ export const useActivityStore = defineStore("activity", () => {
       startOperation(
         mailSyncOperationId(payload.account_id),
         "sync",
-        `Syncing ${payload.account_name}`,
-        "Syncing...",
+        t("Syncing {name}", { name: payload.account_name }),
+        t("Syncing..."),
       );
     });
 
     register<SyncProgressPayload>("sync-progress", (payload) => {
-      const newMessages = payload.synced > 0 ? ` - ${payload.synced} new` : "";
+      const newMessages =
+        payload.synced > 0 ? t(" - {count} new", { count: payload.synced }) : "";
       updateOperation(
         mailSyncOperationId(payload.account_id),
         `${payload.folder} (${payload.current_folder}/${payload.total_folders})${newMessages}`,
@@ -305,8 +307,8 @@ export const useActivityStore = defineStore("activity", () => {
       completeOperation(
         mailSyncOperationId(payload.account_id),
         payload.total_synced > 0
-          ? `Done - ${payload.total_synced} new messages`
-          : "Up to date",
+          ? t("Done - {count} new messages", { count: payload.total_synced })
+          : t("Up to date"),
       );
     });
 
@@ -319,13 +321,13 @@ export const useActivityStore = defineStore("activity", () => {
       startOperation(
         calendarSyncOperationId(accountId),
         "sync",
-        "Syncing calendars",
-        "Syncing...",
+        t("Syncing calendars"),
+        t("Syncing..."),
       );
     });
 
     register<string>("calendar-sync-complete", (accountId) => {
-      completeOperation(calendarSyncOperationId(accountId), "Calendars updated");
+      completeOperation(calendarSyncOperationId(accountId), t("Calendars updated"));
     });
 
     register<AccountErrorPayload>("calendar-sync-error", (payload) => {
@@ -341,7 +343,7 @@ export const useActivityStore = defineStore("activity", () => {
       startOperation(
         operationId,
         "general",
-        `${payload.op_type} failed`,
+        t("{op} failed", { op: payload.op_type }),
         payload.error,
       );
       failOperation(operationId, `${payload.op_type}: ${payload.error}`);
@@ -352,18 +354,18 @@ export const useActivityStore = defineStore("activity", () => {
       startOperation(
         operationId,
         "send",
-        `Sending "${payload.subject}"`,
-        "Syncing...",
+        t('Sending "{subject}"', { subject: payload.subject }),
+        t("Syncing..."),
       );
-      const toastId = showToast(`Sending "${payload.subject}"...`, "info", 0);
+      const toastId = showToast(t('Sending "{subject}"...', { subject: payload.subject }), "info", 0);
       sendToastIds.set(operationId, toastId);
     });
 
     register<SendPayload>("send-complete", (payload) => {
       const operationId = sendOperationId(payload.outbox_id);
-      completeOperation(operationId, "Sent");
+      completeOperation(operationId, t("Sent"));
       dismissSendToast(operationId);
-      showToast(`"${payload.subject}" sent`, "success");
+      showToast(t('"{subject}" sent', { subject: payload.subject }), "success");
     });
 
     register<SendFailurePayload>("send-failed", (payload) => {
@@ -371,7 +373,7 @@ export const useActivityStore = defineStore("activity", () => {
       failOperation(operationId, payload.error);
       dismissSendToast(operationId);
       showToast(
-        `Send failed: ${payload.error}`,
+        t("Send failed: {error}", { error: payload.error }),
         "error",
         SEND_FAILURE_TOAST_DURATION_MS,
       );
@@ -379,11 +381,14 @@ export const useActivityStore = defineStore("activity", () => {
 
     register<SendFailurePayload>("send-unknown", (payload) => {
       const operationId = sendOperationId(payload.outbox_id);
-      const detail = `Delivery status unknown: ${payload.error}`;
+      const detail = t("Delivery status unknown: {error}", { error: payload.error });
       failOperation(operationId, detail);
       dismissSendToast(operationId);
       showToast(
-        `Delivery status unknown for "${payload.subject}": ${payload.error}`,
+        t('Delivery status unknown for "{subject}": {error}', {
+          subject: payload.subject,
+          error: payload.error,
+        }),
         "error",
         SEND_FAILURE_TOAST_DURATION_MS,
       );

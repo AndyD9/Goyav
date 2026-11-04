@@ -1,4 +1,5 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { t } from "@/i18n";
 
 let readerCounter = 0;
 
@@ -11,7 +12,7 @@ export function openReaderWindow(accountId: string, messageId: string, subject?:
   query.set("messageId", messageId);
 
   const url = `/reader?${query.toString()}`;
-  const titleSuffix = subject || "(no subject)";
+  const titleSuffix = subject || t("(no subject)");
 
   const win = new WebviewWindow(label, {
     url,

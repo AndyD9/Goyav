@@ -17,6 +17,7 @@ import ContactFormModal from "@/components/contacts/ContactFormModal.vue";
 import { openComposeWindow } from "@/lib/compose-window";
 import { parseMailto } from "@/lib/mailto";
 import * as api from "@/lib/tauri";
+import { t, tn, dateLocale } from "@/i18n";
 
 defineProps<{
   standalone?: boolean;
@@ -137,15 +138,15 @@ function verifyBadgeLabel(o: PgpVerifyOutcome | null): string {
   if (!o) return "";
   switch (o.kind) {
     case "good":
-      return `Signed by ${o.signerUid ?? o.signerFingerprint.slice(-16)}`;
+      return t("Signed by {signer}", { signer: o.signerUid ?? o.signerFingerprint.slice(-16) });
     case "bad":
-      return `Signature invalid (${o.signerUid ?? o.signerFingerprint.slice(-16)})`;
+      return t("Signature invalid ({signer})", { signer: o.signerUid ?? o.signerFingerprint.slice(-16) });
     case "unknownKey":
-      return `Unknown signer (key id ${o.keyId})`;
+      return t("Unknown signer (key id {keyId})", { keyId: o.keyId });
     case "unsigned":
       return "";
     case "error":
-      return `Signature check error: ${o.message}`;
+      return t("Signature check error: {message}", { message: o.message });
   }
 }
 
@@ -420,10 +421,10 @@ async function saveAttachment(index: number, filename: string | null) {
     // The save dialog is opened by the backend — the renderer only sends
     // a suggested filename, never a path.
     await api.saveAttachment(accountId, messageId, index, filename || "attachment");
-    showToast("Attachment saved");
+    showToast(t("Attachment saved"));
   } catch (e) {
     const msg = String(e);
-    if (!msg.includes("cancelled")) showToast("Failed to save: " + msg);
+    if (!msg.includes("cancelled")) showToast(t("Failed to save: {error}", { error: msg }));
   } finally {
     savingAttachment.value = null;
   }
@@ -456,16 +457,18 @@ async function downloadCalendarAttachment() {
 function onCalendarImported(result: CalendarImportResult) {
   const parts: string[] = [];
   if (result.imported > 0) {
-    parts.push(`${result.imported} event${result.imported === 1 ? "" : "s"} imported`);
+    parts.push(tn(result.imported, "{count} event imported", "{count} events imported"));
   }
   if (result.skipped_existing > 0) {
     parts.push(
-      `${result.skipped_existing} existing event${
-        result.skipped_existing === 1 ? "" : "s"
-      } skipped`,
+      tn(
+        result.skipped_existing,
+        "{count} existing event skipped",
+        "{count} existing events skipped",
+      ),
     );
   }
-  showToast(parts.join("; ") || "Nothing to import");
+  showToast(parts.join("; ") || t("Nothing to import"));
 }
 
 function formatSize(bytes: number): string {
@@ -484,7 +487,7 @@ async function loadRemoteImages() {
   try {
     imagesHtml.value = await api.getMessageHtmlWithImages(accountId, messageId);
   } catch (e) {
-    showToast("Failed to load images: " + String(e));
+    showToast(t("Failed to load images: {error}", { error: String(e) }));
   } finally {
     loadingImages.value = false;
   }
@@ -564,7 +567,7 @@ async function openContactForm() {
 }
 
 function onContactSaved(editedId: string | null) {
-  showToast(editedId ? "Contact updated" : "Contact added");
+  showToast(editedId ? t("Contact updated") : t("Contact added"));
 }
 
 // --- Message actions ---
@@ -600,11 +603,11 @@ function quoteBody(): string {
   const msg = messagesStore.activeMessage;
   if (!msg) return "";
   const text = effectiveBodyText();
-  const date = new Date(msg.date).toLocaleString(undefined, { hour12: uiStore.hour12 });
+  const date = new Date(msg.date).toLocaleString(dateLocale(), { hour12: uiStore.hour12 });
   const from = msg.from.name
     ? `${msg.from.name} <${msg.from.email}>`
     : msg.from.email;
-  const header = `On ${date}, ${from} wrote:`;
+  const header = t("On {date}, {from} wrote:", { date, from });
   const quoted = text
     .split("\n")
     .map((line) => `> ${line}`)
@@ -658,12 +661,12 @@ function forward() {
   if (!msg) return;
   const text = effectiveBodyText();
   const subject = effectiveSubject();
-  const date = new Date(msg.date).toLocaleString(undefined, { hour12: uiStore.hour12 });
+  const date = new Date(msg.date).toLocaleString(dateLocale(), { hour12: uiStore.hour12 });
   const from = msg.from.name
     ? `${msg.from.name} <${msg.from.email}>`
     : msg.from.email;
   const toStr = msg.to.map((a) => a.name || a.email).join(", ");
-  const fwdHeader = `---------- Forwarded message ----------\nFrom: ${from}\nDate: ${date}\nSubject: ${subject}\nTo: ${toStr}\n\n`;
+  const fwdHeader = `${t("---------- Forwarded message ----------")}\n${t("From")}: ${from}\n${t("Date")}: ${date}\n${t("Subject")}: ${subject}\n${t("To")}: ${toStr}\n\n`;
   openComposeWindow({
     accountId: accountsStore.activeAccountId ?? undefined,
     subject: subject.startsWith("Fwd:") ? subject : `Fwd: ${subject}`,
@@ -690,7 +693,7 @@ async function archiveMessage() {
   if (!accountId || !msgId) return;
   const folder = foldersStore.folders.find((f) => f.folder_type === "archive");
   if (!folder) {
-    showToast("No archive folder found");
+    showToast(t("No archive folder found"));
     return;
   }
   try {
@@ -708,7 +711,7 @@ async function markSpam() {
   if (!accountId || !msgId) return;
   const folder = foldersStore.folders.find((f) => f.folder_type === "junk");
   if (!folder) {
-    showToast("No spam folder found");
+    showToast(t("No spam folder found"));
     return;
   }
   try {
@@ -724,44 +727,44 @@ async function markSpam() {
 <template>
   <div class="message-reader">
     <div v-if="standalone" class="reader-toolbar">
-      <button class="close-btn" title="Close" @click="emit('close')">&times;</button>
+      <button class="close-btn" :title="t('Close')" @click="emit('close')">&times;</button>
     </div>
-    <div v-if="messagesStore.loadingBody" class="loading">Loading message...</div>
+    <div v-if="messagesStore.loadingBody" class="loading">{{ t("Loading message...") }}</div>
     <div v-else-if="!messagesStore.activeMessage" class="empty">
-      Select a message to read
+      {{ t("Select a message to read") }}
     </div>
     <div v-else class="message-content">
       <!-- Action bar -->
       <div class="message-actions">
         <div class="actions-left">
-          <button class="pill-btn" title="Reply" @click="reply">
+          <button class="pill-btn" :title="t('Reply')" @click="reply">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 0 0-4-4H4" /></svg>
-            Reply
+            {{ t("Reply") }}
           </button>
-          <button class="pill-btn" title="Reply All" @click="replyAll">
+          <button class="pill-btn" :title="t('Reply All')" @click="replyAll">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 0 0-4-4H4" /></svg>
-            Reply All
+            {{ t("Reply All") }}
           </button>
-          <button class="pill-btn" title="Forward" @click="forward">
+          <button class="pill-btn" :title="t('Forward')" @click="forward">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 17 20 12 15 7" /><path d="M4 18v-2a4 4 0 0 1 4-4h12" /></svg>
-            Forward
+            {{ t("Forward") }}
           </button>
         </div>
         <div class="actions-right">
-          <button class="icon-action" title="Archive" @click="archiveMessage">
+          <button class="icon-action" :title="t('Archive')" @click="archiveMessage">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8" /><rect x="1" y="3" width="22" height="5" /><line x1="10" y1="12" x2="14" y2="12" /></svg>
           </button>
-          <button class="icon-action" title="Report spam" @click="markSpam">
+          <button class="icon-action" :title="t('Report spam')" @click="markSpam">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
           </button>
-          <button class="icon-action danger" title="Delete" @click="deleteMessage">
+          <button class="icon-action danger" :title="t('Delete')" @click="deleteMessage">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
           </button>
           <div v-if="hasHtml()" class="view-toggle">
             <button
               class="toggle-btn"
               :class="{ active: !showHtml }"
-              title="Plain Text"
+              :title="t('Plain Text')"
               @click="showHtml = false"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -771,7 +774,7 @@ async function markSpam() {
             <button
               class="toggle-btn"
               :class="{ active: showHtml }"
-              title="HTML"
+              :title="t('HTML')"
               data-testid="reader-html-toggle"
               @click="showHtml = true"
             >
@@ -784,9 +787,9 @@ async function markSpam() {
       </div>
 
       <div class="message-headers">
-        <h2 class="message-subject" data-testid="reader-subject">{{ messagesStore.activeMessage.subject || "(no subject)" }}</h2>
+        <h2 class="message-subject" data-testid="reader-subject">{{ messagesStore.activeMessage.subject || t("(no subject)") }}</h2>
         <div class="header-row" data-testid="reader-from">
-          <span class="header-label">From:</span>
+          <span class="header-label">{{ t("From:") }}</span>
           <span class="header-value">
             <span class="addr-clickable" @contextmenu="onAddrRightClick($event, messagesStore.activeMessage.from.email, messagesStore.activeMessage.from.name)">
               {{ messagesStore.activeMessage.from.name }}
@@ -795,7 +798,7 @@ async function markSpam() {
           </span>
         </div>
         <div class="header-row" data-testid="reader-to">
-          <span class="header-label">To:</span>
+          <span class="header-label">{{ t("To:") }}</span>
           <span class="header-value">
             <span v-for="(addr, i) in messagesStore.activeMessage.to" :key="i" class="addr-clickable" @contextmenu="onAddrRightClick($event, addr.email, addr.name)">
               {{ addr.name || addr.email }}{{ i < messagesStore.activeMessage.to.length - 1 ? ", " : "" }}
@@ -803,7 +806,7 @@ async function markSpam() {
           </span>
         </div>
         <div v-if="messagesStore.activeMessage.cc.length" class="header-row">
-          <span class="header-label">Cc:</span>
+          <span class="header-label">{{ t("Cc:") }}</span>
           <span class="header-value">
             <span v-for="(addr, i) in messagesStore.activeMessage.cc" :key="i" class="addr-clickable" @contextmenu="onAddrRightClick($event, addr.email, addr.name)">
               {{ addr.name || addr.email }}{{ i < messagesStore.activeMessage.cc.length - 1 ? ", " : "" }}
@@ -811,11 +814,11 @@ async function markSpam() {
           </span>
         </div>
         <div class="header-row" data-testid="reader-date">
-          <span class="header-label">Date:</span>
-          <span class="header-value">{{ new Date(messagesStore.activeMessage.date).toLocaleString(undefined, { hour12: uiStore.hour12 }) }}</span>
+          <span class="header-label">{{ t("Date:") }}</span>
+          <span class="header-value">{{ new Date(messagesStore.activeMessage.date).toLocaleString(dateLocale(), { hour12: uiStore.hour12 }) }}</span>
         </div>
         <div v-if="messagesStore.activeMessage.list_id" class="header-row">
-          <span class="header-label">List:</span>
+          <span class="header-label">{{ t("List:") }}</span>
           <span class="header-value list-id">{{ messagesStore.activeMessage.list_id }}</span>
         </div>
       </div>
@@ -835,7 +838,7 @@ async function markSpam() {
       <div v-if="messagesStore.activeMessage.attachments.length > 0" class="attachments-section">
         <div class="attachments-header">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-          {{ messagesStore.activeMessage.attachments.length }} attachment{{ messagesStore.activeMessage.attachments.length > 1 ? 's' : '' }}
+          {{ tn(messagesStore.activeMessage.attachments.length, "{count} attachment", "{count} attachments") }}
         </div>
         <div class="attachments-list">
           <button
@@ -844,12 +847,12 @@ async function markSpam() {
             class="attachment-chip"
             :data-testid="`attachment-${att.index}`"
             :disabled="savingAttachment === att.index"
-            :title="isCalendarAttachment(att) ? 'Import calendar events' : 'Save attachment'"
+            :title="isCalendarAttachment(att) ? t('Import calendar events') : t('Save attachment')"
             @click="openAttachment(att)"
           >
             <svg v-if="isCalendarAttachment(att)" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M12 14v4M10 16h4"/></svg>
             <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span class="att-name">{{ att.filename || 'attachment' }}</span>
+            <span class="att-name">{{ att.filename || t('attachment') }}</span>
             <span class="att-size">{{ formatSize(att.size) }}</span>
           </button>
         </div>
@@ -861,9 +864,9 @@ async function markSpam() {
         <div class="pgp-banner-row">
           <span class="pgp-banner-icon">🔒</span>
           <span v-if="!decryptedOverlay">
-            This message is encrypted with OpenPGP.
+            {{ t("This message is encrypted with OpenPGP.") }}
           </span>
-          <span v-else>This message was decrypted.</span>
+          <span v-else>{{ t("This message was decrypted.") }}</span>
           <span class="spacer"></span>
           <button
             v-if="!decryptedOverlay"
@@ -872,7 +875,7 @@ async function markSpam() {
             data-testid="reader-decrypt-btn"
             @click="decryptOpenPGP"
           >
-            {{ decryptBusy ? "Decrypting…" : "Decrypt" }}
+            {{ decryptBusy ? t("Decrypting…") : t("Decrypt") }}
           </button>
           <span
             v-if="decryptedOverlay && verifyOutcome && verifyOutcome.kind !== 'unsigned'"
@@ -898,9 +901,9 @@ async function markSpam() {
           class="body-html-wrapper"
         >
           <div v-if="hasRemoteImages && !imagesHtml" class="no-remote-notice">
-            Remote content blocked
+            {{ t("Remote content blocked") }}
             <button class="load-images-btn" data-testid="reader-load-images" :disabled="loadingImages" @click="loadRemoteImages">
-              {{ loadingImages ? 'Loading...' : 'Load images' }}
+              {{ loadingImages ? t('Loading...') : t('Load images') }}
             </button>
           </div>
           <iframe
@@ -922,9 +925,9 @@ async function markSpam() {
           class="body-html-wrapper"
         >
           <div v-if="hasRemoteImages && !imagesHtml" class="no-remote-notice">
-            Remote content blocked
+            {{ t("Remote content blocked") }}
             <button class="load-images-btn" data-testid="reader-load-images" :disabled="loadingImages" @click="loadRemoteImages">
-              {{ loadingImages ? 'Loading...' : 'Load images' }}
+              {{ loadingImages ? t('Loading...') : t('Load images') }}
             </button>
           </div>
           <iframe
@@ -936,7 +939,7 @@ async function markSpam() {
             referrerpolicy="no-referrer"
           />
         </div>
-        <div v-else class="empty">No message content</div>
+        <div v-else class="empty">{{ t("No message content") }}</div>
       </div>
     </div>
 
@@ -954,7 +957,7 @@ async function markSpam() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
           </svg>
-          {{ addrMenuContact ? 'Edit Contact' : 'Add to Contacts' }}
+          {{ addrMenuContact ? t('Edit Contact') : t('Add to Contacts') }}
         </button>
       </div>
       <div v-if="addrMenu" class="addr-menu-overlay" @click="closeAddrMenu"></div>

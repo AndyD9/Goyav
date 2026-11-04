@@ -15,6 +15,7 @@ import {
   type ShortcutDef,
 } from "@/lib/shortcuts";
 import AboutDialog from "@/components/common/AboutDialog.vue";
+import { t } from "@/i18n";
 
 const router = useRouter();
 const route = useRoute();
@@ -71,6 +72,11 @@ function openAbout() {
   aboutOpen.value = true;
 }
 
+function openWhatsNew() {
+  closeMenus();
+  router.push({ path: "/settings", query: { section: "whatsnew" } });
+}
+
 // The backend shows its own dialogs (update found, up to date, error).
 function checkForUpdates() {
   closeMenus();
@@ -105,17 +111,17 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
 <template>
   <div class="menu-bar" @mouseleave="closeMenus" data-testid="menu-bar">
     <div class="menu-item" @click.stop="toggleMenu('file')">
-      <span class="menu-label">File</span>
+      <span class="menu-label">{{ t("File") }}</span>
       <div v-if="openMenu === 'file'" class="menu-dropdown" @click.stop data-testid="menu-file-dropdown">
         <button class="menu-action" data-testid="menu-file-preferences" @click="openPreferences">
           <span class="action-prefix">&#160;</span>
-          <span class="action-label">Preferences&hellip;</span>
+          <span class="action-label">{{ t("Preferences…") }}</span>
           <span class="action-shortcut">{{ formatShortcut(shortcuts.preferences) }}</span>
         </button>
         <div class="menu-separator"></div>
         <button class="menu-action" data-testid="menu-file-quit" @click="quitApp">
           <span class="action-prefix">&#160;</span>
-          <span class="action-label">Quit</span>
+          <span class="action-label">{{ t("Quit") }}</span>
           <span class="action-shortcut">{{ formatShortcut(shortcuts.quit) }}</span>
         </button>
       </div>
@@ -127,17 +133,17 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
       data-testid="menu-view"
       @click.stop="toggleMenu('view')"
     >
-      <span class="menu-label">View</span>
+      <span class="menu-label">{{ t("View") }}</span>
       <div v-if="openMenu === 'view'" class="menu-dropdown" @click.stop data-testid="menu-view-dropdown">
         <template v-if="viewMenuContext === 'mail'">
-          <div class="menu-group-heading">Message Pane</div>
+          <div class="menu-group-heading">{{ t("Message Pane") }}</div>
           <button
             class="menu-action menu-action-radio"
             data-testid="menu-view-position-none"
             @click="setViewMode('none')"
           >
             <span class="action-prefix">{{ uiStore.messageViewMode === 'none' ? '\u25CF' : '\u00A0' }}</span>
-            <span class="action-label">None</span>
+            <span class="action-label">{{ t("None") }}</span>
           </button>
           <button
             class="menu-action menu-action-radio"
@@ -145,7 +151,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
             @click="setViewMode('right')"
           >
             <span class="action-prefix">{{ uiStore.messageViewMode === 'right' ? '\u25CF' : '\u00A0' }}</span>
-            <span class="action-label">Right</span>
+            <span class="action-label">{{ t("Right") }}</span>
           </button>
           <button
             class="menu-action menu-action-radio"
@@ -153,7 +159,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
             @click="setViewMode('bottom')"
           >
             <span class="action-prefix">{{ uiStore.messageViewMode === 'bottom' ? '\u25CF' : '\u00A0' }}</span>
-            <span class="action-label">Bottom</span>
+            <span class="action-label">{{ t("Bottom") }}</span>
           </button>
           <button
             class="menu-action menu-action-radio"
@@ -161,19 +167,19 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
             @click="setViewMode('tab')"
           >
             <span class="action-prefix">{{ uiStore.messageViewMode === 'tab' ? '\u25CF' : '\u00A0' }}</span>
-            <span class="action-label">Tabs</span>
+            <span class="action-label">{{ t("Tabs") }}</span>
           </button>
 
           <div class="menu-separator"></div>
 
-          <div class="menu-group-heading">Message List</div>
+          <div class="menu-group-heading">{{ t("Message List") }}</div>
           <button
             class="menu-action menu-action-radio"
             data-testid="menu-view-list-cards"
             @click="setListLayout('cards')"
           >
             <span class="action-prefix">{{ uiStore.messageListLayout === 'cards' ? '\u25CF' : '\u00A0' }}</span>
-            <span class="action-label">Cards</span>
+            <span class="action-label">{{ t("Cards") }}</span>
           </button>
           <button
             class="menu-action menu-action-radio"
@@ -181,27 +187,27 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
             @click="setListLayout('table')"
           >
             <span class="action-prefix">{{ uiStore.messageListLayout === 'table' ? '\u25CF' : '\u00A0' }}</span>
-            <span class="action-label">Compact Table</span>
+            <span class="action-label">{{ t("Compact Table") }}</span>
           </button>
 
           <div class="menu-separator"></div>
 
           <button class="menu-action" data-testid="menu-view-threaded" @click="toggleThreading">
             <span class="action-prefix">{{ uiStore.threadingEnabled ? '\u2713' : '\u00A0' }}</span>
-            <span class="action-label">Threaded View</span>
+            <span class="action-label">{{ t("Threaded View") }}</span>
             <span class="action-shortcut">{{ formatShortcut(shortcuts.toggleThreading) }}</span>
           </button>
         </template>
 
         <template v-else-if="viewMenuContext === 'contacts'">
-          <div class="menu-group-heading">Contact Pane</div>
+          <div class="menu-group-heading">{{ t("Contact Pane") }}</div>
           <button
             class="menu-action menu-action-radio"
             data-testid="menu-view-contact-position-right"
             @click="setContactViewMode('right')"
           >
             <span class="action-prefix">{{ uiStore.contactViewMode === 'right' ? '\u25CF' : '\u00A0' }}</span>
-            <span class="action-label">Right</span>
+            <span class="action-label">{{ t("Right") }}</span>
           </button>
           <button
             class="menu-action menu-action-radio"
@@ -209,22 +215,26 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
             @click="setContactViewMode('bottom')"
           >
             <span class="action-prefix">{{ uiStore.contactViewMode === 'bottom' ? '\u25CF' : '\u00A0' }}</span>
-            <span class="action-label">Bottom</span>
+            <span class="action-label">{{ t("Bottom") }}</span>
           </button>
         </template>
       </div>
     </div>
 
     <div class="menu-item" @click.stop="toggleMenu('help')">
-      <span class="menu-label">Help</span>
+      <span class="menu-label">{{ t("Help") }}</span>
       <div v-if="openMenu === 'help'" class="menu-dropdown" @click.stop data-testid="menu-help-dropdown">
         <button class="menu-action" data-testid="menu-help-about" @click="openAbout">
           <span class="action-prefix">&#160;</span>
-          <span class="action-label">About Goyav&hellip;</span>
+          <span class="action-label">{{ t("About Goyav…") }}</span>
+        </button>
+        <button class="menu-action" data-testid="menu-help-whats-new" @click="openWhatsNew">
+          <span class="action-prefix">&#160;</span>
+          <span class="action-label">{{ t("What's new") }}</span>
         </button>
         <button class="menu-action" data-testid="menu-help-updates" @click="checkForUpdates">
           <span class="action-prefix">&#160;</span>
-          <span class="action-label">Check for Updates&hellip;</span>
+          <span class="action-label">{{ t("Check for Updates…") }}</span>
         </button>
       </div>
     </div>

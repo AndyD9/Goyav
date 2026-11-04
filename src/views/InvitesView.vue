@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { dateLocale, t } from "@/i18n";
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useInvitesStore } from "@/stores/invites";
 import type { InviteStatusFilter, InviteSortMode } from "@/stores/invites";
@@ -21,19 +22,19 @@ const accountsStore = useAccountsStore();
 const uiStore = useUiStore();
 const calendarStore = useCalendarStore();
 
-const STATUS_FILTERS: { value: InviteStatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "needs-action", label: "Needs action" },
-  { value: "accepted", label: "Accepted" },
-  { value: "tentative", label: "Maybe" },
-  { value: "declined", label: "Declined" },
-];
+const STATUS_FILTERS = computed<{ value: InviteStatusFilter; label: string }[]>(() => [
+  { value: "all", label: t("All") },
+  { value: "needs-action", label: t("Needs action") },
+  { value: "accepted", label: t("Accepted") },
+  { value: "tentative", label: t("Maybe") },
+  { value: "declined", label: t("Declined") },
+]);
 
-const SORT_MODES: { value: InviteSortMode; label: string }[] = [
-  { value: "date-asc", label: "Date (soonest first)" },
-  { value: "date-desc", label: "Date (latest first)" },
-  { value: "received", label: "Recently received" },
-];
+const SORT_MODES = computed<{ value: InviteSortMode; label: string }[]>(() => [
+  { value: "date-asc", label: t("Date (soonest first)") },
+  { value: "date-desc", label: t("Date (latest first)") },
+  { value: "received", label: t("Recently received") },
+]);
 
 // Per-row action in-flight + error state, keyed by event id.
 const actingId = ref<string | null>(null);
@@ -45,19 +46,19 @@ const invites = computed(() => invitesStore.filteredInvites);
 
 function accountLabel(accountId: string): string {
   const acc = accountsStore.accounts.find((a) => a.id === accountId);
-  return acc?.email || acc?.display_name || "Unknown account";
+  return acc?.email || acc?.display_name || t("Unknown account");
 }
 
 function statusLabel(invite: Invite): string {
   switch (normalizeInviteStatus(invite.my_status)) {
     case "accepted":
-      return "Accepted";
+      return t("Accepted");
     case "tentative":
-      return "Maybe";
+      return t("Maybe");
     case "declined":
-      return "Declined";
+      return t("Declined");
     default:
-      return invite.manually_managed_at ? "Managed manually" : "Not replied";
+      return invite.manually_managed_at ? t("Managed manually") : t("Not replied");
   }
 }
 
@@ -77,7 +78,7 @@ function whenLabel(invite: Invite): string {
     // All-day invites are anchored to a date-only (UTC midnight) start.
     // Formatting through a display timezone would add a time component
     // and could shift the day, so render a plain date read in UTC.
-    return occ.toLocaleDateString(undefined, {
+    return occ.toLocaleDateString(dateLocale(), {
       weekday: "long",
       year: "numeric",
       month: "long",
@@ -159,10 +160,10 @@ onUnmounted(() => invitesStore.setViewActive(false));
 <template>
   <div class="invites-view">
     <header class="invites-header">
-      <h2 class="invites-title">Invites</h2>
+      <h2 class="invites-title">{{ t("Invites") }}</h2>
 
       <div class="invites-controls">
-        <div class="status-filter" role="tablist" aria-label="Filter invites by reply status">
+        <div class="status-filter" role="tablist" :aria-label="t('Filter invites by reply status')">
           <button
             v-for="f in STATUS_FILTERS"
             :key="f.value"
@@ -178,7 +179,7 @@ onUnmounted(() => invitesStore.setViewActive(false));
         </div>
 
         <label class="sort-control">
-          <span class="sort-label">Sort</span>
+          <span class="sort-label">{{ t("Sort") }}</span>
           <select
             :value="invitesStore.sortMode"
             data-testid="invites-sort"
@@ -194,10 +195,10 @@ onUnmounted(() => invitesStore.setViewActive(false));
 
     <div class="invites-body">
       <div v-if="invitesStore.loading && invites.length === 0" class="invites-empty">
-        Loading invites…
+        {{ t("Loading invites…") }}
       </div>
       <div v-else-if="invites.length === 0" class="invites-empty" data-testid="invites-empty">
-        No invites to show.
+        {{ t("No invites to show.") }}
       </div>
 
       <ul v-else class="invite-list">
@@ -215,12 +216,12 @@ onUnmounted(() => invitesStore.setViewActive(false));
             ></span>
             <span class="invite-text">
               <span class="invite-title-line">
-                {{ invite.title || "(No title)" }}
+                {{ invite.title || t("(No title)") }}
                 <span
                   v-if="invite.recurrence_rule"
                   class="repeat-badge"
                   :title="recurrenceLabel(invite)"
-                >Repeats</span>
+                >{{ t("Repeats") }}</span>
               </span>
               <span class="invite-when">{{ whenLabel(invite) }}</span>
               <span class="invite-sub">
@@ -246,7 +247,7 @@ onUnmounted(() => invitesStore.setViewActive(false));
               :data-testid="`invite-accept-${invite.id}`"
               @click="respond(invite, 'accepted')"
             >
-              Accept
+              {{ t("Accept") }}
             </button>
             <button
               class="btn-maybe"
@@ -255,7 +256,7 @@ onUnmounted(() => invitesStore.setViewActive(false));
               :data-testid="`invite-maybe-${invite.id}`"
               @click="respond(invite, 'tentative')"
             >
-              Maybe
+              {{ t("Maybe") }}
             </button>
             <button
               class="btn-decline"
@@ -264,7 +265,7 @@ onUnmounted(() => invitesStore.setViewActive(false));
               :data-testid="`invite-decline-${invite.id}`"
               @click="respond(invite, 'declined')"
             >
-              Decline
+              {{ t("Decline") }}
             </button>
             <button
               v-if="!isInviteManaged(invite)"
@@ -272,10 +273,10 @@ onUnmounted(() => invitesStore.setViewActive(false));
               class="btn-managed"
               :disabled="actingId === invite.id"
               :data-testid="`invite-mark-managed-${invite.id}`"
-              title="Mark as handled without sending a response"
+              :title="t('Mark as handled without sending a response')"
               @click="markManaged(invite)"
             >
-              Mark managed
+              {{ t("Mark managed") }}
             </button>
           </div>
 

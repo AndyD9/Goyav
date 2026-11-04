@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { t } from "@/i18n";
 import logoUrl from "@/assets/goyav-logo.png";
 
 const props = defineProps<{ open: boolean }>();
@@ -48,17 +49,17 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
           <button
             class="about-close"
             data-testid="about-close"
-            aria-label="Close"
+            :aria-label="t('Close')"
             @click="emit('close')"
           >&times;</button>
         </header>
 
         <div class="about-body">
-          <p class="about-tagline">A personal mail and calendar client.</p>
+          <p class="about-tagline">{{ t("A personal mail and calendar client.") }}</p>
           <dl class="about-meta">
-            <dt>Version</dt>
+            <dt>{{ t("Version") }}</dt>
             <dd data-testid="about-version">{{ version }}</dd>
-            <dt>Source</dt>
+            <dt>{{ t("Source") }}</dt>
             <dd>
               <a
                 href="#"
@@ -66,7 +67,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
                 @click.prevent="openExternal(SOURCE_URL)"
               >github.com/SUNET/chithi</a>
             </dd>
-            <dt>License</dt>
+            <dt>{{ t("License") }}</dt>
             <dd>
               <a
                 href="#"

@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import { t } from "@/i18n";
 defineProps<{ errors: string[] }>();
 </script>
 
 <template>
   <details v-if="errors.length" class="calendar-incomplete calendar-display-notice" role="alert">
-    <summary>Calendar incomplete: {{ errors.length }} issue(s). Show details</summary>
+    <summary>{{ t("Calendar incomplete: {count} issue(s). Show details", { count: errors.length }) }}</summary>
     <ul>
       <li v-for="(error, index) in errors" :key="index">{{ error }}</li>
     </ul>

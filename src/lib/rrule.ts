@@ -1,3 +1,5 @@
+import { dateLocale, t } from "@/i18n";
+
 const RRULE_FREQUENCIES = ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as const;
 const DAY_MILLISECONDS = 86_400_000;
 
@@ -207,28 +209,43 @@ export function describeRRule(rrule: string): string {
   let description = "";
   switch (rule.freq) {
     case "DAILY":
-      description = rule.interval === 1 ? "Daily" : `Every ${rule.interval} days`;
+      description =
+        rule.interval === 1 ? t("Daily") : t("Every {n} days", { n: rule.interval });
       break;
     case "WEEKLY":
-      description = rule.interval === 1 ? "Weekly" : `Every ${rule.interval} weeks`;
+      description =
+        rule.interval === 1 ? t("Weekly") : t("Every {n} weeks", { n: rule.interval });
       if (rule.byday) {
         const dayNames = rule.byday.map(
-          (day) => WEEKDAYS[day]?.label ?? day,
+          (day) => (WEEKDAYS[day] ? t(WEEKDAYS[day].label) : day),
         );
-        description += ` on ${dayNames.join(", ")}`;
+        description = t("{recurrence} on {days}", {
+          recurrence: description,
+          days: dayNames.join(", "),
+        });
       }
       break;
     case "MONTHLY":
       description =
-        rule.interval === 1 ? "Monthly" : `Every ${rule.interval} months`;
+        rule.interval === 1 ? t("Monthly") : t("Every {n} months", { n: rule.interval });
       break;
     case "YEARLY":
       description =
-        rule.interval === 1 ? "Yearly" : `Every ${rule.interval} years`;
+        rule.interval === 1 ? t("Yearly") : t("Every {n} years", { n: rule.interval });
       break;
   }
 
-  if (rule.count) description += `, ${rule.count} times`;
-  if (rule.until) description += `, until ${rule.until.toLocaleDateString()}`;
+  if (rule.count) {
+    description = t("{recurrence}, {count} times", {
+      recurrence: description,
+      count: rule.count,
+    });
+  }
+  if (rule.until) {
+    description = t("{recurrence}, until {date}", {
+      recurrence: description,
+      date: rule.until.toLocaleDateString(dateLocale()),
+    });
+  }
   return description;
 }

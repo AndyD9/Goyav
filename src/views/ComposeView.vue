@@ -7,6 +7,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask as tauriAsk } from "@tauri-apps/plugin-dialog";
 import type {
   Account,
+  AccountSignature,
   ComposeAttachment,
   MessageBody,
   PgpRecipientStatus,
@@ -28,6 +29,7 @@ import Select from "@/components/common/Select.vue";
 import ComposeMenuBar from "@/components/compose/ComposeMenuBar.vue";
 import SignaturePreview from "@/components/common/SignaturePreview.vue";
 import { isHtmlSignature, htmlSignatureBody, htmlSignatureToText } from "@/lib/signature";
+import { t, tn } from "@/i18n";
 
 type RecipientField = "to" | "cc" | "bcc";
 type ComposeRecipients = Record<RecipientField, string[]>;
@@ -109,7 +111,7 @@ onMounted(async () => {
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       console.error("Failed to fetch accounts:", errorMsg);
-      error.value = `Failed to load accounts: ${errorMsg}`;
+      error.value = t("Failed to load accounts: {error}", { error: errorMsg });
     }
   }
   // Compose only works for accounts that can send mail. Calendar-/
@@ -122,7 +124,7 @@ onMounted(async () => {
     selectedAccountId.value = accounts.value[0].id;
   } else if (!error.value) {
     // Only set error if we didn't already fail to fetch
-    error.value = "No accounts found. Please add an account first.";
+    error.value = t("No accounts found. Please add an account first.");
   }
   // Reply to an encrypted message pre-arms the PGP toggles (see
   // openComposeWindow's pgpEncrypt / pgpSign params). Encrypt is applied
@@ -323,7 +325,7 @@ function selectAutocomplete(item: AutocompleteItem) {
   const mailbox = parseRecipients(item.email);
   if (!mailbox.ok || mailbox.addresses.length !== 1 ||
       mailbox.addresses[0] !== trimRecipientPadding(item.email)) {
-    error.value = "Selected contact does not contain a single email address. Correct the contact or enter an address manually.";
+    error.value = t("Selected contact does not contain a single email address. Correct the contact or enter an address manually.");
     recipientErrorField.value = acField.value;
     return;
   }
@@ -378,32 +380,74 @@ function buildSignatureBlock(sig: string, hasBody: boolean): string {
   return gap + sig;
 }
 
+// Every signature of the From account; the composer starts on the
+// default one and the Signature picker swaps between them.
+const accountSignatures = ref<AccountSignature[]>([]);
+const selectedSignatureId = ref<string>("");
+// Whether the current text block may be swapped (false for resumed drafts,
+// which already carry the signature they were saved with).
+let signatureInsertsText = true;
+
+async function loadAccountSignatures(accountId: string): Promise<AccountSignature[]> {
+  try {
+    return await api.listAccountSignatures(accountId);
+  } catch {
+    // Older backends only know the single per-account signature.
+    const config = await api.getAccountConfig(accountId);
+    const body = config.signature || "";
+    return body.trim()
+      ? [{ id: "legacy", name: t("Signature"), body, is_default: true }]
+      : [];
+  }
+}
+
+function setSignatureBody(newSig: string, resetBaseline: boolean) {
+  const isHtml = isHtmlSignature(newSig);
+  signatureHtml.value = isHtml ? newSig : "";
+  if (!signatureInsertsText) return;
+  const oldBlock = signatureSuffix.value;
+  const queryBody = (route.query.body as string) || "";
+  const hasBody = queryBody.length > 0;
+  const newBlock = isHtml ? "" : buildSignatureBlock(newSig, hasBody);
+  const bodyWasBaseline = bodyText.value === baselineBody.value;
+
+  if (oldBlock && bodyText.value.endsWith(oldBlock)) {
+    bodyText.value = bodyText.value.slice(0, -oldBlock.length) + newBlock;
+  } else if (newBlock) {
+    bodyText.value += newBlock;
+  }
+
+  currentSignature.value = newSig;
+  signatureSuffix.value = newBlock;
+  // A signature alone doesn't make the message dirty.
+  if (resetBaseline || bodyWasBaseline) baselineBody.value = bodyText.value;
+}
+
+/** Switch the signature from the picker; "" removes it. */
+function selectSignature(id: string) {
+  selectedSignatureId.value = id;
+  const signature = accountSignatures.value.find((s) => s.id === id);
+  setSignatureBody(signature?.body ?? "", false);
+}
+
 async function applySignature(accountId: string, insertText = true) {
   try {
-    const config = await api.getAccountConfig(accountId);
-    const newSig = config.signature || "";
-    const isHtml = isHtmlSignature(newSig);
-    signatureHtml.value = isHtml ? newSig : "";
-    if (!insertText) return;
-    const oldBlock = signatureSuffix.value;
-    const queryBody = (route.query.body as string) || "";
-    const hasBody = queryBody.length > 0;
-    const newBlock = isHtml ? "" : buildSignatureBlock(newSig, hasBody);
-
-    if (oldBlock && bodyText.value.endsWith(oldBlock)) {
-      bodyText.value = bodyText.value.slice(0, -oldBlock.length) + newBlock;
-    } else if (newBlock) {
-      bodyText.value += newBlock;
-    }
-
-    currentSignature.value = newSig;
-    signatureSuffix.value = newBlock;
-    // Update baseline so signature alone doesn't count as dirty
-    baselineBody.value = bodyText.value;
+    const signatures = await loadAccountSignatures(accountId);
+    if (selectedAccountId.value !== accountId) return;
+    accountSignatures.value = signatures;
+    const preferred = signatures.find((s) => s.is_default) ?? signatures[0];
+    selectedSignatureId.value = preferred?.id ?? "";
+    signatureInsertsText = insertText;
+    setSignatureBody(preferred?.body ?? "", true);
   } catch (e) {
     console.error("Failed to load signature:", e);
   }
 }
+
+const signatureOptions = computed(() => [
+  { value: "", label: t("No signature") },
+  ...accountSignatures.value.map((s) => ({ value: s.id, label: s.name })),
+]);
 
 // Apply signature on initial account selection and when switching
 // accounts. A resumed draft only picks up the HTML signature — it already
@@ -545,12 +589,12 @@ onMounted(() => {
       // exception is also stay-open so a dialog failure cannot silently
       // drop the user's work.
       const save = await tauriAsk(
-        "You have unsaved changes. Save this message as a draft?",
+        t("You have unsaved changes. Save this message as a draft?"),
         {
-          title: "Unsaved Changes",
+          title: t("Unsaved Changes"),
           kind: "warning",
-          okLabel: "Save Draft",
-          cancelLabel: "No",
+          okLabel: t("Save Draft"),
+          cancelLabel: t("No"),
         },
       );
 
@@ -564,12 +608,12 @@ onMounted(() => {
       }
 
       const discard = await tauriAsk(
-        "Discard your changes and close without saving?",
+        t("Discard your changes and close without saving?"),
         {
-          title: "Discard Changes",
+          title: t("Discard Changes"),
           kind: "warning",
-          okLabel: "Discard",
-          cancelLabel: "Cancel",
+          okLabel: t("Discard"),
+          cancelLabel: t("Cancel"),
         },
       );
       if (discard) {
@@ -579,7 +623,7 @@ onMounted(() => {
     } catch (e) {
       console.error("Close dialog error:", e);
       error.value =
-        "Could not show the save prompt. Use the Save button or try closing again.";
+        t("Could not show the save prompt. Use the Save button or try closing again.");
     }
   });
 });
@@ -636,7 +680,7 @@ async function refreshRecipientStatuses(
   } catch (e) {
     if (seq !== recipientCheckSeq) return { ok: false, error: null };
     const invalidRecipient = backendRecipientIssue(e, parsed.recipients);
-    if (invalidRecipient) return { ok: false, error: "Invalid email address.", invalidRecipient };
+    if (invalidRecipient) return { ok: false, error: t("Invalid email address."), invalidRecipient };
     console.error("PGP recipient check failed:", e);
     return { ok: false, error: e instanceof Error ? e.message : typeof e === "string" ? e : null };
   }
@@ -717,7 +761,7 @@ async function saveDraft(): Promise<boolean> {
     api.triggerSync(accountId).catch(() => {});
     return true;
   } catch (e) {
-    error.value = `Draft save failed: ${e}`;
+    error.value = t("Draft save failed: {error}", { error: String(e) });
     return false;
   } finally {
     savingDraft.value = false;
@@ -761,8 +805,12 @@ function readRecipientFields(): ParsedRecipientFields {
 }
 
 function showRecipientError(field: RecipientField, issue: RecipientParseError) {
-  const labels = { to: "To", cc: "Cc", bcc: "Bcc" };
-  error.value = `${labels[field]} recipient ${issue.index}: ${issue.message}`;
+  const labels = { to: t("To"), cc: t("Cc"), bcc: t("Bcc") };
+  error.value = t("{field} recipient {index}: {message}", {
+    field: labels[field],
+    index: issue.index,
+    message: issue.message,
+  });
   recipientErrorField.value = field;
   if (field === "cc") showCc.value = true;
   if (field === "bcc") showBcc.value = true;
@@ -789,7 +837,7 @@ function recipientsStillMatch(snapshot: string): boolean {
   if (composeDisposed) return false;
   if (snapshot === recipientSnapshot()) return true;
   if (validateRecipientFields()) {
-    error.value = "Sender, recipients, or encryption setting changed. Review them and send again.";
+    error.value = t("Sender, recipients, or encryption setting changed. Review them and send again.");
   }
   return false;
 }
@@ -803,14 +851,14 @@ async function send() {
   if (composeDisposed || sending.value) return;
   const accountId = selectedAccountId.value;
   if (!accountId) {
-    error.value = "No account selected";
+    error.value = t("No account selected");
     return;
   }
 
   const recipients = validateRecipientFields();
   if (!recipients) return;
   if (recipients.to.length === 0) {
-    error.value = "At least one recipient is required";
+    error.value = t("At least one recipient is required");
     return;
   }
 
@@ -824,18 +872,18 @@ async function send() {
       let sendAnyway: boolean;
       try {
         sendAnyway = await tauriAsk(
-          "Your message mentions an attachment, but no files are attached. Send anyway?",
+          t("Your message mentions an attachment, but no files are attached. Send anyway?"),
           {
-            title: "No Attachments",
+            title: t("No Attachments"),
             kind: "warning",
-            okLabel: "Send Anyway",
-            cancelLabel: "Cancel",
+            okLabel: t("Send Anyway"),
+            cancelLabel: t("Cancel"),
           },
         );
       } catch (e) {
         console.error("No-attachment dialog error:", e);
         error.value =
-          "Could not show the attachment warning. Please attach files or remove the mention and try again.";
+          t("Could not show the attachment warning. Please attach files or remove the mention and try again.");
         return;
       }
       if (!sendAnyway) return;
@@ -853,19 +901,19 @@ async function send() {
         if (check.invalidRecipient) {
           showRecipientError(check.invalidRecipient.field, {
             index: check.invalidRecipient.index,
-            message: check.error ?? "Invalid email address.",
+            message: check.error ?? t("Invalid email address."),
           });
         } else {
-          error.value = check.error ?? "Could not verify recipient encryption keys. Please try again.";
+          error.value = check.error ?? t("Could not verify recipient encryption keys. Please try again.");
         }
         return;
       }
       const missing = check.statuses.filter((status) => !status.hasKey);
       if (missing.length > 0) {
         error.value =
-          `Cannot encrypt — no public key in keystore for: ` +
-          missing.map((s) => s.email).join(", ") +
-          `. Fetch keys via WKD or import them, then try again.`;
+          t("Cannot encrypt — no public key in keystore for: {emails}. Fetch keys via WKD or import them, then try again.", {
+            emails: missing.map((s) => s.email).join(", "),
+          });
         return;
       }
     }
@@ -920,75 +968,75 @@ async function send() {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
         </svg>
-        {{ sending ? "Sending..." : "Send" }}
+        {{ sending ? t("Sending...") : t("Send") }}
       </button>
       <button
         class="toolbar-btn"
         :class="{ active: pgpSign }"
         data-testid="compose-pgp-sign"
-        title="Sign with OpenPGP"
+        :title="t('Sign with OpenPGP')"
         @click="pgpSign = !pgpSign"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
         </svg>
-        Sign
+        {{ t("Sign") }}
       </button>
       <button
         class="toolbar-btn"
         :class="{ active: pgpEncrypt, warn: pgpEncrypt && missingRecipientCount > 0 }"
         data-testid="compose-pgp-encrypt"
-        title="Encrypt with OpenPGP"
+        :title="t('Encrypt with OpenPGP')"
         @click="pgpEncrypt = !pgpEncrypt"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
         </svg>
-        Encrypt
+        {{ t("Encrypt") }}
         <span
           v-if="pgpEncrypt && missingRecipientCount > 0"
           class="pgp-missing-badge"
-          :title="`Missing keys: ${recipientStatuses.filter(s => !s.hasKey).map(s => s.email).join(', ')}`"
+          :title="t('Missing keys: {emails}', { emails: recipientStatuses.filter(s => !s.hasKey).map(s => s.email).join(', ') })"
         >{{ missingRecipientCount }}</span>
       </button>
       <button
         class="toolbar-btn"
         :class="{ active: markdownMode }"
         data-testid="compose-markdown"
-        title="Compose in Markdown — sends both plain text and rendered HTML"
+        :title="t('Compose in Markdown — sends both plain text and rendered HTML')"
         :aria-pressed="markdownMode"
         @click="markdownMode = !markdownMode"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="2" y="5" width="20" height="14" rx="2" /><path d="M6 15V9l3 3 3-3v6" /><path d="M17 9v6M14.5 12.5 17 15l2.5-2.5" />
         </svg>
-        Markdown
+        {{ t("Markdown") }}
       </button>
       <button class="toolbar-btn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
         </svg>
-        Spelling
+        {{ t("Spelling") }}
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
       </button>
       <button class="toolbar-btn" :disabled="savingDraft" data-testid="compose-save-draft" @click="saveDraft">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" />
         </svg>
-        {{ savingDraft ? "Saving..." : "Save" }}
+        {{ savingDraft ? t("Saving...") : t("Save") }}
       </button>
       <button class="toolbar-btn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
         </svg>
-        Contacts
+        {{ t("Contacts") }}
       </button>
       <div class="toolbar-spacer"></div>
       <button class="toolbar-btn" data-testid="compose-attach" @click="addAttachment">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
         </svg>
-        Attach
+        {{ t("Attach") }}
       </button>
     </div>
 
@@ -1000,7 +1048,7 @@ async function send() {
       class="compose-draft-banner"
       data-testid="draft-loading"
     >
-      Loading draft…
+      {{ t("Loading draft…") }}
     </div>
     <div
       v-else-if="draftDecryptError"
@@ -1008,7 +1056,7 @@ async function send() {
       data-testid="draft-decrypt-error"
     >
       <span>
-        Encrypted draft — re-attach card or unlock key to continue editing.
+        {{ t("Encrypted draft — re-attach card or unlock key to continue editing.") }}
       </span>
       <button
         type="button"
@@ -1016,7 +1064,7 @@ async function send() {
         data-testid="draft-decrypt-retry"
         @click="retryLoadDraft"
       >
-        Retry
+        {{ t("Retry") }}
       </button>
     </div>
 
@@ -1027,15 +1075,14 @@ async function send() {
       class="compose-draft-banner compose-draft-banner-warn"
       data-testid="draft-plaintext-notice"
     >
-      Draft saved in plaintext — encrypted drafts need an OpenPGP key for
-      this account, and aren't supported on Microsoft accounts yet.
+      {{ t("Draft saved in plaintext — encrypted drafts need an OpenPGP key for this account, and aren't supported on Microsoft accounts yet.") }}
     </div>
 
     <!-- Fields & Body -->
     <div class="compose-body-area">
       <div class="compose-fields">
         <div class="field-row">
-          <label class="field-label">From</label>
+          <label class="field-label">{{ t("From") }}</label>
           <span
             v-if="selectedAccountId"
             class="from-swatch"
@@ -1050,7 +1097,7 @@ async function send() {
           />
         </div>
         <div class="field-row addr-field-row">
-          <label class="field-label" for="compose-to">To</label>
+          <label class="field-label" for="compose-to">{{ t("To") }}</label>
           <div class="field-input-group">
             <div class="addr-input-wrap">
               <input
@@ -1078,16 +1125,16 @@ async function send() {
                 >
                   <span class="ac-name">{{ item.display }}</span>
                   <span class="ac-email">&lt;{{ item.email }}&gt;</span>
-                  <span class="ac-source">{{ item.source }}</span>
+                  <span class="ac-source">{{ t(item.source) }}</span>
                 </button>
               </div>
             </div>
-            <button v-if="!showCc" class="cc-btn" data-testid="compose-cc-toggle" @click="showCc = true">Cc</button>
-            <button v-if="!showBcc" class="cc-btn" data-testid="compose-bcc-toggle" @click="showBcc = true">Bcc</button>
+            <button v-if="!showCc" class="cc-btn" data-testid="compose-cc-toggle" @click="showCc = true">{{ t("Cc") }}</button>
+            <button v-if="!showBcc" class="cc-btn" data-testid="compose-bcc-toggle" @click="showBcc = true">{{ t("Bcc") }}</button>
           </div>
         </div>
         <div v-if="showCc" class="field-row addr-field-row">
-          <label class="field-label" for="compose-cc">Cc</label>
+          <label class="field-label" for="compose-cc">{{ t("Cc") }}</label>
           <div class="addr-input-wrap">
             <input
               id="compose-cc"
@@ -1114,13 +1161,13 @@ async function send() {
               >
                 <span class="ac-name">{{ item.display }}</span>
                 <span class="ac-email">&lt;{{ item.email }}&gt;</span>
-                <span class="ac-source">{{ item.source }}</span>
+                <span class="ac-source">{{ t(item.source) }}</span>
               </button>
             </div>
           </div>
         </div>
         <div v-if="showBcc" class="field-row addr-field-row">
-          <label class="field-label" for="compose-bcc">Bcc</label>
+          <label class="field-label" for="compose-bcc">{{ t("Bcc") }}</label>
           <div class="addr-input-wrap">
             <input
               id="compose-bcc"
@@ -1147,14 +1194,24 @@ async function send() {
               >
                 <span class="ac-name">{{ item.display }}</span>
                 <span class="ac-email">&lt;{{ item.email }}&gt;</span>
-                <span class="ac-source">{{ item.source }}</span>
+                <span class="ac-source">{{ t(item.source) }}</span>
               </button>
             </div>
           </div>
         </div>
         <div class="field-row">
-          <label class="field-label">Subject</label>
+          <label class="field-label">{{ t("Subject") }}</label>
           <input v-model="subject" type="text" class="field-input" data-testid="compose-subject" />
+        </div>
+        <div v-if="accountSignatures.length" class="field-row" data-testid="compose-signature-row">
+          <label class="field-label">{{ t("Signature") }}</label>
+          <Select
+            :model-value="selectedSignatureId"
+            :options="signatureOptions"
+            class="field-select"
+            testid="compose-signature-select"
+            @update:model-value="selectSignature(String($event))"
+          />
         </div>
       </div>
 
@@ -1176,7 +1233,7 @@ async function send() {
         class="compose-markdown-hint"
         data-testid="compose-markdown-hint"
       >
-        Markdown mode — sent as plain text and rendered HTML.
+        {{ t("Markdown mode — sent as plain text and rendered HTML.") }}
       </div>
 
       <!-- Attachment list -->
@@ -1185,7 +1242,7 @@ async function send() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
           </svg>
-          <span>{{ attachments.length }} attachment{{ attachments.length !== 1 ? 's' : '' }}</span>
+          <span>{{ tn(attachments.length, '{count} attachment', '{count} attachments') }}</span>
         </div>
         <div class="attachment-list">
           <div v-for="(att, idx) in attachments" :key="att.token" class="attachment-chip">
@@ -1193,7 +1250,7 @@ async function send() {
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
             </svg>
             <span class="attachment-name">{{ att.name }}</span>
-            <button class="attachment-remove" title="Remove" @click="removeAttachment(idx)">
+            <button class="attachment-remove" :title="t('Remove')" @click="removeAttachment(idx)">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
               </svg>

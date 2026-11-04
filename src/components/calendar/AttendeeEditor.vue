@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { t } from "@/i18n";
 import * as api from "@/lib/tauri";
 import { parseEmails } from "@/lib/contact-json";
 
@@ -128,12 +129,12 @@ function onKeydown(event: KeyboardEvent) {
       <input
         v-model="newEmail"
         type="email"
-        placeholder="Add attendee email or name..."
+        :placeholder="t('Add attendee email or name...')"
         data-testid="attendee-input"
         @input="onInput"
         @keydown="onKeydown"
       />
-      <button class="add-btn" data-testid="attendee-add-btn" @click="addAttendee()">Add</button>
+      <button class="add-btn" data-testid="attendee-add-btn" @click="addAttendee()">{{ t('Add') }}</button>
     </div>
     <ul
       v-if="acVisible && suggestions.length > 0"

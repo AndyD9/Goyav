@@ -19,3 +19,4 @@ pub mod pool;
 pub mod schema;
 pub mod service_bindings;
 pub mod settings;
+pub mod signatures;

@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { ref, computed, watch, onScopeDispose } from "vue";
+import { ref, computed, watch, nextTick, onScopeDispose } from "vue";
 import { listen } from "@tauri-apps/api/event";
 import type {
   MessageSummary,
@@ -9,6 +9,7 @@ import type {
   SearchHit,
   SearchQuery,
   SearchFields,
+  LocalSearchHit,
 } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { useAccountsStore } from "./accounts";
@@ -16,6 +17,23 @@ import { useFoldersStore } from "./folders";
 import { useUiStore } from "./ui";
 
 export type SortColumn = "subject" | "from" | "date" | "flagged";
+
+/** Where the toolbar search looks: the open folder, every folder of the
+ *  active account, or every folder of every account. */
+export type SearchScope = "folder" | "account" | "all";
+const SEARCH_SCOPES: readonly SearchScope[] = ["folder", "account", "all"];
+const SEARCH_SCOPE_KEY = "goyav-search-scope";
+const SEARCH_RESULT_LIMIT = 300;
+
+function loadSearchScope(): SearchScope {
+  try {
+    const stored = localStorage.getItem(SEARCH_SCOPE_KEY) as SearchScope | null;
+    if (stored && SEARCH_SCOPES.includes(stored)) return stored;
+  } catch {
+    // Fall back to the default scope.
+  }
+  return "account";
+}
 
 export const useMessagesStore = defineStore("messages", () => {
   const messages = ref<MessageSummary[]>([]);
@@ -180,12 +198,15 @@ export const useMessagesStore = defineStore("messages", () => {
 
   async function runServerSearch() {
     const accountId = accountsStore.activeAccountId;
-    const text = quickFilterText.value.trim();
+    const fromToolbar = globalSearchActive.value;
+    const text = (fromToolbar ? searchText.value : quickFilterText.value).trim();
     if (!accountId || !text) return;
 
     const query: SearchQuery = {
       text,
-      fields: fieldsForServerSearch(),
+      fields: fromToolbar
+        ? { subject: true, from: true, to: true, body: true }
+        : fieldsForServerSearch(),
       has_attachment: quickFilter.value.has_attachment ? true : undefined,
     };
 
@@ -206,6 +227,143 @@ export const useMessagesStore = defineStore("messages", () => {
       if (token === serverSearchToken) {
         serverSearchLoading.value = false;
       }
+    }
+  }
+
+  // Toolbar search. The "folder" scope drives the quick filter of the open
+  // folder; the other scopes search every folder through the local cache
+  // and show their own result list.
+  const searchText = ref("");
+  const searchScope = ref<SearchScope>(loadSearchScope());
+  const searchResults = ref<LocalSearchHit[]>([]);
+  const searchTotal = ref(0);
+  const searchLoading = ref(false);
+  const searchError = ref<string | null>(null);
+  // Whether the folder quick filter text was set by the toolbar box, so
+  // switching scope or clearing the box only undoes its own filter.
+  let folderFilterFromSearch = false;
+  let globalSearchToken = 0;
+  let globalSearchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const globalSearchActive = computed(
+    () => searchScope.value !== "folder" && searchText.value.trim() !== "",
+  );
+
+  function resetSearchResults() {
+    globalSearchToken++;
+    searchResults.value = [];
+    searchTotal.value = 0;
+    searchLoading.value = false;
+    searchError.value = null;
+  }
+
+  function dropFolderFilterFromSearch() {
+    if (!folderFilterFromSearch) return;
+    folderFilterFromSearch = false;
+    if (quickFilterText.value) {
+      quickFilterText.value = "";
+      void fetchMessages(true);
+    }
+  }
+
+  async function runSearch() {
+    if (globalSearchTimer) {
+      clearTimeout(globalSearchTimer);
+      globalSearchTimer = null;
+    }
+    const text = searchText.value.trim();
+
+    if (searchScope.value === "folder") {
+      resetSearchResults();
+      if (quickFilterText.value !== text) {
+        quickFilterText.value = text;
+        folderFilterFromSearch = text !== "";
+        clearServerSearch();
+        await fetchMessages(true);
+      }
+      return;
+    }
+
+    dropFolderFilterFromSearch();
+    if (!text) {
+      resetSearchResults();
+      return;
+    }
+    const activeId = accountsStore.activeAccountId;
+    if (searchScope.value === "account" && !activeId) {
+      resetSearchResults();
+      return;
+    }
+    const accountIds = searchScope.value === "account" ? [activeId as string] : null;
+
+    const token = ++globalSearchToken;
+    searchLoading.value = true;
+    searchError.value = null;
+    try {
+      const page = await api.searchMessagesLocal(
+        accountIds,
+        { text },
+        SEARCH_RESULT_LIMIT,
+      );
+      if (token !== globalSearchToken) return;
+      searchResults.value = page.hits;
+      searchTotal.value = page.total;
+    } catch (error) {
+      if (token !== globalSearchToken) return;
+      console.error("Search failed:", error);
+      searchError.value = error instanceof Error ? error.message : String(error);
+      searchResults.value = [];
+      searchTotal.value = 0;
+    } finally {
+      if (token === globalSearchToken) searchLoading.value = false;
+    }
+  }
+
+  /** Debounced search as the user types in the toolbar box. */
+  function setSearchText(text: string) {
+    searchText.value = text;
+    clearServerSearch();
+    if (globalSearchTimer) clearTimeout(globalSearchTimer);
+    globalSearchTimer = setTimeout(() => {
+      globalSearchTimer = null;
+      void runSearch();
+    }, 250);
+  }
+
+  function setSearchScope(scope: SearchScope) {
+    if (searchScope.value === scope) return;
+    searchScope.value = scope;
+    try {
+      localStorage.setItem(SEARCH_SCOPE_KEY, scope);
+    } catch {
+      // The scope still applies for this session.
+    }
+    clearServerSearch();
+    void runSearch();
+  }
+
+  function clearSearch() {
+    if (globalSearchTimer) clearTimeout(globalSearchTimer);
+    globalSearchTimer = null;
+    searchText.value = "";
+    resetSearchResults();
+    clearServerSearch();
+    dropFolderFilterFromSearch();
+  }
+
+  /** Opens a result: switch to its account and folder, then select it. */
+  async function openSearchHit(hit: LocalSearchHit) {
+    if (accountsStore.activeAccountId !== hit.account_id) {
+      accountsStore.activeAccountId = hit.account_id;
+    }
+    if (foldersStore.activeFolderPath !== hit.folder_path) {
+      foldersStore.activeFolderPath = hit.folder_path;
+    }
+    // Let the account/folder watcher reset the reader before loading.
+    await nextTick();
+    selectMessage(hit.id, { shiftKey: false, ctrlKey: false, metaKey: false });
+    if (!hit.flags.includes("seen")) {
+      hit.flags = [...hit.flags, "seen"];
     }
   }
 
@@ -688,8 +846,20 @@ export const useMessagesStore = defineStore("messages", () => {
       activeMessageId.value = null;
       selectedIds.value = [];
       lastClickedId.value = null;
-      clearServerSearch();
+      if (!globalSearchActive.value) clearServerSearch();
       void fetchMessages();
+    },
+  );
+
+  // An account-scoped search follows the account picked in the folder pane.
+  watch(
+    () => accountsStore.activeAccountId,
+    (id, previous) => {
+      if (!previous || id === previous) return;
+      if (globalSearchActive.value && searchScope.value === "account") {
+        clearServerSearch();
+        void runSearch();
+      }
     },
   );
 
@@ -708,6 +878,7 @@ export const useMessagesStore = defineStore("messages", () => {
     if (messagesRefreshTimer) clearTimeout(messagesRefreshTimer);
     messagesRefreshTimer = setTimeout(() => {
       void fetchMessages();
+      if (globalSearchActive.value) void runSearch();
     }, 200);
   })
     .then((unlisten) => {
@@ -802,5 +973,17 @@ export const useMessagesStore = defineStore("messages", () => {
     runServerSearch,
     clearServerSearch,
     openServerHit,
+    searchText,
+    searchScope,
+    searchResults,
+    searchTotal,
+    searchLoading,
+    searchError,
+    globalSearchActive,
+    setSearchText,
+    setSearchScope,
+    runSearch,
+    clearSearch,
+    openSearchHit,
   };
 });

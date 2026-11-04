@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useMessagesStore } from "@/stores/messages";
 import { useAccountsStore } from "@/stores/accounts";
 import { useFoldersStore } from "@/stores/folders";
 import { openComposeWindow } from "@/lib/compose-window";
 import * as api from "@/lib/tauri";
+import { t } from "@/i18n";
 
 const messagesStore = useMessagesStore();
 const accountsStore = useAccountsStore();
@@ -18,6 +19,36 @@ const isJunkFolder = computed(() => {
 });
 
 const hasSelection = computed(() => messagesStore.selectedIds.length > 0);
+
+const searchInput = ref<HTMLInputElement | null>(null);
+
+function onSearchInput(event: Event) {
+  messagesStore.setSearchText((event.target as HTMLInputElement).value);
+}
+
+function onSearchKeydown(event: KeyboardEvent) {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    void messagesStore.runSearch();
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    messagesStore.clearSearch();
+    searchInput.value?.blur();
+  }
+}
+
+// Cmd/Ctrl+F focuses the search box from anywhere in the mail view.
+function onWindowKeydown(event: KeyboardEvent) {
+  if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "f") {
+    if (!searchInput.value) return;
+    event.preventDefault();
+    searchInput.value.focus();
+    searchInput.value.select();
+  }
+}
+
+onMounted(() => window.addEventListener("keydown", onWindowKeydown));
+onUnmounted(() => window.removeEventListener("keydown", onWindowKeydown));
 
 async function markNotSpam() {
   const accountId = accountsStore.activeAccountId;
@@ -38,17 +69,17 @@ async function markNotSpam() {
 
 <template>
   <div class="toolbar">
-    <button class="compose-btn" title="Compose new email" data-testid="btn-compose" @click="openComposeWindow({ accountId: accountsStore.activeAccountId ?? undefined })">
+    <button class="compose-btn" :title="t('Compose new email')" data-testid="btn-compose" @click="openComposeWindow({ accountId: accountsStore.activeAccountId ?? undefined })">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
       </svg>
-      Compose
+      {{ t("Compose") }}
     </button>
 
     <button
       v-if="isJunkFolder && hasSelection"
       class="not-spam-btn"
-      title="Move to Inbox"
+      :title="t('Move to Inbox')"
       data-testid="btn-not-spam"
       @click="markNotSpam"
     >
@@ -56,12 +87,37 @@ async function markNotSpam() {
         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
         <polyline points="22 4 12 14.01 9 11.01" />
       </svg>
-      Not Spam
+      {{ t("Not Spam") }}
     </button>
 
     <span v-if="messagesStore.selectedIds.length > 1" class="selection-count">
-      {{ messagesStore.selectedIds.length }} selected
+      {{ t("{count} selected", { count: messagesStore.selectedIds.length }) }}
     </span>
+
+    <div class="search-box" :class="{ filled: messagesStore.searchText }">
+      <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+      <input
+        ref="searchInput"
+        type="search"
+        class="search-input"
+        data-testid="mail-search-input"
+        :value="messagesStore.searchText"
+        :placeholder="t('Search mail')"
+        :aria-label="t('Search mail')"
+        @input="onSearchInput"
+        @keydown="onSearchKeydown"
+      />
+      <button
+        v-if="messagesStore.searchText"
+        class="search-clear"
+        data-testid="mail-search-clear"
+        :aria-label="t('Clear search')"
+        :title="t('Clear search')"
+        @click="messagesStore.clearSearch()"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -113,6 +169,67 @@ async function markNotSpam() {
 .not-spam-btn:hover {
   background: var(--color-status-dot);
   color: white;
+}
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  flex: 0 1 260px;
+  min-width: 120px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 28px 0 30px;
+  border: 1px solid var(--color-border);
+  border-radius: 15px;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+  font-size: 12.5px;
+  font-family: var(--font-sans);
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.search-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.search-input:focus,
+.search-box.filled .search-input {
+  outline: none;
+  border-color: var(--color-accent);
+  background: var(--color-bg);
+}
+
+.search-clear {
+  position: absolute;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--color-text-muted);
+}
+
+.search-clear:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
 }
 
 .selection-count {

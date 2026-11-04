@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "@/i18n";
 /// First step of "Add Account": pick a type. Replaces the cramped
 /// in-modal tab row with a dialog that lists every supported
 /// account type (currently eleven — Gmail / O365 / Fastmail / IMAP /
@@ -28,26 +29,26 @@ const availableAccountTypes = computed(() =>
 <template>
   <ModalShell
     :open="open"
-    title="Add Account"
+    :title="t('Add Account')"
     modal-class="modal-picker"
     data-testid="account-type-picker"
     @close="emit('cancel')"
   >
-    <p class="picker-help">Pick the kind of account you want to add. You can add more later.</p>
+    <p class="picker-help">{{ t("Pick the kind of account you want to add. You can add more later.") }}</p>
     <div class="picker-grid">
       <button
-        v-for="t in availableAccountTypes"
-        :key="t"
+        v-for="type in availableAccountTypes"
+        :key="type"
         class="picker-card"
-        :data-testid="`picker-${t}`"
-        @click="emit('pick', t)"
+        :data-testid="`picker-${type}`"
+        @click="emit('pick', type)"
       >
-        <span class="picker-card-title">{{ accountTypeLabelLong(t) }}</span>
-        <span class="picker-card-desc">{{ accountTypeDescription(t) }}</span>
+        <span class="picker-card-title">{{ accountTypeLabelLong(type) }}</span>
+        <span class="picker-card-desc">{{ accountTypeDescription(type) }}</span>
       </button>
     </div>
     <template #footer>
-      <button class="btn-secondary" @click="emit('cancel')">Cancel</button>
+      <button class="btn-secondary" @click="emit('cancel')">{{ t("Cancel") }}</button>
     </template>
   </ModalShell>
 </template>

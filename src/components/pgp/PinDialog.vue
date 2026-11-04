@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, nextTick } from "vue";
 import type { PgpSecretPrompt } from "@/stores/pgp-prompts";
 import { usePgpPromptsStore } from "@/stores/pgp-prompts";
+import { t } from "@/i18n";
 
 const props = defineProps<{ prompt: PgpSecretPrompt }>();
 const prompts = usePgpPromptsStore();
@@ -31,7 +32,7 @@ onUnmounted(() => {
 async function submit() {
   if (busy.value) return;
   if (pin.value.length < 4) {
-    errorMsg.value = "PIN must be at least 4 digits.";
+    errorMsg.value = t("PIN must be at least 4 digits.");
     return;
   }
   errorMsg.value = null;
@@ -74,11 +75,11 @@ function onKeydown(e: KeyboardEvent) {
 <template>
   <div class="overlay" @click.self="cancel">
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pgp-pin-title">
-      <h3 id="pgp-pin-title">Smartcard PIN</h3>
+      <h3 id="pgp-pin-title">{{ t("Smartcard PIN") }}</h3>
       <p class="reason">{{ prompt.reason }}</p>
       <code class="target">{{ prompt.target }}</code>
       <label class="field">
-        <span>User PIN</span>
+        <span>{{ t("User PIN") }}</span>
         <input
           ref="inputEl"
           v-model="pin"
@@ -94,14 +95,14 @@ function onKeydown(e: KeyboardEvent) {
       <p v-if="errorMsg" class="error">{{ errorMsg }}</p>
       <div class="actions">
         <span class="spacer"></span>
-        <button class="btn" :disabled="busy" @click="cancel">Cancel</button>
+        <button class="btn" :disabled="busy" @click="cancel">{{ t("Cancel") }}</button>
         <button
           class="btn btn-primary"
           :disabled="busy"
           data-testid="pgp-pin-submit"
           @click="submit"
         >
-          Continue
+          {{ t("Continue") }}
         </button>
       </div>
     </div>

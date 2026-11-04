@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { t, tn } from "@/i18n";
 import { useAccountsStore } from "@/stores/accounts";
 import type { Contact, ContactBook } from "@/lib/types";
 import * as api from "@/lib/tauri";
@@ -91,11 +92,11 @@ function mobileContactInitial(c: Contact): string {
   <div class="contacts-view mobile">
     <MobileAppBar
       large
-      title="Contacts"
-      :subtitle="`All accounts · ${allContactsFlat.length} people`"
+      :title="t('Contacts')"
+      :subtitle="`${t('All accounts')} · ${tn(allContactsFlat.length, '{count} person', '{count} people')}`"
     >
       <template #trailing>
-        <MobileIconButton aria-label="New contact" @click="emit('newContact')">
+        <MobileIconButton :aria-label="t('New contact')" @click="emit('newContact')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
@@ -109,7 +110,7 @@ function mobileContactInitial(c: Contact): string {
         <circle cx="11" cy="11" r="8" />
         <line x1="21" y1="21" x2="16.65" y2="16.65" />
       </svg>
-      <input v-model="search" type="search" placeholder="Search contacts" />
+      <input v-model="search" type="search" :placeholder="t('Search contacts')" />
     </div>
 
     <div class="mobile-chips" role="tablist">
@@ -119,7 +120,7 @@ function mobileContactInitial(c: Contact): string {
         role="tab"
         :aria-selected="mobileAccountFilter === 'all'"
         @click="mobileAccountFilter = 'all'"
-      >All</button>
+      >{{ t('All') }}</button>
       <button
         v-for="account in accountsStore.accounts"
         :key="account.id"
@@ -168,11 +169,11 @@ function mobileContactInitial(c: Contact): string {
           </button>
         </template>
         <div v-if="filteredMobileContacts.length === 0" class="empty-text">
-          {{ search ? "No matches" : "No contacts yet" }}
+          {{ search ? t("No matches") : t("No contacts yet") }}
         </div>
       </div>
 
-      <nav class="index-rail" aria-label="Jump to letter">
+      <nav class="index-rail" :aria-label="t('Jump to letter')">
         <a
           v-for="letter in indexRailLetters"
           :key="letter"

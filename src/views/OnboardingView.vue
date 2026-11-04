@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "@/i18n";
 import { useRouter } from "vue-router";
 import logoUrl from "@/assets/goyav-logo.png";
 
@@ -67,10 +68,9 @@ function skipForNow() {
       <img :src="logoUrl" alt="" class="brand-tile" />
       <span class="brand-name">Goyav</span>
     </div>
-    <h1 class="hero">Your mail, your calendar, on your device.</h1>
+    <h1 class="hero">{{ t("Your mail, your calendar, on your device.") }}</h1>
     <p class="lede">
-      Pick a provider to sign in. Goyav stores everything locally — nothing
-      leaves your machine unless you send it.
+      {{ t("Pick a provider to sign in. Goyav stores everything locally — nothing leaves your machine unless you send it.") }}
     </p>
 
     <ul class="provider-list">
@@ -89,7 +89,7 @@ function skipForNow() {
           </span>
           <span class="provider-text">
             <span class="provider-name">{{ p.name }}</span>
-            <span class="provider-sub">{{ p.sub }}</span>
+            <span class="provider-sub">{{ t(p.sub) }}</span>
           </span>
           <svg
             class="chevron"
@@ -107,7 +107,7 @@ function skipForNow() {
     </ul>
 
     <button class="skip-link" @click="skipForNow" data-testid="onboarding-skip">
-      Skip and add an account later
+      {{ t("Skip and add an account later") }}
     </button>
   </div>
 </template>

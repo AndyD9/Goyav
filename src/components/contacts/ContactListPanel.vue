@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { t } from "@/i18n";
 import type { Contact, ContactBook } from "@/lib/types";
 import { acctColor } from "@/lib/account-colors";
 import { parseFirstEmail } from "@/lib/contact-json";
@@ -67,7 +68,7 @@ function startMerge() {
   <div class="contact-list-panel">
     <div class="search-bar">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-      <input v-model="search" type="text" placeholder="Search contacts..." data-testid="contacts-search" />
+      <input v-model="search" type="text" :placeholder="t('Search contacts...')" data-testid="contacts-search" />
     </div>
     <div
       v-if="selectedIds.length >= 2"
@@ -75,7 +76,7 @@ function startMerge() {
       data-testid="merge-toolbar"
     >
       <span class="merge-toolbar-text">
-        {{ selectedIds.length }} selected{{
+        {{ t("{count} selected", { count: selectedIds.length }) }}{{
           selectedContactNames.length >= 2
             ? `: ${selectedContactNames[0]} + ${selectedContactNames[1]}`
             : ""
@@ -86,11 +87,11 @@ function startMerge() {
         data-testid="merge-toolbar-btn"
         :disabled="!canMergeSelected"
         :title="canMergeSelected
-          ? 'Merge the two selected contacts'
-          : 'Pick two contacts in the same address book to merge'"
+          ? t('Merge the two selected contacts')
+          : t('Pick two contacts in the same address book to merge')"
         @click="startMerge"
-      >Merge</button>
-      <button class="merge-toolbar-cancel" @click="emit('clearSelection')">Clear</button>
+      >{{ t('Merge') }}</button>
+      <button class="merge-toolbar-cancel" @click="emit('clearSelection')">{{ t('Clear') }}</button>
     </div>
     <div class="contact-list">
       <div
@@ -115,7 +116,7 @@ function startMerge() {
         </div>
       </div>
       <div v-if="filteredContacts.length === 0 && hasBook" class="empty-text">
-        {{ search ? "No matches" : "No contacts" }}
+        {{ search ? t("No matches") : t("No contacts") }}
       </div>
     </div>
   </div>

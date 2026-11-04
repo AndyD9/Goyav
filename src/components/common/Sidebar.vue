@@ -3,6 +3,7 @@ import { useRouter, useRoute } from "vue-router";
 import { useInvitesStore } from "@/stores/invites";
 import { useUiStore } from "@/stores/ui";
 import logoUrl from "@/assets/goyav-logo.png";
+import { t } from "@/i18n";
 
 const router = useRouter();
 const route = useRoute();
@@ -30,7 +31,7 @@ const topItems = [
         :key="item.name"
         class="sidebar-item"
         :class="{ active: route.name === item.name }"
-        :title="item.label"
+        :title="t(item.label)"
         :data-testid="`nav-${item.name}`"
         @click="router.push(item.path)"
       >
@@ -70,7 +71,7 @@ const topItems = [
       <button
         class="sidebar-item"
         :class="{ active: route.name === 'settings' }"
-        title="Settings"
+        :title="t('Settings')"
         data-testid="nav-settings"
         @click="router.push('/settings')"
       >

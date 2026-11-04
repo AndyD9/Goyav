@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "@/i18n";
 import { ref, watch } from "vue";
 import type { ParsedInvite } from "@/lib/types";
 import { useUiStore } from "@/stores/ui";
@@ -68,14 +69,14 @@ async function respond(response: string) {
         </svg>
       </div>
       <div class="invite-details">
-        <h4 class="invite-title">{{ invite.summary || "(No title)" }}</h4>
+        <h4 class="invite-title">{{ invite.summary || t("(No title)") }}</h4>
         <div class="invite-meta">
           <span>{{ formatDateTime(invite.dtstart) }}</span>
           <span v-if="!invite.all_day"> - {{ formatDateTime(invite.dtend) }}</span>
         </div>
         <div v-if="invite.location" class="invite-meta">{{ invite.location }}</div>
         <div v-if="invite.organizer_email" class="invite-meta">
-          Organized by {{ invite.organizer_name || invite.organizer_email }}
+          {{ t("Organized by {name}", { name: invite.organizer_name || invite.organizer_email }) }}
         </div>
       </div>
     </div>
@@ -85,14 +86,14 @@ async function respond(response: string) {
     </div>
 
     <div v-if="invite.attendees.length > 0" class="invite-attendees">
-      <span class="attendees-label">Attendees:</span>
+      <span class="attendees-label">{{ t("Attendees:") }}</span>
       {{ invite.attendees.map(a => a.name || a.email).join(", ") }}
     </div>
 
     <div v-if="error" class="invite-error">{{ error }}</div>
 
     <div v-if="responded" class="invite-responded">
-      You {{ responded === "accepted" ? "accepted" : responded === "tentative" ? "tentatively accepted" : "declined" }} this invite.
+      {{ responded === "accepted" ? t("You accepted this invite.") : responded === "tentative" ? t("You tentatively accepted this invite.") : t("You declined this invite.") }}
     </div>
 
     <div v-else class="invite-actions">
@@ -105,7 +106,7 @@ async function respond(response: string) {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="20 6 9 17 4 12" />
         </svg>
-        Accept
+        {{ t("Accept") }}
       </button>
       <button
         class="btn-maybe"
@@ -116,7 +117,7 @@ async function respond(response: string) {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
         </svg>
-        Maybe
+        {{ t("Maybe") }}
       </button>
       <button
         class="btn-decline"
@@ -127,7 +128,7 @@ async function respond(response: string) {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
         </svg>
-        Decline
+        {{ t("Decline") }}
       </button>
     </div>
   </div>

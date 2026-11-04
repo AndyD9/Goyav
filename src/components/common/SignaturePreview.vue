@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onUnmounted, ref, watch } from "vue";
+import { t } from "@/i18n";
 import * as api from "@/lib/tauri";
 import { htmlSignatureBody } from "@/lib/signature";
 
@@ -65,7 +66,7 @@ onUnmounted(() => {
   <iframe
     class="signature-preview"
     data-testid="signature-preview"
-    title="Signature preview"
+    :title="t('Signature preview')"
     sandbox="allow-same-origin"
     :srcdoc="srcdoc"
     :style="height ? { height: `${height}px` } : undefined"

@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useUiStore } from "@/stores/ui";
 import * as api from "@/lib/tauri";
 import { showToast } from "@/lib/toast";
+import { t } from "@/i18n";
 
 const uiStore = useUiStore();
 
@@ -46,9 +47,9 @@ async function onCopy() {
   if (!original.value) return;
   try {
     await navigator.clipboard.writeText(original.value);
-    showToast("Link copied to clipboard", "success");
+    showToast(t("Link copied to clipboard"), "success");
   } catch (error) {
-    showToast("Copy failed: " + String(error), "error");
+    showToast(t("Copy failed: {error}", { error: String(error) }), "error");
   }
   uiStore.closeLinkPopup();
 }
@@ -59,7 +60,7 @@ async function onOpen() {
     // The backend re-sanitizes the original before opening it.
     await api.openLink(original.value);
   } catch (error) {
-    showToast("Open failed: " + String(error), "error");
+    showToast(t("Open failed: {error}", { error: String(error) }), "error");
   }
   uiStore.closeLinkPopup();
 }
@@ -88,7 +89,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
     @click.self="onCancel"
   >
     <div class="link-popup" role="dialog" aria-labelledby="link-popup-title">
-      <div id="link-popup-title" class="link-popup-title">Open link</div>
+      <div id="link-popup-title" class="link-popup-title">{{ t("Open link") }}</div>
 
       <div class="link-popup-row">
         <span class="link-popup-label">URL</span>
@@ -96,24 +97,24 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
       </div>
 
       <div v-if="wasModified" class="link-popup-row clean">
-        <span class="link-popup-label">Open as</span>
+        <span class="link-popup-label">{{ t("Open as") }}</span>
         <span class="link-popup-url clean" data-testid="link-popup-cleaned">{{ cleaned }}</span>
       </div>
       <div v-else-if="cleaning" class="link-popup-row hint">
-        <span class="link-popup-hint">Checking for tracking parameters...</span>
+        <span class="link-popup-hint">{{ t("Checking for tracking parameters...") }}</span>
       </div>
       <div v-else-if="cleanError" class="link-popup-row hint">
         <span class="link-popup-hint error" data-testid="link-popup-clean-error">
-          Could not check for tracking parameters.
+          {{ t("Could not check for tracking parameters.") }}
         </span>
       </div>
       <div v-else class="link-popup-row hint">
-        <span class="link-popup-hint">No tracking parameters detected.</span>
+        <span class="link-popup-hint">{{ t("No tracking parameters detected.") }}</span>
       </div>
 
       <div v-if="!openableScheme" class="link-popup-row hint">
         <span class="link-popup-hint warn" data-testid="link-popup-unopenable">
-          chithi can only open http(s), mailto:, and tel: links. Copy this one and paste it where you need it.
+          {{ t("chithi can only open http(s), mailto:, and tel: links. Copy this one and paste it where you need it.") }}
         </span>
       </div>
 
@@ -123,21 +124,21 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
           class="link-popup-btn"
           data-testid="link-popup-cancel"
           @click="onCancel"
-        >Cancel</button>
+        >{{ t("Cancel") }}</button>
         <button
           type="button"
           class="link-popup-btn"
           data-testid="link-popup-copy"
           @click="onCopy"
-        >Copy</button>
+        >{{ t("Copy") }}</button>
         <button
           type="button"
           class="link-popup-btn primary"
           :disabled="!openableScheme"
-          :title="openableScheme ? '' : 'Only http(s) URLs can be opened from chithi'"
+          :title="openableScheme ? '' : t('Only http(s) URLs can be opened from chithi')"
           data-testid="link-popup-open"
           @click="onOpen"
-        >Open</button>
+        >{{ t("Open") }}</button>
       </div>
     </div>
   </div>

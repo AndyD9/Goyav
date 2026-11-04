@@ -1,3 +1,5 @@
+import { t } from "@/i18n";
+
 export interface RecipientParseError {
   /** One-based ordinal among nonempty recipients, not separator fields. */
   index: number;
@@ -28,7 +30,7 @@ type MailboxResult =
   | { ok: false; message: string };
 
 const controlCharacters = /[\u0000-\u001f\u007f-\u009f]/u;
-const missingSeparator = "Separate recipients with a comma or semicolon.";
+const missingSeparator = () => t("Separate recipients with a comma or semicolon.");
 
 function isRecipientPadding(char: string): boolean {
   return char === " " || char === "\t";
@@ -59,7 +61,7 @@ function tokenizeRecipients(input: string): RecipientSpan[] {
       end,
       parts,
       error: controlCharacters.test(input.slice(start, end))
-        ? "Control characters are not allowed in recipients."
+        ? t("Control characters are not allowed in recipients.")
         : error,
     });
     start = end + 1;
@@ -80,7 +82,7 @@ function tokenizeRecipients(input: string): RecipientSpan[] {
       if (angleDepth === 0) {
         finish(cursor);
       } else {
-        error ??= "Unexpected separator inside angle brackets.";
+        error ??= t("Unexpected separator inside angle brackets.");
       }
       cursor++;
       continue;
@@ -103,13 +105,13 @@ function tokenizeRecipients(input: string): RecipientSpan[] {
         } else if (inner === closing) {
           depth--;
         } else if (char === "[" && inner === "[") {
-          error ??= "Unexpected opening bracket inside a domain literal.";
+          error ??= t("Unexpected opening bracket inside a domain literal.");
         }
       }
 
       if (depth > 0) {
-        const label = char === "(" ? "comment" : char === "[" ? "domain literal" : "quote";
-        error ??= `Unclosed ${label}.`;
+        const label = char === "(" ? t("comment") : char === "[" ? t("domain literal") : t("quote");
+        error ??= t("Unclosed {label}.", { label });
       }
       if (char !== "(") {
         parts.push({
@@ -124,13 +126,13 @@ function tokenizeRecipients(input: string): RecipientSpan[] {
     if (char === "<" || char === ">" || char === "@" || char === ":") {
       if (char === "<") {
         if (seenAngle) {
-          error ??= `Extra angle bracket. ${missingSeparator}`;
+          error ??= t("Extra angle bracket. {hint}", { hint: missingSeparator() });
         }
         seenAngle = true;
         angleDepth++;
       } else if (char === ">") {
         if (angleDepth === 0) {
-          error ??= "Unexpected closing angle bracket.";
+          error ??= t("Unexpected closing angle bracket.");
         } else {
           angleDepth--;
         }
@@ -138,10 +140,10 @@ function tokenizeRecipients(input: string): RecipientSpan[] {
       parts.push({ kind: char, start: cursor, end: cursor + 1 });
     } else if (char === ")" || char === "]") {
       error ??= char === ")"
-        ? "Unexpected closing comment parenthesis."
-        : "Unexpected closing domain literal bracket.";
+        ? t("Unexpected closing comment parenthesis.")
+        : t("Unexpected closing domain literal bracket.");
     } else if (char === "\\") {
-      error ??= "Backslash escapes require quotes, a comment, or a domain literal.";
+      error ??= t("Backslash escapes require quotes, a comment, or a domain literal.");
     } else {
       const previous = parts[parts.length - 1];
       if (previous?.kind === "text" && previous.end === cursor) {
@@ -153,7 +155,7 @@ function tokenizeRecipients(input: string): RecipientSpan[] {
     cursor++;
   }
 
-  if (angleDepth > 0) error ??= "Unclosed angle bracket.";
+  if (angleDepth > 0) error ??= t("Unclosed angle bracket.");
   finish(input.length);
   return spans;
 }
@@ -162,12 +164,12 @@ function tokenizeRecipients(input: string): RecipientSpan[] {
 function readAddrSpec(input: string, parts: RecipientPart[]): MailboxResult {
   const atSigns = parts.filter((part) => part.kind === "@");
   if (atSigns.length === 0) {
-    return { ok: false, message: "Missing '@' in recipient address." };
+    return { ok: false, message: t("Missing '@' in recipient address.") };
   }
   if (atSigns.length > 1) {
     return {
       ok: false,
-      message: `Multiple unquoted '@' signs. ${missingSeparator}`,
+      message: t("Multiple unquoted '@' signs. {hint}", { hint: missingSeparator() }),
     };
   }
 
@@ -175,35 +177,35 @@ function readAddrSpec(input: string, parts: RecipientPart[]): MailboxResult {
   const local = parts.slice(0, at);
   const domain = parts.slice(at + 1);
   if (local.length === 0) {
-    return { ok: false, message: "Missing local part before '@'." };
+    return { ok: false, message: t("Missing local part before '@'.") };
   }
   if (domain.length === 0) {
-    return { ok: false, message: "Missing domain after '@'." };
+    return { ok: false, message: t("Missing domain after '@'.") };
   }
   if (local.length !== 1 || domain.length !== 1) {
     return {
       ok: false,
-      message: `Unexpected whitespace or word fragments in address. ${missingSeparator}`,
+      message: t("Unexpected whitespace or word fragments in address. {hint}", { hint: missingSeparator() }),
     };
   }
   if (local[0].kind !== "text" && local[0].kind !== "quoted") {
-    return { ok: false, message: "Invalid local part before '@'." };
+    return { ok: false, message: t("Invalid local part before '@'.") };
   }
   if (domain[0].kind !== "text" && domain[0].kind !== "literal") {
-    return { ok: false, message: "Invalid domain after '@'." };
+    return { ok: false, message: t("Invalid domain after '@'.") };
   }
 
   const localPart = input.slice(local[0].start, local[0].end);
   const domainPart = input.slice(domain[0].start, domain[0].end);
   if (domainPart === "[]") {
-    return { ok: false, message: "Empty domain literal." };
+    return { ok: false, message: t("Empty domain literal.") };
   }
   return { ok: true, address: `${localPart}@${domainPart}`, localPart, domainPart };
 }
 
 function readMailbox(input: string, parts: RecipientPart[]): MailboxResult {
   if (parts.some((part) => part.kind === ":")) {
-    return { ok: false, message: "Recipient groups are not supported." };
+    return { ok: false, message: t("Recipient groups are not supported.") };
   }
 
   const open = parts.findIndex((part) => part.kind === "<");
@@ -213,11 +215,11 @@ function readMailbox(input: string, parts: RecipientPart[]): MailboxResult {
   if (close !== parts.length - 1) {
     return {
       ok: false,
-      message: `Unexpected text after '>'. ${missingSeparator}`,
+      message: t("Unexpected text after '>'. {hint}", { hint: missingSeparator() }),
     };
   }
   if (close === open + 1) {
-    return { ok: false, message: "Empty angle-bracket address." };
+    return { ok: false, message: t("Empty angle-bracket address.") };
   }
 
   const mailbox = readAddrSpec(input, parts.slice(open + 1, close));
@@ -230,13 +232,13 @@ function readMailbox(input: string, parts: RecipientPart[]): MailboxResult {
     if (!legacyDisplay.ok || legacyDisplay.address !== mailbox.address) {
       return {
         ok: false,
-        message: `Unexpected address in display name. ${missingSeparator}`,
+        message: t("Unexpected address in display name. {hint}", { hint: missingSeparator() }),
       };
     }
   } else if (display.some((part) => part.kind !== "text" && part.kind !== "quoted")) {
     return {
       ok: false,
-      message: "Invalid display name; quote names containing special characters.",
+      message: t("Invalid display name; quote names containing special characters."),
     };
   }
   return mailbox;

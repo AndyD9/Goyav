@@ -5,6 +5,7 @@ import { useAccountsStore } from "@/stores/accounts";
 import * as api from "@/lib/tauri";
 import type { OutboxRow } from "@/lib/types";
 import { showToast } from "@/lib/toast";
+import { t } from "@/i18n";
 
 const accountsStore = useAccountsStore();
 const rows = ref<OutboxRow[]>([]);
@@ -55,7 +56,7 @@ async function reload() {
 function activeAccountFor(row: OutboxRow): string | null {
   const accountId = accountsStore.activeAccountId;
   if (!accountId || row.account_id !== accountId) {
-    showToast("The Outbox account changed. Refresh and try again.", "error", 5000);
+    showToast(t("The Outbox account changed. Refresh and try again."), "error", 5000);
     void reload();
     return null;
   }
@@ -70,7 +71,10 @@ async function retry(row: OutboxRow) {
   if (
     row.delivery_outcome_unknown &&
     !confirm(
-      `Delivery of "${row.subject ?? "(no subject)"}" may already have occurred. Retrying can duplicate this message. Retry anyway?`,
+      t(
+        'Delivery of "{subject}" may already have occurred. Retrying can duplicate this message. Retry anyway?',
+        { subject: row.subject ?? t("(no subject)") },
+      ),
     )
   ) {
     return;
@@ -78,9 +82,9 @@ async function retry(row: OutboxRow) {
   actingRowId.value = row.id;
   try {
     await api.retryOutboxOp(accountId, row.id);
-    showToast(`Queued "${row.subject ?? "(no subject)"}" for retry`, "info");
+    showToast(t('Queued "{subject}" for retry', { subject: row.subject ?? t("(no subject)") }), "info");
   } catch (e) {
-    showToast(`Retry failed: ${e instanceof Error ? e.message : String(e)}`, "error", 5000);
+    showToast(t("Retry failed: {error}", { error: e instanceof Error ? e.message : String(e) }), "error", 5000);
   } finally {
     await reload();
     if (!disposed && actingRowId.value === row.id) {
@@ -95,8 +99,8 @@ async function discard(row: OutboxRow) {
   if (!accountId) return;
 
   const message = row.delivery_outcome_unknown
-    ? `Discard "${row.subject ?? "(no subject)"}"? This only removes the local record and cannot cancel delivery.`
-    : `Discard "${row.subject ?? "(no subject)"}"? This cannot be undone.`;
+    ? t('Discard "{subject}"? This only removes the local record and cannot cancel delivery.', { subject: row.subject ?? t("(no subject)") })
+    : t('Discard "{subject}"? This cannot be undone.', { subject: row.subject ?? t("(no subject)") });
   if (!confirm(message)) {
     return;
   }
@@ -104,7 +108,7 @@ async function discard(row: OutboxRow) {
   try {
     await api.discardOutboxOp(accountId, row.id);
   } catch (e) {
-    showToast(`Discard failed: ${e instanceof Error ? e.message : String(e)}`, "error", 5000);
+    showToast(t("Discard failed: {error}", { error: e instanceof Error ? e.message : String(e) }), "error", 5000);
   } finally {
     await reload();
     if (!disposed && actingRowId.value === row.id) {
@@ -182,7 +186,7 @@ onMounted(async () => {
     if (!disposed && setupFailed) {
       const detail =
         setupFailure instanceof Error ? setupFailure.message : String(setupFailure);
-      listenerError.value = `Automatic Outbox updates are unavailable: ${detail}. Use Refresh to update the list.`;
+      listenerError.value = t("Automatic Outbox updates are unavailable: {detail}. Use Refresh to update the list.", { detail });
     }
     await initialLoad;
     return;
@@ -218,19 +222,19 @@ watch(
 
 function recipients(row: OutboxRow): string {
   const all = [...row.to, ...row.cc, ...row.bcc];
-  if (all.length === 0) return "(no recipients)";
+  if (all.length === 0) return t("(no recipients)");
   if (all.length <= 3) return all.join(", ");
-  return `${all.slice(0, 3).join(", ")} +${all.length - 3} more`;
+  return t("{list} +{count} more", { list: all.slice(0, 3).join(", "), count: all.length - 3 });
 }
 
 function statusLabel(row: OutboxRow): string {
-  if (row.status === "sending") return "Sending...";
+  if (row.status === "sending") return t("Sending...");
   if (row.status === "dead" && row.delivery_outcome_unknown) {
-    return "Delivery status unknown";
+    return t("Delivery status unknown");
   }
-  if (row.status === "dead") return `Failed (${row.retry_count} attempts)`;
-  if (row.retry_count > 0) return `Queued for retry (${row.retry_count} so far)`;
-  return "Queued";
+  if (row.status === "dead") return t("Failed ({count} attempts)", { count: row.retry_count });
+  if (row.retry_count > 0) return t("Queued for retry ({count} so far)", { count: row.retry_count });
+  return t("Queued");
 }
 </script>
 
@@ -243,7 +247,7 @@ function statusLabel(row: OutboxRow): string {
     :aria-busy="loading"
   >
     <div class="outbox-header">
-      <h2 id="outbox-heading">Outbox</h2>
+      <h2 id="outbox-heading">{{ t("Outbox") }}</h2>
       <button
         type="button"
         class="outbox-refresh"
@@ -251,7 +255,7 @@ function statusLabel(row: OutboxRow): string {
         :disabled="loading || actingRowId !== null"
         @click="reload"
       >
-        Refresh
+        {{ t("Refresh") }}
       </button>
     </div>
 
@@ -265,13 +269,13 @@ function statusLabel(row: OutboxRow): string {
     </div>
 
     <div v-if="loading && rows.length === 0" class="outbox-empty" role="status">
-      Loading...
+      {{ t("Loading...") }}
     </div>
     <div v-else-if="error" class="outbox-error" data-testid="outbox-error" role="alert">
       {{ error }}
     </div>
     <div v-else-if="rows.length === 0" class="outbox-empty" data-testid="outbox-empty" role="status">
-      No queued or failed sends.
+      {{ t("No queued or failed sends.") }}
     </div>
 
     <ul v-else class="outbox-items">
@@ -287,7 +291,7 @@ function statusLabel(row: OutboxRow): string {
         :data-testid="`outbox-item-${row.id}`"
       >
         <div class="outbox-item-main">
-          <div class="outbox-subject">{{ row.subject || "(no subject)" }}</div>
+          <div class="outbox-subject">{{ row.subject || t("(no subject)") }}</div>
           <div class="outbox-recipients">{{ recipients(row) }}</div>
           <div
             class="outbox-status"
@@ -305,7 +309,7 @@ function statusLabel(row: OutboxRow): string {
             type="button"
             class="outbox-btn outbox-btn-retry"
             :data-testid="`outbox-retry-${row.id}`"
-            :aria-label="`Retry message: ${row.subject || '(no subject)'}`"
+            :aria-label="t('Retry message: {subject}', { subject: row.subject || t('(no subject)') })"
             :disabled="
               loading ||
               actingRowId !== null ||
@@ -314,13 +318,13 @@ function statusLabel(row: OutboxRow): string {
             "
             @click="retry(row)"
           >
-            Retry
+            {{ t("Retry") }}
           </button>
           <button
             type="button"
             class="outbox-btn outbox-btn-discard"
             :data-testid="`outbox-discard-${row.id}`"
-            :aria-label="`Discard message: ${row.subject || '(no subject)'}`"
+            :aria-label="t('Discard message: {subject}', { subject: row.subject || t('(no subject)') })"
             :disabled="
               loading ||
               actingRowId !== null ||
@@ -329,7 +333,7 @@ function statusLabel(row: OutboxRow): string {
             "
             @click="discard(row)"
           >
-            Discard
+            {{ t("Discard") }}
           </button>
         </div>
       </li>

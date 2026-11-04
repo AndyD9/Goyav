@@ -4,6 +4,7 @@ import { storeToRefs } from "pinia";
 import * as api from "@/lib/tauri";
 import { usePgpStore } from "@/stores/pgp";
 import type { PgpCardDetails } from "@/lib/types";
+import { t, tn, dateLocale } from "@/i18n";
 
 const pgpStore = usePgpStore();
 const {
@@ -120,7 +121,7 @@ async function selectCard(ident: string) {
 
 function formatRetryCounter(n: number): string {
   // libtumpa surfaces 0 when the card is locked-out on that PIN.
-  return n === 0 ? "0 (locked)" : String(n);
+  return n === 0 ? t("0 (locked)") : String(n);
 }
 
 function formatFingerprint(fp: string): string {
@@ -132,14 +133,14 @@ function formatFingerprint(fp: string): string {
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleDateString();
+    return new Date(iso).toLocaleDateString(dateLocale());
   } catch {
     return iso;
   }
 }
 
 function primaryDisplay(key: { primaryUid: string | null; fingerprint: string }) {
-  return key.primaryUid?.trim() || `(no UID) ${formatFingerprint(key.fingerprint)}`;
+  return key.primaryUid?.trim() || `${t("(no UID)")} ${formatFingerprint(key.fingerprint)}`;
 }
 
 // "Secret key" status is more nuanced than the libtumpa `isSecret` flag
@@ -154,13 +155,13 @@ function secretKeyStatus(key: {
   cardIdents: string[];
 }): string {
   if (key.isSecret && key.cardIdents.length > 0) {
-    return `in keystore + smartcard (${key.cardIdents.join(", ")})`;
+    return t("in keystore + smartcard ({idents})", { idents: key.cardIdents.join(", ") });
   }
-  if (key.isSecret) return "in keystore";
+  if (key.isSecret) return t("in keystore");
   if (key.cardIdents.length > 0) {
-    return `on smartcard (${key.cardIdents.join(", ")})`;
+    return t("on smartcard ({idents})", { idents: key.cardIdents.join(", ") });
   }
-  return "absent (public only)";
+  return t("absent (public only)");
 }
 
 async function openFilePicker() {
@@ -186,7 +187,7 @@ async function importArmored() {
   importError.value = null;
   const trimmed = armoredInput.value.trim();
   if (!trimmed) {
-    importError.value = "Paste an armored PGP key first.";
+    importError.value = t("Paste an armored PGP key first.");
     return;
   }
   importBusy.value = true;
@@ -205,7 +206,7 @@ async function fetchViaWkd() {
   wkdError.value = null;
   const email = wkdEmail.value.trim();
   if (!email) {
-    wkdError.value = "Enter an email address to look up.";
+    wkdError.value = t("Enter an email address to look up.");
     return;
   }
   wkdBusy.value = true;
@@ -226,11 +227,15 @@ async function syncCards() {
     const detections = await pgpStore.autoLinkCards();
     if (detections.length === 0) {
       lastSyncSummary.value =
-        "No new links. Either no cards are connected or all on-card keys are already linked.";
+        t("No new links. Either no cards are connected or all on-card keys are already linked.");
     } else {
       const linkedKeys = new Set(detections.map((d) => d.keyFingerprint)).size;
       const linkedCards = new Set(detections.map((d) => d.cardIdent)).size;
-      lastSyncSummary.value = `Linked ${linkedKeys} key(s) across ${linkedCards} card(s) (${detections.length} slot${detections.length === 1 ? "" : "s"}).`;
+      lastSyncSummary.value = t("Linked {keys} key(s) across {cards} card(s) ({slots}).", {
+        keys: linkedKeys,
+        cards: linkedCards,
+        slots: tn(detections.length, "{count} slot", "{count} slots"),
+      });
     }
   } catch (e) {
     lastSyncSummary.value = e instanceof Error ? e.message : String(e);
@@ -242,7 +247,7 @@ async function exportSelected() {
   try {
     const armored = await pgpStore.exportPublic(selectedKey.value.fingerprint);
     await navigator.clipboard.writeText(armored);
-    lastSyncSummary.value = "Public key copied to clipboard.";
+    lastSyncSummary.value = t("Public key copied to clipboard.");
   } catch (e) {
     lastSyncSummary.value = e instanceof Error ? e.message : String(e);
   }
@@ -274,18 +279,18 @@ const keystoreEmptyHint = computed(() =>
           v-model="searchQuery"
           class="search"
           type="search"
-          placeholder="Search UID or fingerprint…"
+          :placeholder="t('Search UID or fingerprint…')"
           data-testid="pgp-search"
         />
         <div class="toolbar-actions">
           <button class="btn" @click="showImportModal = true" data-testid="pgp-import-btn">
-            Import
+            {{ t("Import") }}
           </button>
           <button class="btn" @click="showWkdModal = true" data-testid="pgp-wkd-btn">
-            Fetch via WKD
+            {{ t("Fetch via WKD") }}
           </button>
           <button class="btn" @click="syncCards" data-testid="pgp-sync-cards-btn">
-            Sync cards
+            {{ t("Sync cards") }}
           </button>
         </div>
         <p v-if="lastSyncSummary" class="hint">{{ lastSyncSummary }}</p>
@@ -304,20 +309,20 @@ const keystoreEmptyHint = computed(() =>
           <div class="key-row">
             <span class="primary">{{ primaryDisplay(key) }}</span>
             <span class="badges">
-              <span v-if="key.isSecret" class="badge badge-secret" title="Secret key present">S</span>
-              <span v-if="key.cardIdents.length" class="badge badge-card" :title="`On card: ${key.cardIdents.join(', ')}`">card</span>
-              <span v-if="key.isRevoked" class="badge badge-revoked" title="Revoked">R</span>
+              <span v-if="key.isSecret" class="badge badge-secret" :title="t('Secret key present')">S</span>
+              <span v-if="key.cardIdents.length" class="badge badge-card" :title="t('On card: {idents}', { idents: key.cardIdents.join(', ') })">{{ t("card") }}</span>
+              <span v-if="key.isRevoked" class="badge badge-revoked" :title="t('Revoked')">R</span>
             </span>
           </div>
           <div class="fp">{{ formatFingerprint(key.fingerprint) }}</div>
         </li>
       </ul>
       <div v-else class="empty">
-        <p>No keys yet. Use Import, Fetch via WKD, or generate one in tumpa-cli / tumpa desktop — they share this same keystore at <code>~/.tumpa/keys.db</code>.</p>
+        <p>{{ t("No keys yet. Use Import, Fetch via WKD, or generate one in tumpa-cli / tumpa desktop — they share this same keystore at {path}.", { path: "~/.tumpa/keys.db" }) }}</p>
       </div>
 
       <section class="cards-section" v-if="!loadingCards">
-        <h3>Smartcards <span class="muted" v-if="cards.length === 0">(none connected)</span></h3>
+        <h3>{{ t("Smartcards") }} <span class="muted" v-if="cards.length === 0">{{ t("(none connected)") }}</span></h3>
         <ul v-if="cards.length" class="card-list" data-testid="pgp-card-list">
           <li
             v-for="c in cards"
@@ -346,7 +351,7 @@ const keystoreEmptyHint = computed(() =>
       class="resize-handle"
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize key list"
+      :aria-label="t('Resize key list')"
       @mousedown="startResize"
       data-testid="pgp-resize-handle"
     ></div>
@@ -357,7 +362,7 @@ const keystoreEmptyHint = computed(() =>
       <div v-if="selectedCardIdent" class="detail" data-testid="pgp-card-detail">
         <header class="detail-header">
           <h2>
-            {{ cardDetails?.manufacturerName ?? "Smartcard" }}
+            {{ cardDetails?.manufacturerName ?? t("Smartcard") }}
             <span v-if="cardDetails?.serialNumber" class="muted">
               #{{ cardDetails.serialNumber }}
             </span>
@@ -365,20 +370,20 @@ const keystoreEmptyHint = computed(() =>
           <code class="fp-full">{{ selectedCardIdent }}</code>
         </header>
 
-        <p v-if="cardDetailsLoading" class="hint">Reading card…</p>
+        <p v-if="cardDetailsLoading" class="hint">{{ t("Reading card…") }}</p>
         <p v-if="cardDetailsError" class="error">{{ cardDetailsError }}</p>
 
         <template v-if="cardDetails && !cardDetailsError">
           <section>
-            <h3>Card</h3>
+            <h3>{{ t("Card") }}</h3>
             <dl class="meta">
-              <dt>Cardholder</dt>
+              <dt>{{ t("Cardholder") }}</dt>
               <dd>{{ cardDetails.cardholderName ?? "—" }}</dd>
-              <dt>Manufacturer</dt>
+              <dt>{{ t("Manufacturer") }}</dt>
               <dd>{{ cardDetails.manufacturerName ?? "—" }}</dd>
-              <dt>Serial</dt>
+              <dt>{{ t("Serial") }}</dt>
               <dd><code>{{ cardDetails.serialNumber }}</code></dd>
-              <dt>Public key URL</dt>
+              <dt>{{ t("Public key URL") }}</dt>
               <dd>
                 <a
                   v-if="cardDetails.publicKeyUrl"
@@ -392,37 +397,37 @@ const keystoreEmptyHint = computed(() =>
           </section>
 
           <section>
-            <h3>On-card key slots</h3>
+            <h3>{{ t("On-card key slots") }}</h3>
             <table class="subkey-table">
               <thead>
-                <tr><th>Slot</th><th>Fingerprint</th></tr>
+                <tr><th>{{ t("Slot") }}</th><th>{{ t("Fingerprint") }}</th></tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>Signature</td>
+                  <td>{{ t("Signature") }}</td>
                   <td>
                     <code v-if="cardDetails.signatureFingerprint">
                       {{ formatFingerprint(cardDetails.signatureFingerprint) }}
                     </code>
-                    <span v-else class="muted">empty</span>
+                    <span v-else class="muted">{{ t("empty") }}</span>
                   </td>
                 </tr>
                 <tr>
-                  <td>Encryption</td>
+                  <td>{{ t("Encryption") }}</td>
                   <td>
                     <code v-if="cardDetails.encryptionFingerprint">
                       {{ formatFingerprint(cardDetails.encryptionFingerprint) }}
                     </code>
-                    <span v-else class="muted">empty</span>
+                    <span v-else class="muted">{{ t("empty") }}</span>
                   </td>
                 </tr>
                 <tr>
-                  <td>Authentication</td>
+                  <td>{{ t("Authentication") }}</td>
                   <td>
                     <code v-if="cardDetails.authenticationFingerprint">
                       {{ formatFingerprint(cardDetails.authenticationFingerprint) }}
                     </code>
-                    <span v-else class="muted">empty</span>
+                    <span v-else class="muted">{{ t("empty") }}</span>
                   </td>
                 </tr>
               </tbody>
@@ -430,15 +435,15 @@ const keystoreEmptyHint = computed(() =>
           </section>
 
           <section>
-            <h3>Counters</h3>
+            <h3>{{ t("Counters") }}</h3>
             <dl class="meta">
-              <dt>Signatures made</dt>
+              <dt>{{ t("Signatures made") }}</dt>
               <dd>{{ cardDetails.signatureCounter }}</dd>
-              <dt>User PIN retries left</dt>
+              <dt>{{ t("User PIN retries left") }}</dt>
               <dd>{{ formatRetryCounter(cardDetails.pinRetryCounter) }}</dd>
-              <dt>Reset code retries left</dt>
+              <dt>{{ t("Reset code retries left") }}</dt>
               <dd>{{ formatRetryCounter(cardDetails.resetCodeRetryCounter) }}</dd>
-              <dt>Admin PIN retries left</dt>
+              <dt>{{ t("Admin PIN retries left") }}</dt>
               <dd>{{ formatRetryCounter(cardDetails.adminPinRetryCounter) }}</dd>
             </dl>
           </section>
@@ -446,7 +451,7 @@ const keystoreEmptyHint = computed(() =>
       </div>
 
       <div v-else-if="!selectedKey" class="placeholder">
-        Select a key or smartcard on the left to see its details.
+        {{ t("Select a key or smartcard on the left to see its details.") }}
       </div>
       <div v-else class="detail" data-testid="pgp-key-detail">
         <header class="detail-header">
@@ -456,19 +461,19 @@ const keystoreEmptyHint = computed(() =>
 
         <div class="detail-actions">
           <button class="btn" @click="exportSelected" data-testid="pgp-export-btn">
-            Copy public key
+            {{ t("Copy public key") }}
           </button>
           <button
             class="btn btn-danger"
             @click="deleteConfirmFp = selectedKey.fingerprint"
             data-testid="pgp-delete-btn"
           >
-            Delete
+            {{ t("Delete") }}
           </button>
         </div>
 
         <section>
-          <h3>User IDs</h3>
+          <h3>{{ t("User IDs") }}</h3>
           <ul class="uid-list">
             <li v-for="(u, i) in selectedKey.userIds" :key="i">
               <span>{{ u.uid }}</span>
@@ -478,14 +483,14 @@ const keystoreEmptyHint = computed(() =>
         </section>
 
         <section>
-          <h3>Subkeys</h3>
+          <h3>{{ t("Subkeys") }}</h3>
           <table class="subkey-table">
             <thead>
               <tr>
-                <th>Fingerprint</th>
-                <th>Type</th>
-                <th>Algorithm</th>
-                <th>Bits</th>
+                <th>{{ t("Fingerprint") }}</th>
+                <th>{{ t("Type") }}</th>
+                <th>{{ t("Algorithm") }}</th>
+                <th>{{ t("Bits") }}</th>
               </tr>
             </thead>
             <tbody>
@@ -500,19 +505,19 @@ const keystoreEmptyHint = computed(() =>
         </section>
 
         <section v-if="selectedKey.cardIdents.length">
-          <h3>Smartcard links</h3>
+          <h3>{{ t("Smartcard links") }}</h3>
           <ul>
             <li v-for="ident in selectedKey.cardIdents" :key="ident"><code>{{ ident }}</code></li>
           </ul>
         </section>
 
         <section>
-          <h3>Status</h3>
+          <h3>{{ t("Status") }}</h3>
           <dl class="meta">
-            <dt>Created</dt><dd>{{ formatDate(selectedKey.creationTime) }}</dd>
-            <dt>Expires</dt><dd>{{ formatDate(selectedKey.expirationTime) }}</dd>
-            <dt>Secret key</dt><dd>{{ secretKeyStatus(selectedKey) }}</dd>
-            <dt v-if="selectedKey.isRevoked">Revoked</dt>
+            <dt>{{ t("Created") }}</dt><dd>{{ formatDate(selectedKey.creationTime) }}</dd>
+            <dt>{{ t("Expires") }}</dt><dd>{{ formatDate(selectedKey.expirationTime) }}</dd>
+            <dt>{{ t("Secret key") }}</dt><dd>{{ secretKeyStatus(selectedKey) }}</dd>
+            <dt v-if="selectedKey.isRevoked">{{ t("Revoked") }}</dt>
             <dd v-if="selectedKey.isRevoked">{{ formatDate(selectedKey.revocationTime) }}</dd>
           </dl>
         </section>
@@ -521,9 +526,9 @@ const keystoreEmptyHint = computed(() =>
 
     <!-- Import modal -->
     <div v-if="showImportModal" class="modal-overlay" @click.self="showImportModal = false">
-      <div class="modal" role="dialog" aria-label="Import key">
-        <h3>Import OpenPGP key</h3>
-        <p>Paste an armored key (begins with <code>-----BEGIN PGP</code>) or pick a file.</p>
+      <div class="modal" role="dialog" :aria-label="t('Import key')">
+        <h3>{{ t("Import OpenPGP key") }}</h3>
+        <p>{{ t("Paste an armored key (begins with {marker}) or pick a file.", { marker: "-----BEGIN PGP" }) }}</p>
         <textarea
           v-model="armoredInput"
           rows="8"
@@ -533,11 +538,11 @@ const keystoreEmptyHint = computed(() =>
         <p v-if="importError" class="error">{{ importError }}</p>
         <div class="modal-actions">
           <button class="btn" @click="openFilePicker" :disabled="importBusy">
-            Pick file…
+            {{ t("Pick file…") }}
           </button>
           <span class="spacer"></span>
           <button class="btn" @click="showImportModal = false" :disabled="importBusy">
-            Cancel
+            {{ t("Cancel") }}
           </button>
           <button
             class="btn btn-primary"
@@ -545,7 +550,7 @@ const keystoreEmptyHint = computed(() =>
             :disabled="importBusy"
             data-testid="pgp-import-submit"
           >
-            Import
+            {{ t("Import") }}
           </button>
         </div>
       </div>
@@ -553,9 +558,9 @@ const keystoreEmptyHint = computed(() =>
 
     <!-- WKD modal -->
     <div v-if="showWkdModal" class="modal-overlay" @click.self="showWkdModal = false">
-      <div class="modal" role="dialog" aria-label="Fetch via WKD">
-        <h3>Fetch public key via WKD</h3>
-        <p>Looks up the key on the address's domain (Web Key Directory).</p>
+      <div class="modal" role="dialog" :aria-label="t('Fetch via WKD')">
+        <h3>{{ t("Fetch public key via WKD") }}</h3>
+        <p>{{ t("Looks up the key on the address's domain (Web Key Directory).") }}</p>
         <input
           v-model="wkdEmail"
           type="email"
@@ -565,14 +570,14 @@ const keystoreEmptyHint = computed(() =>
         <p v-if="wkdError" class="error">{{ wkdError }}</p>
         <div class="modal-actions">
           <span class="spacer"></span>
-          <button class="btn" @click="showWkdModal = false" :disabled="wkdBusy">Cancel</button>
+          <button class="btn" @click="showWkdModal = false" :disabled="wkdBusy">{{ t("Cancel") }}</button>
           <button
             class="btn btn-primary"
             @click="fetchViaWkd"
             :disabled="wkdBusy"
             data-testid="pgp-wkd-submit"
           >
-            Fetch
+            {{ t("Fetch") }}
           </button>
         </div>
       </div>
@@ -580,18 +585,17 @@ const keystoreEmptyHint = computed(() =>
 
     <!-- Delete confirmation -->
     <div v-if="deleteConfirmFp" class="modal-overlay" @click.self="deleteConfirmFp = null">
-      <div class="modal" role="dialog" aria-label="Confirm delete">
-        <h3>Delete key?</h3>
+      <div class="modal" role="dialog" :aria-label="t('Confirm delete')">
+        <h3>{{ t("Delete key?") }}</h3>
         <p>
-          This removes the key from the shared keystore. If the secret key is
-          only stored here (not on a smartcard or backed up), it will be lost.
+          {{ t("This removes the key from the shared keystore. If the secret key is only stored here (not on a smartcard or backed up), it will be lost.") }}
         </p>
         <code>{{ deleteConfirmFp.toUpperCase() }}</code>
         <div class="modal-actions">
           <span class="spacer"></span>
-          <button class="btn" @click="deleteConfirmFp = null">Cancel</button>
+          <button class="btn" @click="deleteConfirmFp = null">{{ t("Cancel") }}</button>
           <button class="btn btn-danger" @click="confirmDelete" data-testid="pgp-delete-confirm">
-            Delete
+            {{ t("Delete") }}
           </button>
         </div>
       </div>

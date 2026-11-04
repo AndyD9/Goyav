@@ -6,6 +6,7 @@ import MenuBar from "@/components/common/MenuBar.vue";
 import StatusBar from "@/components/common/StatusBar.vue";
 import OperationsPanel from "@/components/common/OperationsPanel.vue";
 import LinkPopup from "@/components/common/LinkPopup.vue";
+import WhatsNewDialog from "@/components/changelog/WhatsNewDialog.vue";
 
 const route = useRoute();
 
@@ -50,6 +51,7 @@ const viewHasOwnPanels = computed(
       <StatusBar />
     </div>
     <LinkPopup />
+    <WhatsNewDialog />
   </div>
 </template>
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { t } from "@/i18n";
 
 type TabId =
   | "mail"
@@ -45,19 +46,19 @@ function onTabClick(tab: Tab) {
 </script>
 
 <template>
-  <nav class="mobile-tab-bar" aria-label="Primary">
+  <nav class="mobile-tab-bar" :aria-label="t('Primary')">
     <button
-      v-for="t in tabs"
-      :key="t.id"
+      v-for="tab in tabs"
+      :key="tab.id"
       class="mobile-tab"
-      :class="{ active: active === t.id }"
-      :aria-current="active === t.id ? 'page' : undefined"
-      :aria-label="t.label"
-      @click="onTabClick(t)"
+      :class="{ active: active === tab.id }"
+      :aria-current="active === tab.id ? 'page' : undefined"
+      :aria-label="t(tab.label)"
+      @click="onTabClick(tab)"
     >
       <span class="mobile-tab-icon-wrap">
         <svg
-          v-if="t.id === 'mail'"
+          v-if="tab.id === 'mail'"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -68,7 +69,7 @@ function onTabClick(tab: Tab) {
           <path d="M22 7l-10 6L2 7" />
         </svg>
         <svg
-          v-else-if="t.id === 'calendar'"
+          v-else-if="tab.id === 'calendar'"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -79,7 +80,7 @@ function onTabClick(tab: Tab) {
           <path d="M16 2v4M8 2v4M3 10h18" />
         </svg>
         <svg
-          v-else-if="t.id === 'invites'"
+          v-else-if="tab.id === 'invites'"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -91,7 +92,7 @@ function onTabClick(tab: Tab) {
           <path d="M15 18l2 2 4-4" />
         </svg>
         <svg
-          v-else-if="t.id === 'contacts'"
+          v-else-if="tab.id === 'contacts'"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -104,7 +105,7 @@ function onTabClick(tab: Tab) {
           <path d="M16 3.13a4 4 0 0 1 0 7.75" />
         </svg>
         <svg
-          v-else-if="t.id === 'filters'"
+          v-else-if="tab.id === 'filters'"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -127,7 +128,7 @@ function onTabClick(tab: Tab) {
           />
         </svg>
       </span>
-      <span class="mobile-tab-label">{{ t.label }}</span>
+      <span class="mobile-tab-label">{{ t(tab.label) }}</span>
     </button>
   </nav>
 </template>

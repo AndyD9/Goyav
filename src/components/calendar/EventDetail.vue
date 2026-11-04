@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "@/i18n";
 import { ref, computed, watch, useId } from "vue";
 import { useCalendarStore } from "@/stores/calendar";
 import { useAccountsStore } from "@/stores/accounts";
@@ -39,8 +40,8 @@ const editSupport = computed(() => calendarScopedEditSupport(event.value));
 const mutationNotice = computed(() => {
   if (editSupport.value.supported && !editSupport.value.scopes.includes("standalone")) {
     return editSupport.value.scopes.includes("this-occurrence")
-      ? "Recurring deletion remains unavailable. Choose whether an edit applies to this occurrence or the entire series."
-      : "Recurring deletion remains unavailable. Only the entire series can be edited.";
+      ? t("Recurring deletion remains unavailable. Choose whether an edit applies to this occurrence or the entire series.")
+      : t("Recurring deletion remains unavailable. Only the entire series can be edited.");
   }
   if (editSupport.value.reason && mutationSupport.value.reason &&
     editSupport.value.reason !== mutationSupport.value.reason) {
@@ -92,7 +93,7 @@ const calendarInfo = computed(() => {
     (candidate) => candidate.id === event.value?.account_id,
   );
   return {
-    name: calendar?.name || "Unknown calendar",
+    name: calendar?.name || t("Unknown calendar"),
     color: calendar?.color || "#4285f4",
     accountEmail: account?.email || "",
   };
@@ -127,10 +128,10 @@ function formatDateTime(iso: string): string {
 
 function statusLabel(status: string | null): string {
   switch (status) {
-    case "accepted": return "Accepted";
-    case "tentative": return "Maybe";
-    case "declined": return "Declined";
-    default: return "No response";
+    case "accepted": return t("Accepted");
+    case "tentative": return t("Maybe");
+    case "declined": return t("Declined");
+    default: return t("No response");
   }
 }
 
@@ -172,7 +173,7 @@ async function refreshMutationTarget(eventId: string, purpose: "attendee notific
     if (!support.supported) throw new Error(support.reason);
     return fresh;
   } catch (cause) {
-    throw new Error(`Could not verify the event for ${purpose}. Please try again. ${String(cause)}`);
+    throw new Error(t("Could not verify the event for {purpose}. Please try again. {cause}", { purpose: t(purpose), cause: String(cause) }));
   }
 }
 
@@ -197,10 +198,10 @@ async function saveEdit() {
 
     if (occurrenceEdit) {
       if (!occurrenceEditSupport.value.supported || !occurrenceEditSupport.value.occurrence) {
-        throw new Error(occurrenceEditSupport.value.reason || "This occurrence cannot be edited.");
+        throw new Error(occurrenceEditSupport.value.reason || t("This occurrence cannot be edited."));
       }
       if (targetCalendarId !== original.calendar_id) {
-        throw new Error("Moving a recurring occurrence is not supported yet.");
+        throw new Error(t("Moving a recurring occurrence is not supported yet."));
       }
       await calendarStore.updateOccurrence(original, {
         title: editTitle.value,
@@ -271,7 +272,7 @@ async function saveEdit() {
       const target = calendarStore.calendars.find(
         (c) => c.id === targetCalendarId,
       );
-      if (!target) throw new Error("The destination calendar is unavailable.");
+      if (!target) throw new Error(t("The destination calendar is unavailable."));
       notifyEventId = await calendarStore.moveEventToCalendar(
         original.id, target.id, target.account_id,
       );
@@ -282,21 +283,21 @@ async function saveEdit() {
     if (!isCurrentSelection(original.id, version)) return;
     if (canNotify(fresh)) {
       const result = await tauriMessage(
-        "This event has attendees. Send an update notification?",
+        t("This event has attendees. Send an update notification?"),
         {
-          title: "Notify Attendees",
+          title: t("Notify Attendees"),
           kind: "info",
-          buttons: { yes: "Send Update", no: "Don't Notify", cancel: "Cancel" },
+          buttons: { yes: t("Send Update"), no: t("Don't Notify"), cancel: t("Cancel") },
         },
       );
-      if (result === "Cancel") {
+      if (result === t("Cancel") || result === "Cancel") {
         return;
       }
       if (!isCurrentSelection(original.id, version)) return;
       // Revalidate the captured destination after the dialog wait.
       const notificationTarget = await refreshMutationTarget(notifyEventId, "attendee notification");
       if (!isCurrentSelection(original.id, version)) return;
-      if ((result === "Send Update" || result === "Yes") && canNotify(notificationTarget)) {
+      if ((result === t("Send Update") || result === "Yes") && canNotify(notificationTarget)) {
         await api.notifyCalendarEvent(notifyEventId);
       }
     }
@@ -323,14 +324,14 @@ async function handleDelete() {
     if (!isCurrentSelection(original.id, version)) return;
     if (canNotify(fresh)) {
       const result = await tauriMessage(
-        "Delete this event with attendees? Chithi does not send manual cancellation notifications. Your calendar provider may notify attendees automatically.",
+        t("Delete this event with attendees? Chithi does not send manual cancellation notifications. Your calendar provider may notify attendees automatically."),
         {
-          title: "Delete Event",
+          title: t("Delete Event"),
           kind: "warning",
-          buttons: { ok: "Delete", cancel: "Cancel" },
+          buttons: { ok: t("Delete"), cancel: t("Cancel") },
         },
       );
-      if (result !== "Delete" && result !== "Ok") return;
+      if (result !== t("Delete") && result !== "Ok") return;
       if (!isCurrentSelection(original.id, version)) return;
       await refreshMutationTarget(original.id, "deletion");
       if (!isCurrentSelection(original.id, version)) return;
@@ -352,7 +353,7 @@ async function handleDelete() {
   <div v-if="event" class="event-detail-overlay" @click.self="emit('close')">
     <div class="event-detail">
       <div class="detail-header">
-        <h3 v-if="!editing">{{ event.title || '(No title)' }}</h3>
+        <h3 v-if="!editing">{{ event.title || t('(No title)') }}</h3>
         <input v-else v-model="editTitle" class="edit-title" type="text" data-testid="event-form-title" />
         <button class="close-btn" @click="emit('close')">&times;</button>
       </div>
@@ -368,9 +369,9 @@ async function handleDelete() {
           <div>
             <div>{{ formatDateTime(event.start_time) }}</div>
             <div v-if="!event.all_day" class="detail-secondary">
-              to {{ formatDateTime(event.end_time) }}
+              {{ t("to {time}", { time: formatDateTime(event.end_time) }) }}
             </div>
-            <div v-else class="detail-secondary">All day</div>
+            <div v-else class="detail-secondary">{{ t("All day") }}</div>
           </div>
         </div>
 
@@ -396,7 +397,7 @@ async function handleDelete() {
 
         <div v-if="event.organizer_email" class="detail-row">
           <span class="detail-icon">&#x1F464;</span>
-          <span>Organizer: {{ event.organizer_email }}</span>
+          <span>{{ t("Organizer: {email}", { email: event.organizer_email }) }}</span>
         </div>
 
         <div v-if="attendees.length > 0" class="detail-row">
@@ -405,7 +406,7 @@ async function handleDelete() {
             <div v-for="attendee in attendees" :key="attendee.email" class="attendee">
               {{ attendee.name || attendee.email }}
               <span class="attendee-status" :class="statusClass(attendee.status)">
-                ({{ attendee.status }})
+                ({{ t(attendee.status) }})
               </span>
             </div>
           </div>
@@ -424,38 +425,38 @@ async function handleDelete() {
 
       <div v-else class="detail-body edit-mode">
         <div v-if="!editSupport.scopes.includes('standalone')" class="edit-group">
-          <label>Edit scope</label>
+          <label>{{ t("Edit scope") }}</label>
           <select v-model="editScope" data-testid="event-detail-scope">
-            <option v-if="editSupport.scopes.includes('this-occurrence')" value="this-occurrence">This occurrence</option>
-            <option value="entire-series">Entire series</option>
+            <option v-if="editSupport.scopes.includes('this-occurrence')" value="this-occurrence">{{ t("This occurrence") }}</option>
+            <option value="entire-series">{{ t("Entire series") }}</option>
           </select>
         </div>
         <label class="checkbox-row">
           <input type="checkbox" v-model="editAllDay" data-testid="event-form-allday" />
-          All day
+          {{ t("All day") }}
         </label>
         <div class="edit-row">
           <div class="edit-group">
-            <label>Start date</label>
+            <label>{{ t("Start date") }}</label>
             <DateInput v-model="editStartDate" testid="event-form-start" />
           </div>
           <div v-if="!editAllDay" class="edit-group">
-            <label>Start time</label>
+            <label>{{ t("Start time") }}</label>
             <TimeInput v-model="editStartTime" testid="event-form-start-time" />
           </div>
         </div>
         <div class="edit-row">
           <div class="edit-group">
-            <label>End date</label>
+            <label>{{ t("End date") }}</label>
             <DateInput v-model="editEndDate" testid="event-form-end" />
           </div>
           <div v-if="!editAllDay" class="edit-group">
-            <label>End time</label>
+            <label>{{ t("End time") }}</label>
             <TimeInput v-model="editEndTime" testid="event-form-end-time" />
           </div>
         </div>
         <div class="edit-group">
-          <label>Calendar</label>
+          <label>{{ t("Calendar") }}</label>
           <select v-model="editCalendarId" :disabled="editScope === 'this-occurrence'" data-testid="event-detail-calendar">
             <option v-for="calendar in calendarStore.calendars" :key="calendar.id" :value="calendar.id">
               {{ calendarLabel(calendar) }}
@@ -463,25 +464,25 @@ async function handleDelete() {
           </select>
         </div>
         <div class="edit-group">
-          <label>Location</label>
-          <input v-model="editLocation" type="text" placeholder="Location" data-testid="event-form-location" />
+          <label>{{ t("Location") }}</label>
+          <input v-model="editLocation" type="text" :placeholder="t('Location')" data-testid="event-form-location" />
         </div>
         <div class="edit-group">
-          <label>Description</label>
-          <textarea v-model="editDescription" rows="3" placeholder="Description"></textarea>
+          <label>{{ t("Description") }}</label>
+          <textarea v-model="editDescription" rows="3" :placeholder="t('Description')"></textarea>
         </div>
       </div>
 
       <div class="detail-footer">
         <template v-if="!editing">
-          <button class="btn-edit" :disabled="saving || !editSupport.supported" :aria-describedby="editSupport.reason ? mutationReasonId : undefined" @click="startEditing">Edit</button>
-          <button class="btn-danger" :disabled="saving || !mutationSupport.supported" :aria-describedby="mutationSupport.reason ? mutationReasonId : undefined" @click="handleDelete" data-testid="event-form-delete">Delete</button>
+          <button class="btn-edit" :disabled="saving || !editSupport.supported" :aria-describedby="editSupport.reason ? mutationReasonId : undefined" @click="startEditing">{{ t("Edit") }}</button>
+          <button class="btn-danger" :disabled="saving || !mutationSupport.supported" :aria-describedby="mutationSupport.reason ? mutationReasonId : undefined" @click="handleDelete" data-testid="event-form-delete">{{ t("Delete") }}</button>
         </template>
         <template v-else>
           <button class="btn-save" :disabled="saving || !editSupport.supported" :aria-describedby="editSupport.reason ? mutationReasonId : undefined" @click="saveEdit" data-testid="event-form-save">
-            {{ saving ? "Saving..." : "Save" }}
+            {{ saving ? t("Saving...") : t("Save") }}
           </button>
-          <button class="btn-cancel" @click="editing = false">Cancel</button>
+          <button class="btn-cancel" @click="editing = false">{{ t("Cancel") }}</button>
         </template>
       </div>
     </div>

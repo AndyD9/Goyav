@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
 import { useRouter } from "vue-router";
+import { t } from "@/i18n";
 import { useUiStore, type Theme, type TimeFormat } from "@/stores/ui";
 
 type Section = "general" | "date-time";
@@ -114,17 +115,17 @@ function scrollHighlightedIntoView() {
 <template>
   <div class="preferences-view" data-testid="preferences-view">
     <header class="prefs-header">
-      <h1>Preferences</h1>
+      <h1>{{ t('Preferences') }}</h1>
       <button
         class="prefs-close"
         data-testid="prefs-close"
-        aria-label="Close Preferences"
+        :aria-label="t('Close Preferences')"
         @click="close"
       >&times;</button>
     </header>
 
     <div class="prefs-body">
-      <nav class="prefs-nav" aria-label="Preferences sections">
+      <nav class="prefs-nav" :aria-label="t('Preferences sections')">
         <button
           v-for="s in sections"
           :key="s.id"
@@ -133,16 +134,16 @@ function scrollHighlightedIntoView() {
           :data-testid="`prefs-nav-${s.id}`"
           @click="activeSection = s.id"
         >
-          {{ s.label }}
+          {{ t(s.label) }}
         </button>
       </nav>
 
       <main class="prefs-detail">
         <!-- General -->
         <section v-if="activeSection === 'general'" data-testid="prefs-section-general">
-          <h2>General</h2>
+          <h2>{{ t('General') }}</h2>
           <div class="prefs-row">
-            <label class="prefs-label">Theme</label>
+            <label class="prefs-label">{{ t('Theme') }}</label>
             <div class="prefs-radio-group">
               <button
                 v-for="opt in themeOptions"
@@ -151,11 +152,11 @@ function scrollHighlightedIntoView() {
                 :class="{ active: uiStore.theme === opt.value }"
                 :data-testid="`prefs-theme-${opt.value}`"
                 @click="uiStore.setTheme(opt.value)"
-              >{{ opt.label }}</button>
+              >{{ t(opt.label) }}</button>
             </div>
           </div>
           <div class="prefs-row">
-            <label class="prefs-label" for="prefs-hide-title-bar">Hide title bar</label>
+            <label class="prefs-label" for="prefs-hide-title-bar">{{ t('Hide title bar') }}</label>
             <div class="prefs-toggle">
               <input
                 id="prefs-hide-title-bar"
@@ -167,7 +168,7 @@ function scrollHighlightedIntoView() {
             </div>
           </div>
           <div class="prefs-row">
-            <label class="prefs-label" for="prefs-show-invite-badge">Show invites badge</label>
+            <label class="prefs-label" for="prefs-show-invite-badge">{{ t('Show invites badge') }}</label>
             <div class="prefs-toggle">
               <input
                 id="prefs-show-invite-badge"
@@ -182,9 +183,9 @@ function scrollHighlightedIntoView() {
 
         <!-- Date and Time -->
         <section v-if="activeSection === 'date-time'" data-testid="prefs-section-date-time">
-          <h2>Date and Time</h2>
+          <h2>{{ t('Date and Time') }}</h2>
           <div class="prefs-row">
-            <label class="prefs-label">Week starts on</label>
+            <label class="prefs-label">{{ t('Week starts on') }}</label>
             <div class="prefs-radio-group">
               <button
                 v-for="opt in weekStartOptions"
@@ -193,11 +194,11 @@ function scrollHighlightedIntoView() {
                 :class="{ active: uiStore.weekStartDay === opt.day }"
                 :data-testid="`prefs-week-start-${opt.day}`"
                 @click="uiStore.setWeekStartDay(opt.day)"
-              >{{ opt.label }}</button>
+              >{{ t(opt.label) }}</button>
             </div>
           </div>
           <div class="prefs-row">
-            <label class="prefs-label">Time format</label>
+            <label class="prefs-label">{{ t('Time format') }}</label>
             <div class="prefs-radio-group">
               <button
                 v-for="opt in timeFormatOptions"
@@ -206,11 +207,11 @@ function scrollHighlightedIntoView() {
                 :class="{ active: uiStore.timeFormat === opt.value }"
                 :data-testid="`prefs-time-format-${opt.value}`"
                 @click="uiStore.setTimeFormat(opt.value)"
-              >{{ opt.label }}</button>
+              >{{ t(opt.label) }}</button>
             </div>
           </div>
           <div class="prefs-row">
-            <label class="prefs-label" for="prefs-tz">Display timezone</label>
+            <label class="prefs-label" for="prefs-tz">{{ t('Display timezone') }}</label>
             <div class="tz-picker">
               <input
                 id="prefs-tz"
@@ -222,7 +223,7 @@ function scrollHighlightedIntoView() {
                 @focus="onTzInputFocus"
                 @blur="onTzInputBlur"
                 @keydown="onTzKeydown"
-                aria-label="Display timezone"
+                :aria-label="t('Display timezone')"
                 role="combobox"
                 :aria-expanded="tzDropdownOpen"
                 aria-controls="prefs-tz-listbox"
@@ -239,7 +240,7 @@ function scrollHighlightedIntoView() {
                 ref="tzDropdownRef"
                 id="prefs-tz-listbox"
                 role="listbox"
-                aria-label="Timezones"
+                :aria-label="t('Timezones')"
                 class="tz-dropdown"
                 data-testid="prefs-timezone-dropdown"
               >
@@ -258,7 +259,7 @@ function scrollHighlightedIntoView() {
                   {{ tz }}
                 </button>
                 <div v-if="filteredTimezones.length === 0" class="tz-empty">
-                  No matching timezones
+                  {{ t('No matching timezones') }}
                 </div>
               </div>
             </div>

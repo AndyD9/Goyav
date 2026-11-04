@@ -435,6 +435,8 @@ pub fn initialize(conn: &Connection) -> Result<()> {
         ",
     )?;
 
+    crate::db::signatures::create_table(conn)?;
+
     // Migrations for existing databases
     run_migrations(conn)?;
     initialize_calendar_event_state(conn)?;

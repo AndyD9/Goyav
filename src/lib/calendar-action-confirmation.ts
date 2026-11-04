@@ -1,4 +1,5 @@
 import { message as tauriMessage } from "@tauri-apps/plugin-dialog";
+import { t } from "@/i18n";
 import type {
   CalendarActionPlan,
   CalendarConfirmations,
@@ -17,12 +18,12 @@ async function confirmWarning(
   title: string,
   confirmLabel: string,
 ): Promise<boolean> {
-  const answer = await tauriMessage(message, {
-    title,
+  const answer = await tauriMessage(t(message), {
+    title: t(title),
     kind: "warning",
-    buttons: { ok: confirmLabel, cancel: "Cancel" },
+    buttons: { ok: t(confirmLabel), cancel: t("Cancel") },
   });
-  return matchesDialogAnswer(answer, confirmLabel, "Ok");
+  return matchesDialogAnswer(answer, t(confirmLabel), "Ok");
 }
 
 export async function confirmCalendarAction(
@@ -69,21 +70,21 @@ export async function chooseRescheduleScope(
     return confirmed ? "entire-series" : null;
   }
   const answer = await tauriMessage(
-    "Apply this new time to only this occurrence or to the entire series?",
+    t("Apply this new time to only this occurrence or to the entire series?"),
     {
-      title: "Reschedule Recurring Event",
+      title: t("Reschedule Recurring Event"),
       kind: "info",
       buttons: {
-        yes: "This Occurrence",
-        no: "Entire Series",
-        cancel: "Cancel",
+        yes: t("This Occurrence"),
+        no: t("Entire Series"),
+        cancel: t("Cancel"),
       },
     },
   );
-  if (matchesDialogAnswer(answer, "This Occurrence", "Yes")) {
+  if (matchesDialogAnswer(answer, t("This Occurrence"), "Yes")) {
     return "this-occurrence";
   }
-  if (matchesDialogAnswer(answer, "Entire Series", "No")) {
+  if (matchesDialogAnswer(answer, t("Entire Series"), "No")) {
     return "entire-series";
   }
   return null;

@@ -28,6 +28,10 @@ vi.mock("@/lib/tauri", () => ({
   meetVisioLoginStart: vi.fn().mockResolvedValue({ session_id: "visio-session" }),
   meetVisioLoginComplete: vi.fn().mockResolvedValue("visio-1"),
   meetVisioLoginCancel: vi.fn().mockResolvedValue(undefined),
+  listAccountSignatures: vi.fn().mockResolvedValue([]),
+  saveAccountSignatures: vi.fn().mockResolvedValue([]),
+  pickSignatureFile: vi.fn().mockResolvedValue(null),
+  getSignaturePreviewHtml: vi.fn(async (html: string) => html),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -294,10 +298,7 @@ describe("SettingsView", () => {
     ) as HTMLSelectElement;
     expect(select.value).toBe("ms-calendar");
 
-    bodyEl(".account-form")!
-      .closest(".modal")!
-      .querySelector<HTMLButtonElement>(".btn-primary")!
-      .click();
+    bodyEl('[data-testid="account-save"]')!.click();
     await flushPromises();
 
     expect(api.setDefaultImportCalendar).toHaveBeenCalledWith(
@@ -418,8 +419,7 @@ describe("SettingsView", () => {
     email.dispatchEvent(new Event("input"));
     username.value = "user";
     username.dispatchEvent(new Event("input"));
-    const save = Array.from(document.body.querySelectorAll(".modal-footer button"))
-      .find((button) => button.textContent?.includes("Add Account")) as HTMLElement;
+    const save = bodyEl('[data-testid="account-save"]') as HTMLElement;
     save.click();
     await flushPromises();
 
@@ -442,8 +442,7 @@ describe("SettingsView", () => {
     const email = bodyEl('[data-testid="account-email"]') as HTMLInputElement;
     email.value = "user@example.org";
     email.dispatchEvent(new Event("input"));
-    const save = Array.from(document.body.querySelectorAll(".modal-footer button"))
-      .find((button) => button.textContent?.includes("Add Account")) as HTMLElement;
+    const save = bodyEl('[data-testid="account-save"]') as HTMLElement;
     save.click();
     await flushPromises();
 
@@ -462,8 +461,7 @@ describe("SettingsView", () => {
     bodyEl('[data-testid="picker-fastmail"]')!.click();
     await flushPromises();
 
-    const buttons = Array.from(document.body.querySelectorAll(".modal-footer button"));
-    const save = buttons.find((b) => b.textContent?.includes("Add Account")) as HTMLElement;
+    const save = bodyEl('[data-testid="account-save"]') as HTMLElement;
     save.click();
     await flushPromises();
 
@@ -568,10 +566,7 @@ describe("SettingsView", () => {
     name.value = "Renamed Visio";
     name.dispatchEvent(new Event("input"));
     await wrapper.vm.$nextTick();
-    bodyEl(".account-form")!
-      .closest(".modal")!
-      .querySelector<HTMLButtonElement>(".btn-primary")!
-      .click();
+    bodyEl('[data-testid="account-save"]')!.click();
     await flushPromises();
     expect(api.updateAccount).toHaveBeenCalledWith(
       "visio-1",
@@ -626,7 +621,7 @@ describe("SettingsView", () => {
     bodyEl('[data-testid="visio-signin-btn"]')!.click();
     await flushPromises();
 
-    bodyEl(".modal-close")!.click();
+    bodyEl('[data-testid="account-page-back"]')!.click();
     await flushPromises();
     expect(api.meetVisioLoginCancel).toHaveBeenCalledWith("visio-session");
 
@@ -653,7 +648,8 @@ describe("SettingsView", () => {
     bodyEl('[data-testid="visio-signin-btn"]')!.click();
     await flushPromises();
 
-    bodyEl(".modal-close")!.click();
+    bodyEl('[data-testid="account-page-back"]')!.click();
+    await flushPromises();
     await wrapper.find(".btn-add").trigger("click");
     bodyEl('[data-testid="picker-imap"]')!.click();
     await flushPromises();
@@ -833,5 +829,68 @@ describe("SettingsView", () => {
     expect((bodyEl(
       '[data-testid="zoom-abandon-checkbox"]',
     ) as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("opens an account as a page with tabs and saves its signatures", async () => {
+    vi.mocked(api.getAccountConfig).mockResolvedValue({ ...gmailConfig, signature: "-- \nOld" });
+    vi.mocked(api.listAccountSignatures).mockResolvedValue([
+      { id: "legacy", name: "Signature", body: "-- \nOld", is_default: true },
+    ]);
+    vi.mocked(api.saveAccountSignatures).mockImplementation(async (_id, list) => list);
+    vi.mocked(api.updateAccount).mockResolvedValue(undefined);
+    const store = useAccountsStore();
+    store.accounts = [
+      {
+        id: "acc1",
+        display_name: "Work",
+        email: "w@example.org",
+        username: "w@example.org",
+        provider: "gmail",
+        mail_protocol: "imap",
+        enabled: true,
+        mail_sync_interval_seconds: null,
+        calendar_sync_interval_seconds: null,
+        contacts_sync_interval_seconds: null,
+        has_calendar_binding: true,
+        has_contacts_binding: true,
+        meet_protocol: "",
+      },
+    ];
+    const wrapper = mount(SettingsView, {
+      global: { plugins: [makeRouter()] },
+      attachTo: document.body,
+    });
+
+    await wrapper.find(".account-card").trigger("click");
+    await flushPromises();
+
+    // The page replaces the account list instead of opening a dialog.
+    expect(bodyEl('[data-testid="account-page"]')).toBeTruthy();
+    expect(bodyEl(".modal-overlay")).toBeNull();
+    expect(wrapper.find(".account-list").exists()).toBe(false);
+    const tabs = Array.from(document.body.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent?.trim());
+    expect(tabs).toEqual(["General", "Signatures", "Sync", "OpenPGP"]);
+
+    await wrapper.find('[data-testid="account-tab-signatures"]').trigger("click");
+    await wrapper.find('[data-testid="signature-add"]').trigger("click");
+    const name = wrapper.find('[data-testid="signature-name"]');
+    await name.setValue("Short");
+    await wrapper.find('[data-testid="signature-body"]').setValue("-- \nA.");
+    await wrapper.find('[data-testid="signature-default"]').setValue(true);
+
+    await wrapper.find('[data-testid="account-save"]').trigger("click");
+    await flushPromises();
+
+    const savedConfig = vi.mocked(api.updateAccount).mock.calls[0][1];
+    expect(savedConfig.signature).toBe("-- \nA.");
+    const saved = vi.mocked(api.saveAccountSignatures).mock.calls[0];
+    expect(saved[0]).toBe("acc1");
+    expect(saved[1].map((s) => [s.name, s.is_default])).toEqual([
+      ["Signature", false],
+      ["Short", true],
+    ]);
+    // Back on the Accounts section (the mocked refresh returns no accounts).
+    expect(bodyEl('[data-testid="account-page"]')).toBeNull();
+    expect(wrapper.find(".settings-toolbar").exists()).toBe(true);
   });
 });

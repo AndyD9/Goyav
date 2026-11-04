@@ -1,3 +1,5 @@
+import { t } from "@/i18n";
+
 export const ADD_ACCOUNT_TYPES = [
   "gmail",
   "o365",
@@ -98,9 +100,9 @@ export function accountTypeLabel(account: {
 
   const hasCalendar = Boolean(account.has_calendar_binding);
   const hasContacts = Boolean(account.has_contacts_binding);
-  if (hasCalendar && hasContacts) return "Calendar and Contacts";
-  if (hasCalendar) return "Calendar";
-  if (hasContacts) return "Contacts";
+  if (hasCalendar && hasContacts) return t("Calendar and Contacts");
+  if (hasCalendar) return t("Calendar");
+  if (hasContacts) return t("Contacts");
 
   switch (account.meet_protocol) {
     case "talk":
@@ -121,5 +123,5 @@ export function accountSecondaryLabel(account: {
 }
 
 export function accountTypeDescription(accountType: AccountType): string {
-  return ACCOUNT_TYPE_DETAILS[accountType].description;
+  return t(ACCOUNT_TYPE_DETAILS[accountType].description);
 }

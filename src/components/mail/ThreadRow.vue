@@ -3,6 +3,7 @@ import { computed } from "vue";
 import type { ThreadSummary } from "@/lib/types";
 import { useUiStore } from "@/stores/ui";
 import { acctColor } from "@/lib/account-colors";
+import { t, dateLocale } from "@/i18n";
 
 const props = defineProps<{
   thread: ThreadSummary;
@@ -32,13 +33,13 @@ function formatDate(dateStr: string): string {
   const now = new Date();
   const isToday = date.toDateString() === now.toDateString();
   if (isToday) {
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: uiStore.hour12 });
+    return date.toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit", hour12: uiStore.hour12 });
   }
   const isThisYear = date.getFullYear() === now.getFullYear();
   if (isThisYear) {
-    return date.toLocaleDateString([], { month: "short", day: "numeric" });
+    return date.toLocaleDateString(dateLocale(), { month: "short", day: "numeric" });
   }
-  return date.toLocaleDateString([], {
+  return date.toLocaleDateString(dateLocale(), {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -93,7 +94,7 @@ function isReply(): boolean {
           type="button"
           class="mail-card-count"
           :class="{ expanded }"
-          :aria-label="`${expanded ? 'Collapse' : 'Expand'} thread of ${thread.message_count} messages`"
+          :aria-label="expanded ? t('Collapse thread of {count} messages', { count: thread.message_count }) : t('Expand thread of {count} messages', { count: thread.message_count })"
           :aria-expanded="expanded"
           @click.stop="$emit('toggle')"
         >{{ thread.message_count }}</button>
@@ -101,7 +102,7 @@ function isReply(): boolean {
       </div>
       <div class="mail-card-line col-subject" :class="{ bold: hasUnread() && !expanded }">
         <span v-if="isReply()" class="mail-card-reply">&hookleftarrow;</span>
-        <span class="mail-card-subject" data-testid="msg-subject">{{ thread.subject || "(no subject)" }}</span>
+        <span class="mail-card-subject" data-testid="msg-subject">{{ thread.subject || t("(no subject)") }}</span>
         <svg
           v-if="thread.has_attachments"
           class="mail-card-clip"
@@ -111,7 +112,7 @@ function isReply(): boolean {
           stroke-width="1.8"
           stroke-linecap="round"
           stroke-linejoin="round"
-          aria-label="Has attachments"
+          :aria-label="t('Has attachments')"
         >
           <path d="M21.44 11.05l-9.19 9.19a6 6 0 1 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
         </svg>
@@ -165,7 +166,7 @@ function isReply(): boolean {
     </div>
     <div class="col col-subject" :class="{ bold: hasUnread() && !expanded }">
       <span v-if="isReply()" class="reply-icon">&hookleftarrow;</span>
-      <span class="subject-text" data-testid="msg-subject">{{ thread.subject || "(no subject)" }}</span>
+      <span class="subject-text" data-testid="msg-subject">{{ thread.subject || t("(no subject)") }}</span>
       <span v-if="thread.message_count > 1" class="thread-count">({{ thread.message_count }})</span>
     </div>
     <div class="col col-from" :class="{ bold: hasUnread() && !expanded }" data-testid="msg-from">

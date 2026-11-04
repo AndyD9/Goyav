@@ -4,6 +4,7 @@ import type { MessageSummary } from "@/lib/types";
 import { useUiStore } from "@/stores/ui";
 import { useAccountsStore } from "@/stores/accounts";
 import { acctColor } from "@/lib/account-colors";
+import { t, dateLocale } from "@/i18n";
 
 const props = defineProps<{
   message: MessageSummary;
@@ -41,13 +42,13 @@ function formatDate(dateStr: string): string {
   const now = new Date();
   const isToday = date.toDateString() === now.toDateString();
   if (isToday) {
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: uiStore.hour12 });
+    return date.toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit", hour12: uiStore.hour12 });
   }
   const isThisYear = date.getFullYear() === now.getFullYear();
   if (isThisYear) {
-    return date.toLocaleDateString([], { month: "short", day: "numeric" });
+    return date.toLocaleDateString(dateLocale(), { month: "short", day: "numeric" });
   }
-  return date.toLocaleDateString([], {
+  return date.toLocaleDateString(dateLocale(), {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -162,7 +163,7 @@ function onPointerUp() {
       </div>
       <div class="mail-card-line col-subject" :class="{ bold: isUnread(message.flags) }">
         <span v-if="isReply(message.subject, message.flags)" class="mail-card-reply">&hookleftarrow;</span>
-        <span class="mail-card-subject" data-testid="msg-subject">{{ message.subject || "(no subject)" }}</span>
+        <span class="mail-card-subject" data-testid="msg-subject">{{ message.subject || t("(no subject)") }}</span>
         <svg
           v-if="message.has_attachments"
           class="mail-card-clip"
@@ -172,7 +173,7 @@ function onPointerUp() {
           stroke-width="1.8"
           stroke-linecap="round"
           stroke-linejoin="round"
-          aria-label="Has attachments"
+          :aria-label="t('Has attachments')"
         >
           <path d="M21.44 11.05l-9.19 9.19a6 6 0 1 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
         </svg>
@@ -223,7 +224,7 @@ function onPointerUp() {
     </div>
     <div class="col col-subject" :class="{ bold: isUnread(message.flags) }">
       <span v-if="isReply(message.subject, message.flags)" class="reply-icon">&hookleftarrow;</span>
-      <span class="subject-text" data-testid="msg-subject">{{ message.subject || "(no subject)" }}</span>
+      <span class="subject-text" data-testid="msg-subject">{{ message.subject || t("(no subject)") }}</span>
     </div>
     <div class="col col-from" :class="{ bold: isUnread(message.flags) }" data-testid="msg-from">
       {{ message.from_name || message.from_email }}
@@ -281,7 +282,7 @@ function onPointerUp() {
           <span
             v-if="isUnread(message.flags)"
             class="mobile-unread-dot"
-            aria-label="Unread"
+            :aria-label="t('Unread')"
             data-testid="msg-unread-dot"
           />
           <span class="mobile-sender" :class="{ unread: isUnread(message.flags) }" data-testid="msg-from">
@@ -294,7 +295,7 @@ function onPointerUp() {
         <div class="mobile-line2" :class="{ unread: isUnread(message.flags) }">
           <span v-if="isReply(message.subject, message.flags)" class="reply-icon">&hookleftarrow;</span>
           <span class="mobile-subject" data-testid="msg-subject">
-            {{ message.subject || "(no subject)" }}
+            {{ message.subject || t("(no subject)") }}
           </span>
         </div>
         <div class="mobile-line3">

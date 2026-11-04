@@ -6,6 +6,7 @@
 /// `form` is the modal's shared AccountConfig draft, passed by
 /// reference — inputs and discovery results write straight into it.
 import { ref } from "vue";
+import { t } from "@/i18n";
 import type { AccountConfig } from "@/lib/types";
 import * as api from "@/lib/tauri";
 
@@ -110,24 +111,24 @@ async function discoverMailServers() {
       form.use_tls = result.smtp_use_tls;
     }
 
-    const sourceLabel = result.source ? ` (via ${result.source})` : "";
+    const sourceLabel = result.source ? t(" (via {source})", { source: result.source }) : "";
     if (filled.length === 0 && skipped.length === 0) {
-      discoveryNote.value = "No autoconfig data found for this domain.";
+      discoveryNote.value = t("No autoconfig data found for this domain.");
     } else if (filled.length === 0) {
       discoveryNote.value =
-        `Kept your existing ${skipped.join(" + ")} settings; autoconfig${sourceLabel} also returned values but did not overwrite.`;
+        t("Kept your existing {settings} settings; autoconfig{source} also returned values but did not overwrite.", { settings: skipped.join(" + "), source: sourceLabel });
     } else if (skipped.length === 0) {
-      discoveryNote.value = `Filled ${filled.join(" + ")}${sourceLabel}.`;
+      discoveryNote.value = t("Filled {filled}{source}.", { filled: filled.join(" + "), source: sourceLabel });
     } else {
       discoveryNote.value =
-        `Filled ${filled.join(" + ")}${sourceLabel}. Kept your existing ${skipped.join(" + ")} settings.`;
+        t("Filled {filled}{source}. Kept your existing {settings} settings.", { filled: filled.join(" + "), source: sourceLabel, settings: skipped.join(" + ") });
     }
   } catch (e) {
     // Match the rest of the UI: unwrap Error.message instead of
     // template-stringifying the raw value, which can render
     // "[object Object]" when the backend returns a structured error.
     const msg = e instanceof Error ? e.message : String(e);
-    discoveryNote.value = `Discovery failed: ${msg}`;
+    discoveryNote.value = t("Discovery failed: {message}", { message: msg });
   } finally {
     discoveringMail.value = false;
   }
@@ -137,27 +138,27 @@ async function discoverMailServers() {
 <template>
   <div class="form-row">
     <div class="form-group">
-      <label>IMAP Server</label>
+      <label>{{ t("IMAP Server") }}</label>
       <input v-model="form.imap_host" type="text" placeholder="imap.example.com" />
     </div>
     <div class="form-group port">
-      <label>Port</label>
+      <label>{{ t("Port") }}</label>
       <input v-model.number="form.imap_port" type="number" />
     </div>
   </div>
   <div class="form-row">
     <div class="form-group">
-      <label>SMTP Server</label>
+      <label>{{ t("SMTP Server") }}</label>
       <input v-model="form.smtp_host" type="text" placeholder="smtp.example.com" />
     </div>
     <div class="form-group port">
-      <label>Port</label>
+      <label>{{ t("Port") }}</label>
       <input v-model.number="form.smtp_port" type="number" />
     </div>
   </div>
 
   <div class="form-group">
-    <label>Mail server auto-discovery</label>
+    <label>{{ t("Mail server auto-discovery") }}</label>
     <div class="mail-discovery-row">
       <button
         type="button"
@@ -166,21 +167,21 @@ async function discoverMailServers() {
         :disabled="discoveringMail || !form.email"
         @click="discoverMailServers"
       >
-        {{ discoveringMail ? 'Searching...' : 'Auto-discover IMAP / SMTP' }}
+        {{ discoveringMail ? t('Searching...') : t('Auto-discover IMAP / SMTP') }}
       </button>
       <span v-if="!form.email" class="field-hint">
-        Enter your email address first.
+        {{ t("Enter your email address first.") }}
       </span>
     </div>
     <span v-if="discoveryNote" class="field-hint" data-testid="mail-discovery-note">
       {{ discoveryNote }}
     </span>
     <span class="field-hint">
-      Looks up the IMAP / SMTP host, port and TLS settings for your domain via Thunderbird-style autoconfig. Calendars and contacts are added as separate accounts on the CalDAV / CardDAV tabs.
+      {{ t("Looks up the IMAP / SMTP host, port and TLS settings for your domain via Thunderbird-style autoconfig. Calendars and contacts are added as separate accounts on the CalDAV / CardDAV tabs.") }}
     </span>
     <div v-if="editing && form.caldav_url" class="dav-link-cleanup-row">
       <span class="field-hint dav-link-hint" data-testid="dav-link-hint">
-        This account is also linked to {{ form.caldav_url }}.
+        {{ t("This account is also linked to {url}.", { url: form.caldav_url }) }}
       </span>
       <button
         type="button"
@@ -188,7 +189,7 @@ async function discoverMailServers() {
         data-testid="dav-unlink-btn"
         @click="form.caldav_url = ''"
       >
-        Unlink calendar / contacts
+        {{ t("Unlink calendar / contacts") }}
       </button>
     </div>
   </div>

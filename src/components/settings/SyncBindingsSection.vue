@@ -10,6 +10,7 @@
 /// AccountConfig), so they come in as two v-models the modal persists
 /// in saveAccount.
 import { computed } from "vue";
+import { t } from "@/i18n";
 import type { AccountConfig } from "@/lib/types";
 import type { BookOption } from "@/lib/account-types";
 
@@ -55,7 +56,7 @@ const contactsIntervalMinutes = makeMinutesField("contacts_sync_interval_seconds
 
 <template>
   <div class="form-group bindings-section" data-testid="binding-controls">
-    <label class="bindings-section-title">Per-service sync</label>
+    <label class="bindings-section-title">{{ t("Per-service sync") }}</label>
 
     <!-- Mail toggle + interval: only show when there's actually
          a mail binding. CalDAV/CardDAV-only accounts hide this. -->
@@ -66,10 +67,10 @@ const contactsIntervalMinutes = makeMinutesField("contacts_sync_interval_seconds
           type="checkbox"
           data-testid="mail-sync-enabled"
         />
-        Sync mail
+        {{ t("Sync mail") }}
       </label>
       <p class="form-help">
-        Turn off to keep using calendars and contacts on this server without fetching mail. Useful for JMAP accounts you only treat as a calendar source.
+        {{ t("Turn off to keep using calendars and contacts on this server without fetching mail. Useful for JMAP accounts you only treat as a calendar source.") }}
       </p>
     </div>
 
@@ -80,10 +81,10 @@ const contactsIntervalMinutes = makeMinutesField("contacts_sync_interval_seconds
           type="checkbox"
           data-testid="calendar-sync-enabled"
         />
-        Sync calendar
+        {{ t("Sync calendar") }}
       </label>
       <div class="interval-row">
-        <span>Every</span>
+        <span>{{ t("Every") }}</span>
         <input
           v-model="calendarIntervalMinutes"
           type="number"
@@ -93,8 +94,8 @@ const contactsIntervalMinutes = makeMinutesField("contacts_sync_interval_seconds
           class="interval-input"
           data-testid="calendar-sync-interval"
         />
-        <span>minutes</span>
-        <span class="field-hint inline-hint">default 5 if blank</span>
+        <span>{{ t("minutes") }}</span>
+        <span class="field-hint inline-hint">{{ t("default 5 if blank") }}</span>
       </div>
     </div>
 
@@ -105,10 +106,10 @@ const contactsIntervalMinutes = makeMinutesField("contacts_sync_interval_seconds
           type="checkbox"
           data-testid="contacts-sync-enabled"
         />
-        Sync contacts
+        {{ t("Sync contacts") }}
       </label>
       <div class="interval-row">
-        <span>Every</span>
+        <span>{{ t("Every") }}</span>
         <input
           v-model="contactsIntervalMinutes"
           type="number"
@@ -118,23 +119,23 @@ const contactsIntervalMinutes = makeMinutesField("contacts_sync_interval_seconds
           class="interval-input"
           data-testid="contacts-sync-interval"
         />
-        <span>minutes</span>
-        <span class="field-hint inline-hint">default 30 if blank</span>
+        <span>{{ t("minutes") }}</span>
+        <span class="field-hint inline-hint">{{ t("default 30 if blank") }}</span>
       </div>
     </div>
 
     <p class="form-help bindings-footer">
-      When a service is off, the corresponding data is not fetched from the server. Already-synced data remains available offline.
+      {{ t("When a service is off, the corresponding data is not fetched from the server. Already-synced data remains available offline.") }}
     </p>
 
     <div v-if="form.mail_protocol" class="form-group binding-row">
-      <label>Default calendar for imported events</label>
+      <label>{{ t("Default calendar for imported events") }}</label>
       <select
         v-model="importCalendarId"
         class="form-control"
         data-testid="default-import-calendar"
       >
-        <option :value="null">Auto (source account default when available)</option>
+        <option :value="null">{{ t("Auto (source account default when available)") }}</option>
         <option
           v-for="calendar in availableImportCalendars"
           :key="calendar.id"
@@ -144,34 +145,34 @@ const contactsIntervalMinutes = makeMinutesField("contacts_sync_interval_seconds
         </option>
       </select>
       <span class="field-hint">
-        Calendar attachments opened from this email account use this destination first.
+        {{ t("Calendar attachments opened from this email account use this destination first.") }}
       </span>
     </div>
 
     <div v-if="form.mail_protocol" class="form-group binding-row">
-      <label>Default address book for compose</label>
+      <label>{{ t("Default address book for compose") }}</label>
       <select
         v-model="mailBookId"
         class="form-control"
         data-testid="default-contact-book-mail"
       >
-        <option :value="null">Auto (first synced book on this account)</option>
+        <option :value="null">{{ t("Auto (first synced book on this account)") }}</option>
         <option v-for="b in availableBooks" :key="b.id" :value="b.id">{{ b.label }}</option>
       </select>
-      <span class="field-hint">Recipient autocomplete in the composer ranks matches from this book first.</span>
+      <span class="field-hint">{{ t("Recipient autocomplete in the composer ranks matches from this book first.") }}</span>
     </div>
 
     <div v-if="hasCalendarBinding" class="form-group binding-row">
-      <label>Default address book for event attendees</label>
+      <label>{{ t("Default address book for event attendees") }}</label>
       <select
         v-model="calendarBookId"
         class="form-control"
         data-testid="default-contact-book-calendar"
       >
-        <option :value="null">Auto (first synced book on this account)</option>
+        <option :value="null">{{ t("Auto (first synced book on this account)") }}</option>
         <option v-for="b in availableBooks" :key="b.id" :value="b.id">{{ b.label }}</option>
       </select>
-      <span class="field-hint">Attendee autocomplete in the event editor ranks matches from this book first.</span>
+      <span class="field-hint">{{ t("Attendee autocomplete in the event editor ranks matches from this book first.") }}</span>
     </div>
   </div>
 </template>

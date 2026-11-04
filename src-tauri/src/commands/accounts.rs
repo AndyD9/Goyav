@@ -443,6 +443,74 @@ fn validate_visio_account_update(
 }
 
 #[tauri::command]
+pub async fn list_account_signatures(
+    state: State<'_, AppState>,
+    account_id: String,
+) -> Result<Vec<db::signatures::AccountSignature>> {
+    let conn = state.db.reader();
+    db::signatures::list_signatures(&conn, &account_id)
+}
+
+#[tauri::command]
+pub async fn save_account_signatures(
+    state: State<'_, AppState>,
+    account_id: String,
+    signatures: Vec<db::signatures::AccountSignature>,
+) -> Result<Vec<db::signatures::AccountSignature>> {
+    let conn = state.db.writer().await;
+    db::signatures::save_signatures(&conn, &account_id, &signatures)
+}
+
+/// A signature file chosen in the native picker.
+#[derive(Debug, serde::Serialize)]
+pub struct PickedSignatureFile {
+    /// File name without extension, offered as the signature name.
+    pub name: String,
+    pub content: String,
+}
+
+/// Let the user pick an HTML (or text) signature file and return its text.
+/// The dialog runs on the Rust side so the renderer never handles paths.
+/// Returns `None` when the user cancels.
+#[tauri::command]
+pub async fn pick_signature_file(app: tauri::AppHandle) -> Result<Option<PickedSignatureFile>> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .add_filter("Signature", &["html", "htm", "txt"])
+        .pick_file(move |path| {
+            let _ = tx.send(path);
+        });
+    let picked = rx
+        .await
+        .map_err(|e| crate::error::Error::Other(format!("file picker closed unexpectedly: {e}")))?;
+    let Some(file_path) = picked else {
+        return Ok(None);
+    };
+    let path = file_path
+        .as_path()
+        .ok_or_else(|| crate::error::Error::Other("picked path was not on local filesystem".into()))?
+        .to_path_buf();
+    let metadata = std::fs::metadata(&path)?;
+    if metadata.len() as usize > db::signatures::MAX_SIGNATURE_BYTES {
+        return Err(crate::error::Error::Other(format!(
+            "Signature files must be smaller than {} KB",
+            db::signatures::MAX_SIGNATURE_BYTES / 1024
+        )));
+    }
+    let bytes = std::fs::read(&path)?;
+    let content = String::from_utf8_lossy(&bytes)
+        .trim_start_matches('\u{feff}')
+        .to_string();
+    let name = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    Ok(Some(PickedSignatureFile { name, content }))
+}
+
+#[tauri::command]
 pub async fn delete_account(state: State<'_, AppState>, account_id: String) -> Result<()> {
     log::info!("Deleting account {}", account_id);
     // A previous cleanup may have failed only because OAuth needed renewal.

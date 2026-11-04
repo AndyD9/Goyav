@@ -1,3 +1,5 @@
+import { dateLocale } from "@/i18n";
+
 const MILLISECONDS_PER_MINUTE = 60_000;
 
 interface DateTimeParts {
@@ -60,7 +62,7 @@ export function formatInTimezone(
   const date = parseDate(iso);
   if (!date) return iso;
 
-  return date.toLocaleString(undefined, {
+  return date.toLocaleString(dateLocale(), {
     weekday: "long",
     month: "long",
     day: "numeric",

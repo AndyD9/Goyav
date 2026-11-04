@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useActivityStore } from "@/stores/activity";
 import { useUiStore } from "@/stores/ui";
+import { t } from "@/i18n";
 
 const activityStore = useActivityStore();
 const uiStore = useUiStore();
@@ -10,8 +11,8 @@ const uiStore = useUiStore();
   <Transition name="panel-slide">
     <div v-if="uiStore.operationsPanelOpen" class="operations-panel" data-testid="operations-panel">
       <div class="panel-header">
-        <span class="panel-title">Operations</span>
-        <button class="panel-close" data-testid="ops-panel-close" @click="uiStore.toggleOperationsPanel()" title="Close">
+        <span class="panel-title">{{ t("Operations") }}</span>
+        <button class="panel-close" data-testid="ops-panel-close" @click="uiStore.toggleOperationsPanel()" :title="t('Close')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
           </svg>
@@ -22,7 +23,7 @@ const uiStore = useUiStore();
           v-if="activityStore.recentOperations.length === 0"
           class="panel-empty"
         >
-          No recent operations
+          {{ t("No recent operations") }}
         </div>
         <div
           v-for="op in activityStore.recentOperations"

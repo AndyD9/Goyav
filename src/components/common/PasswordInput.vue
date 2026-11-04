@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { t } from "@/i18n";
 
 defineProps<{ placeholder?: string }>();
 const model = defineModel<string>({ required: true });
@@ -24,6 +25,7 @@ const isVisible = ref(false);
       type="button"
       class="eye-btn"
       tabindex="-1"
+      :aria-label="isVisible ? t('Hide password') : t('Show password')"
       @click="isVisible = !isVisible"
     >
       <svg v-if="isVisible" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

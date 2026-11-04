@@ -20,6 +20,7 @@ import OutboxList from "@/components/mail/OutboxList.vue";
 import { OUTBOX_FOLDER } from "@/lib/types";
 import MobileAppBar from "@/components/mobile/MobileAppBar.vue";
 import MobileIconButton from "@/components/mobile/MobileIconButton.vue";
+import { t, tn } from "@/i18n";
 
 const accountsStore = useAccountsStore();
 const foldersStore = useFoldersStore();
@@ -30,10 +31,10 @@ const router = useRouter();
 
 const { isMobile } = storeToRefs(platformStore);
 const activeFolderName = computed(() => {
-  if (foldersStore.activeFolderPath === OUTBOX_FOLDER) return "Outbox";
+  if (foldersStore.activeFolderPath === OUTBOX_FOLDER) return t("Outbox");
   return (
     foldersStore.folders.find((f) => f.path === foldersStore.activeFolderPath)
-      ?.name ?? "Inbox"
+      ?.name ?? t("Inbox")
   );
 });
 const isOutboxFolder = computed(
@@ -193,7 +194,7 @@ function onOpenMessage(messageId: string) {
   if (!existing) {
     messageTabs.value.push({
       messageId,
-      subject: messagesStore.subjectForMessage(messageId) ?? "(no subject)",
+      subject: messagesStore.subjectForMessage(messageId) ?? t("(no subject)"),
     });
   }
   activateMessageTab(messageId);
@@ -233,10 +234,13 @@ function notifyNewMail(accountId: string, count: number) {
   if (document.hasFocus()) return;
 
   const account = accountsStore.accounts.find(a => a.id === accountId);
-  const accountName = account?.display_name || account?.email || "Account";
-  const body = count === 1
-    ? `1 new message in ${accountName}`
-    : `${count} new messages in ${accountName}`;
+  const accountName = account?.display_name || account?.email || t("Account");
+  const body = tn(
+    count,
+    "{count} new message in {account}",
+    "{count} new messages in {account}",
+    { account: accountName },
+  );
 
   sendNotification({ title: "Goyav", body });
 }
@@ -358,7 +362,7 @@ onUnmounted(() => {
     >
       <template #leading>
         <MobileIconButton
-          aria-label="Open folders"
+          :aria-label="t('Open folders')"
           @click="uiStore.openDrawer()"
         >
           <svg
@@ -380,7 +384,7 @@ onUnmounted(() => {
     </div>
     <button
       class="compose-fab"
-      aria-label="Compose new message"
+      :aria-label="t('Compose new message')"
       @click="uiStore.openCompose()"
     >
       <svg
@@ -475,7 +479,7 @@ onUnmounted(() => {
                 @click="activateListTab"
                 data-testid="tab-messages-btn"
               >
-                <span class="tab-label">Messages</span>
+                <span class="tab-label">{{ t("Messages") }}</span>
               </button>
             </div>
             <div
@@ -498,7 +502,7 @@ onUnmounted(() => {
               <button
                 type="button"
                 class="tab-close"
-                :aria-label="`Close tab: ${tab.subject}`"
+                :aria-label="t('Close tab: {subject}', { subject: tab.subject })"
                 @click="closeTab(tab.messageId)"
                 :data-testid="`tab-close-${tab.messageId}`"
               >

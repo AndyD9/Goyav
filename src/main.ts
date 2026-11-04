@@ -8,6 +8,7 @@ import {
 } from "./stores/activity";
 import { usePlatformStore } from "./stores/platform";
 import { dismissToast, showToast } from "./lib/toast";
+import { t } from "./i18n";
 import "./assets/styles/main.css";
 
 const STARTUP_ATTEMPTS = 2;
@@ -41,7 +42,7 @@ if (activityInitializationError !== null) {
     activityInitializationError,
   );
   const unavailableToastId = showToast(
-    "Background activity updates are unavailable. Retrying...",
+    t("Background activity updates are unavailable. Retrying..."),
     "error",
     0,
   );
@@ -59,7 +60,7 @@ if (activityInitializationError !== null) {
       );
       if (error === null) {
         dismissToast(unavailableToastId);
-        showToast("Background activity updates restored", "success");
+        showToast(t("Background activity updates restored"), "success");
         return;
       }
 

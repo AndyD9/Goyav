@@ -67,6 +67,32 @@ export interface SearchHit {
   snippet: string | null;
 }
 
+/** A local-cache search match, from any folder of any searched account. */
+export interface LocalSearchHit extends MessageSummary {
+  account_id: string;
+  folder_path: string;
+}
+
+export interface LocalSearchPage {
+  hits: LocalSearchHit[];
+  /** All matches; may exceed hits.length when the result list is capped. */
+  total: number;
+}
+
+/** A named signature of an account; one per account is the default. */
+export interface AccountSignature {
+  id: string;
+  name: string;
+  /** Plain text, or HTML when it opens with a tag. */
+  body: string;
+  is_default: boolean;
+}
+
+export interface PickedSignatureFile {
+  name: string;
+  content: string;
+}
+
 export interface Folder {
   name: string;
   path: string;

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "@/i18n";
 import { useMessagesStore } from "@/stores/messages";
 
 const messagesStore = useMessagesStore();
@@ -18,7 +19,7 @@ function onTextInput() {
             type="text"
             class="filter-input"
             data-testid="filter-text-input"
-            placeholder="Filter messages... (/)"
+            :placeholder="t('Filter messages... (/)')"
             @input="onTextInput"
           />
           <button
@@ -39,7 +40,7 @@ function onTextInput() {
           @click="messagesStore.toggleQuickFilter('unread')"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-          Unread
+          {{ t("Unread") }}
         </button>
         <button
           class="filter-btn"
@@ -48,7 +49,7 @@ function onTextInput() {
           @click="messagesStore.toggleQuickFilter('starred')"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-          Starred
+          {{ t("Starred") }}
         </button>
         <button
           class="filter-btn"
@@ -57,7 +58,7 @@ function onTextInput() {
           @click="messagesStore.toggleQuickFilter('contact')"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          Contact
+          {{ t("Contact") }}
         </button>
         <button
           class="filter-btn"
@@ -66,36 +67,36 @@ function onTextInput() {
           @click="messagesStore.toggleQuickFilter('has_attachment')"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-          Attachment
+          {{ t("Attachment") }}
         </button>
       </div>
     </div>
     <div v-if="messagesStore.quickFilterText.trim()" class="field-row">
-      <span class="field-label">Filter messages by:</span>
+      <span class="field-label">{{ t("Filter messages by:") }}</span>
       <button
         class="field-btn"
         :class="{ active: messagesStore.quickFilterFields.length === 0 || messagesStore.quickFilterFields.includes('sender') }"
         data-testid="filter-field-sender"
         @click="messagesStore.toggleTextField('sender')"
-      >Sender</button>
+      >{{ t("Sender") }}</button>
       <button
         class="field-btn"
         :class="{ active: messagesStore.quickFilterFields.length === 0 || messagesStore.quickFilterFields.includes('recipients') }"
         data-testid="filter-field-recipients"
         @click="messagesStore.toggleTextField('recipients')"
-      >Recipients</button>
+      >{{ t("Recipients") }}</button>
       <button
         class="field-btn"
         :class="{ active: messagesStore.quickFilterFields.length === 0 || messagesStore.quickFilterFields.includes('subject') }"
         data-testid="filter-field-subject"
         @click="messagesStore.toggleTextField('subject')"
-      >Subject</button>
+      >{{ t("Subject") }}</button>
       <button
         class="field-btn"
         :class="{ active: messagesStore.quickFilterFields.length === 0 || messagesStore.quickFilterFields.includes('body') }"
         data-testid="filter-field-body"
         @click="messagesStore.toggleTextField('body')"
-      >Body</button>
+      >{{ t("Body") }}</button>
     </div>
     <div v-if="messagesStore.quickFilterText.trim()" class="server-row">
       <button
@@ -105,8 +106,8 @@ function onTextInput() {
         @click="messagesStore.runServerSearch()"
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <span v-if="messagesStore.serverSearchLoading" data-testid="search-server-loading">Searching server&hellip;</span>
-        <span v-else>Search server for &ldquo;{{ messagesStore.quickFilterText.trim() }}&rdquo;</span>
+        <span v-if="messagesStore.serverSearchLoading" data-testid="search-server-loading">{{ t("Searching server…") }}</span>
+        <span v-else>{{ t("Search server for “{text}”", { text: messagesStore.quickFilterText.trim() }) }}</span>
       </button>
       <span
         v-if="messagesStore.serverSearchError"

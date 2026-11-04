@@ -9,15 +9,17 @@
 /// visibility, so an imperative handle beats a v-model here. Store
 /// refresh and post-save navigation happen inside, exactly as they did
 /// in the view, so no emits are needed.
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useAccountsStore } from "@/stores/accounts";
 import { usePlatformStore } from "@/stores/platform";
-import type { AccountConfig } from "@/lib/types";
+import type { AccountConfig, AccountSignature } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import PasswordInput from "@/components/common/PasswordInput.vue";
 import ModalShell from "@/components/common/ModalShell.vue";
+import AccountPageShell from "@/components/settings/AccountPageShell.vue";
+import SignatureEditor from "@/components/settings/SignatureEditor.vue";
 import MeetAccountSection from "@/components/settings/MeetAccountSection.vue";
 import OauthSignInSection from "@/components/settings/OauthSignInSection.vue";
 import ImapServerSection from "@/components/settings/ImapServerSection.vue";
@@ -25,14 +27,22 @@ import JmapSection from "@/components/settings/JmapSection.vue";
 import DavSection from "@/components/settings/DavSection.vue";
 import SyncBindingsSection from "@/components/settings/SyncBindingsSection.vue";
 import PgpAdvancedSection from "@/components/settings/PgpAdvancedSection.vue";
-import SignaturePreview from "@/components/common/SignaturePreview.vue";
-import { isHtmlSignature } from "@/lib/signature";
+import { acctColor } from "@/lib/account-colors";
+import { showToast } from "@/lib/toast";
+import { t } from "@/i18n";
 import {
   accountTypeLabelLong,
   isFastmailJmapUrl,
   type AccountType,
   type BookOption,
 } from "@/lib/account-types";
+
+/// "modal" (mobile) shows every section in a dialog; "page" (desktop)
+/// fills the settings panel with the sections split into tabs.
+const props = withDefaults(defineProps<{ variant?: "modal" | "page" }>(), {
+  variant: "modal",
+});
+const emit = defineEmits<{ openChange: [open: boolean] }>();
 
 const router = useRouter();
 const accountsStore = useAccountsStore();
@@ -42,6 +52,24 @@ const visioAuthenticationSupported = computed(
 );
 
 const showForm = ref(false);
+watch(showForm, (open) => emit("openChange", open));
+
+// Named signatures, persisted after the account itself is saved.
+const signatures = ref<AccountSignature[]>([]);
+
+async function loadSignatures(id: string, legacy: string) {
+  try {
+    signatures.value = await api.listAccountSignatures(id);
+  } catch (e) {
+    console.warn("openEdit: list signatures failed", e);
+    signatures.value = legacy.trim()
+      ? [{ id: "legacy", name: t("Signature"), body: legacy, is_default: true }]
+      : [];
+  }
+}
+
+type AccountTab = "general" | "server" | "signatures" | "sync" | "security";
+const activeTab = ref<AccountTab>("general");
 const saving = ref(false);
 const error = ref<string | null>(null);
 const editingAccountId = ref<string | null>(null);
@@ -171,6 +199,47 @@ const isMeetTab = computed(
     || accountType.value === "zoom"
     || accountType.value === "visio",
 );
+
+const hasSignatures = computed(
+  () => !isMeetTab.value && accountType.value !== "caldav" && accountType.value !== "carddav",
+);
+
+const pageTabs = computed(() => {
+  const type = accountType.value;
+  const tabs: Array<{ id: AccountTab; label: string }> = [
+    { id: "general", label: t("General") },
+  ];
+  if (
+    ["imap", "jmap", "fastmail", "caldav", "carddav"].includes(type)
+    || (type === "gmail" && !editingAccountId.value)
+  ) {
+    tabs.push({ id: "server", label: t("Server") });
+  }
+  if (hasSignatures.value) tabs.push({ id: "signatures", label: t("Signatures") });
+  if (!isMeetTab.value) tabs.push({ id: "sync", label: t("Sync") });
+  if (!isMeetTab.value && form.value.mail_protocol) {
+    tabs.push({ id: "security", label: "OpenPGP" });
+  }
+  return tabs;
+});
+
+// The modal lists every section; the page shows the active tab only.
+function inTab(tab: AccountTab): boolean {
+  return props.variant === "modal" || activeTab.value === tab;
+}
+
+const pageTitle = computed(() => {
+  if (!editingAccountId.value) {
+    return t("New {type} account", { type: accountTypeLabelLong(accountType.value) });
+  }
+  return form.value.display_name || form.value.email || t("Account");
+});
+
+function initialsOf(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return name.trim().slice(0, 2).toUpperCase() || "?";
+}
 
 const defaultForm = (): AccountConfig => ({
   display_name: "",
@@ -381,6 +450,8 @@ function openNew(type: AccountType) {
   error.value = null;
   meetAuthStatus.value = null;
   form.value = defaultForm();
+  signatures.value = [];
+  activeTab.value = "general";
   selectAccountType(type);
   // Pre-load the cross-account book list so the create-flow dropdowns
   // are populated for users who already have an account with synced
@@ -397,6 +468,8 @@ async function openEdit(id: string) {
   try {
     const config = await api.getAccountConfig(id);
     form.value = config;
+    activeTab.value = "general";
+    await loadSignatures(id, config.signature || "");
     // Load current default-book selections (#137). Errors are
     // non-fatal: a missing binding or backend failure leaves the
     // dropdown empty and the user can still pick a value.
@@ -425,7 +498,7 @@ async function openEdit(id: string) {
       try {
         const hasTokens = await api.oauthHasTokens(id);
         if (hasTokens) {
-          oauthStatus.value = "Signed in with Microsoft";
+          oauthStatus.value = t("Signed in with Microsoft");
         } else {
           oauthStatus.value = null;
         }
@@ -435,7 +508,7 @@ async function openEdit(id: string) {
       try {
         const hasTokens = await api.oauthHasTokens(id);
         if (hasTokens) {
-          oauthStatus.value = "Signed in with Google";
+          oauthStatus.value = t("Signed in with Google");
         } else {
           oauthStatus.value = null;
         }
@@ -460,7 +533,7 @@ async function openEdit(id: string) {
         try {
           const hasTokens = await api.oauthHasTokens(id);
           if (hasTokens) {
-            oauthStatus.value = "Signed in via OIDC";
+            oauthStatus.value = t("Signed in via OIDC");
           } else {
             oauthStatus.value = null;
           }
@@ -503,7 +576,7 @@ async function openEdit(id: string) {
   }
 }
 
-defineExpose({ openNew, openEdit });
+defineExpose({ openNew, openEdit, cancel: cancelForm });
 
 async function saveAccount() {
   saving.value = true;
@@ -524,14 +597,12 @@ async function saveAccount() {
       const trimmedToken = form.value.password.trim();
       if (!editingAccountId.value && trimmedToken === "") {
         throw new Error(
-          "Fastmail accounts require an API token. Generate one at " +
-            "Fastmail Settings → Privacy & Security → Manage API tokens.",
+          t("Fastmail accounts require an API token. Generate one at Fastmail Settings → Privacy & Security → Manage API tokens."),
         );
       }
       if (editingAccountId.value && form.value.password !== "" && trimmedToken === "") {
         throw new Error(
-          "API token cannot be only whitespace. Leave the field blank " +
-            "to keep the existing token, or paste a valid token.",
+          t("API token cannot be only whitespace. Leave the field blank to keep the existing token, or paste a valid token."),
         );
       }
     }
@@ -542,7 +613,7 @@ async function saveAccount() {
       && !editingAccountId.value
       && !form.value.password.startsWith("oauth2:")
     ) {
-      throw new Error("Sign in with Google before saving the account.");
+      throw new Error(t("Sign in with Google before saving the account."));
     }
     // Default username to email if not set (Gmail and most IMAP servers use email as username)
     if (!form.value.username.trim()) {
@@ -575,6 +646,11 @@ async function saveAccount() {
         ? u
         : `${u || "dav"}@local`;
     }
+    if (hasSignatures.value) {
+      const preferred = signatures.value.find((s) => s.is_default) ?? signatures.value[0];
+      form.value.signature = preferred?.body ?? "";
+    }
+    const wasEditing = !!editingAccountId.value;
     let savedId: string | null = null;
     if (editingAccountId.value) {
       await api.updateAccount(editingAccountId.value, form.value);
@@ -609,6 +685,17 @@ async function saveAccount() {
       } catch (e) {
         console.warn("saveAccount: persist default contact books failed", e);
       }
+      if (hasSignatures.value) {
+        try {
+          signatures.value = await api.saveAccountSignatures(savedId, signatures.value);
+        } catch (e) {
+          console.error("saveAccount: persist signatures failed", e);
+          showToast(t("The account was saved, but its signatures could not be saved."), "error");
+        }
+      }
+    }
+    if (wasEditing && props.variant === "page") {
+      showToast(t("Account saved"), "success");
     }
     showForm.value = false;
     editingAccountId.value = null;
@@ -622,6 +709,7 @@ async function saveAccount() {
 
 function cancelForm() {
   invalidateVisioLogin();
+  signatures.value = [];
   meetSigningIn.value = false;
   showForm.value = false;
   editingAccountId.value = null;
@@ -662,9 +750,9 @@ async function startGoogleOAuth() {
 
     // Store the temp ID so saveAccount can use it
     form.value.password = `oauth2:${tempAccountId}`;
-    oauthStatus.value = "Signed in with Google";
+    oauthStatus.value = t("Signed in with Google");
   } catch (e) {
-    error.value = `Google sign-in failed: ${e}`;
+    error.value = t("Google sign-in failed: {error}", { error: String(e) });
   } finally {
     oauthInProgress.value = false;
   }
@@ -694,9 +782,9 @@ async function startMicrosoftOAuth() {
     }
 
     form.value.password = `oauth2:${tempAccountId}`;
-    oauthStatus.value = "Signed in with Microsoft";
+    oauthStatus.value = t("Signed in with Microsoft");
   } catch (e) {
-    error.value = `Microsoft sign-in failed: ${e}`;
+    error.value = t("Microsoft sign-in failed: {error}", { error: String(e) });
   } finally {
     oauthInProgress.value = false;
   }
@@ -757,9 +845,9 @@ async function startJmapOidc() {
     }
     form.value.jmap_auth_method = "oidc";
     oidcUserCode.value = null;
-    oauthStatus.value = "Signed in via OIDC";
+    oauthStatus.value = t("Signed in via OIDC");
   } catch (e) {
-    error.value = `OIDC sign-in failed: ${e}`;
+    error.value = t("OIDC sign-in failed: {error}", { error: String(e) });
     oidcUserCode.value = null;
   } finally {
     oauthInProgress.value = false;
@@ -777,7 +865,7 @@ const meetSigningIn = ref(false);
 async function signInWithTalk() {
   if (meetSigningIn.value) return;
   if (!form.value.meet_url.trim()) {
-    error.value = "Enter your Nextcloud server URL first";
+    error.value = t("Enter your Nextcloud server URL first");
     return;
   }
   meetSigningIn.value = true;
@@ -800,7 +888,7 @@ async function signInWithTalk() {
     void accountId;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    error.value = `Nextcloud Talk sign-in failed: ${msg}`;
+    error.value = t("Nextcloud Talk sign-in failed: {error}", { error: msg });
   } finally {
     meetSigningIn.value = false;
   }
@@ -809,7 +897,7 @@ async function signInWithTalk() {
 async function signInWithMatrix() {
   if (meetSigningIn.value) return;
   if (!form.value.meet_url.trim()) {
-    error.value = "Enter your Matrix homeserver URL first";
+    error.value = t("Enter your Matrix homeserver URL first");
     return;
   }
   meetSigningIn.value = true;
@@ -830,7 +918,7 @@ async function signInWithMatrix() {
     void accountId;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    error.value = `Matrix sign-in failed: ${msg}`;
+    error.value = t("Matrix sign-in failed: {error}", { error: msg });
   } finally {
     meetSigningIn.value = false;
   }
@@ -860,7 +948,7 @@ async function signInWithZoom() {
     void accountId;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    error.value = `Zoom sign-in failed: ${msg}`;
+    error.value = t("Zoom sign-in failed: {error}", { error: msg });
   } finally {
     meetSigningIn.value = false;
   }
@@ -870,7 +958,7 @@ async function signInWithVisio() {
   if (meetSigningIn.value) return;
   if (!visioAuthenticationSupported.value) return;
   if (!form.value.meet_url.trim()) {
-    error.value = "Enter your La Suite Visio instance URL first";
+    error.value = t("Enter your La Suite Visio instance URL first");
     return;
   }
   meetSigningIn.value = true;
@@ -907,7 +995,7 @@ async function signInWithVisio() {
     }
     if (visioOperationId !== operationId) return;
     if (editingId) {
-      meetAuthStatus.value = "Signed in again. Select Save to keep account name changes.";
+      meetAuthStatus.value = t("Signed in again. Select Save to keep account name changes.");
       return;
     }
     showForm.value = false;
@@ -918,7 +1006,7 @@ async function signInWithVisio() {
   } catch (e) {
     if (visioOperationId === operationId) {
       const msg = e instanceof Error ? e.message : String(e);
-      error.value = `La Suite Visio sign-in failed: ${msg}`;
+      error.value = t("La Suite Visio sign-in failed: {error}", { error: msg });
     }
   } finally {
     if (activeVisioLogin.value?.operationId === operationId) {
@@ -930,35 +1018,44 @@ async function signInWithVisio() {
 </script>
 
 <template>
-  <ModalShell
+  <component
+    :is="variant === 'page' ? AccountPageShell : ModalShell"
+    v-model:tab="activeTab"
     :open="showForm"
-    :title="editingAccountId ? 'Edit Account' : 'Add Account'"
+    :title="variant === 'page' ? pageTitle : (editingAccountId ? t('Edit Account') : t('Add Account'))"
+    :subtitle="variant === 'page' && editingAccountId ? form.email || form.username : undefined"
+    :badge="variant === 'page' ? accountTypeLabelLong(accountType) : undefined"
+    :initials="variant === 'page' && editingAccountId ? initialsOf(form.display_name || form.email) : undefined"
+    :color="variant === 'page' && editingAccountId ? acctColor(editingAccountId) : undefined"
+    :tabs="pageTabs"
     @close="cancelForm"
   >
     <!-- Wrapper element so shared form primitives can be styled once
          here and reach the per-type section components via :deep()
          (scoped styles otherwise stop at child roots). -->
-    <div class="account-form">
+    <div class="account-form" :class="{ 'is-page': variant === 'page' }">
     <div v-if="error" class="form-error">{{ error }}</div>
 
+    <!-- General: identity and credentials -->
+    <div v-show="inTab('general')" class="form-tab" data-tab="general">
     <!-- Account type is picked via the picker dialog before this
-         modal opens (#148 cleanup). Show a read-only label here so
+         form opens (#148 cleanup). Show a read-only label here so
          the user knows what they picked / which kind of account
          they're editing. -->
     <div class="form-group">
-      <label>Account Type</label>
+      <label>{{ t("Account Type") }}</label>
       <div class="type-readonly" data-testid="account-type-readonly">
         {{ accountTypeLabelLong(accountType) }}
       </div>
     </div>
 
     <div class="form-group">
-      <label>Account Name</label>
+      <label>{{ t("Account Name") }}</label>
       <input
         v-model="form.display_name"
         type="text"
         :disabled="isMeetTab && meetSigningIn"
-        :placeholder="accountType === 'caldav' ? 'My Calendar' : 'e.g., Personal, Work'"
+        :placeholder="accountType === 'caldav' ? t('My Calendar') : t('e.g., Personal, Work')"
       />
     </div>
 
@@ -993,21 +1090,21 @@ async function signInWithVisio() {
       v-if="accountType !== 'caldav' && accountType !== 'carddav' && !isMeetTab"
       class="form-group"
     >
-<label for="account-sender-name">Full Name</label>
-<input
-  id="account-sender-name"
-  v-model="form.sender_name"
-  type="text"
-  placeholder="e.g., Ada Lovelace"
-  data-testid="account-sender-name"
+      <label for="account-sender-name">{{ t("Full Name") }}</label>
+      <input
+        id="account-sender-name"
+        v-model="form.sender_name"
+        type="text"
+        :placeholder="t('e.g., Ada Lovelace')"
+        data-testid="account-sender-name"
       />
-      <span class="field-hint">Shown to recipients as the sender of your messages.</span>
+      <span class="field-hint">{{ t("Shown to recipients as the sender of your messages.") }}</span>
     </div>
     <div
       v-if="accountType !== 'caldav' && accountType !== 'carddav' && !isMeetTab"
       class="form-group"
     >
-      <label>Email Address</label>
+      <label>{{ t("Email Address") }}</label>
       <input
         v-model="form.email"
         type="email"
@@ -1019,25 +1116,25 @@ async function signInWithVisio() {
       v-if="accountType === 'caldav' || accountType === 'carddav'"
       class="form-group"
     >
-      <label>Username</label>
+      <label>{{ t("Username") }}</label>
       <input
         v-model="form.username"
         type="text"
-        placeholder="Login name on the DAV server"
+        :placeholder="t('Login name on the DAV server')"
         data-testid="account-username"
       />
       <span class="field-hint">
-        Login name for the {{ accountType === 'carddav' ? 'CardDAV' : 'CalDAV' }} server.
+        {{ t("Login name for the {server} server.", { server: accountType === 'carddav' ? 'CardDAV' : 'CalDAV' }) }}
       </span>
     </div>
     <div v-if="accountType !== 'o365' && accountType !== 'gmail' && !(accountType === 'jmap' && form.jmap_auth_method === 'oidc') && !isMeetTab" class="form-group">
-      <label>{{ accountType === 'fastmail' ? 'API token' : 'Password' }}</label>
+      <label>{{ accountType === 'fastmail' ? t('API token') : t('Password') }}</label>
       <PasswordInput
         v-model="form.password"
-        :placeholder="editingAccountId ? (accountType === 'fastmail' ? 'Leave empty to keep current token' : 'Leave empty to keep current password') : (accountType === 'fastmail' ? 'Paste your Fastmail API token' : '••••••••')"
+        :placeholder="editingAccountId ? (accountType === 'fastmail' ? t('Leave empty to keep current token') : t('Leave empty to keep current password')) : (accountType === 'fastmail' ? t('Paste your Fastmail API token') : '••••••••')"
       />
-      <span v-if="accountType === 'fastmail'" class="field-hint">Generate at Fastmail Settings → Privacy &amp; Security → Manage API tokens. Stored in your OS keyring.</span>
-      <span v-else class="field-hint">Passwords are stored securely in your OS keyring</span>
+      <span v-if="accountType === 'fastmail'" class="field-hint">{{ t("Generate at Fastmail Settings → Privacy & Security → Manage API tokens. Stored in your OS keyring.") }}</span>
+      <span v-else class="field-hint">{{ t("Passwords are stored securely in your OS keyring") }}</span>
     </div>
 
     <OauthSignInSection
@@ -1057,10 +1154,11 @@ async function signInWithVisio() {
       @sign-in="startMicrosoftOAuth"
       @reauth="oauthStatus = null"
     />
+    </div>
 
-    <!-- Server rows + autodiscovery. Order-safe merge: for the IMAP
-         tab nothing renders between the old server-rows and
-         discovery positions. -->
+    <!-- Server: hosts, autodiscovery and endpoints -->
+    <div v-show="inTab('server')" class="form-tab" data-tab="server">
+    <!-- Server rows + autodiscovery. -->
     <ImapServerSection
       v-if="accountType === 'imap'"
       :form="form"
@@ -1080,22 +1178,17 @@ async function signInWithVisio() {
 
     <!-- Fastmail tab: hardcoded JMAP URL + bearer auth, so the
          form only needs an info row. The API-token field is
-         rendered above by the shared password block (which
-         relabels itself when accountType === 'fastmail'). -->
+         rendered in the general tab by the shared password block. -->
     <template v-if="accountType === 'fastmail'">
       <div class="form-group">
-        <label>JMAP endpoint</label>
+        <label>{{ t("JMAP endpoint") }}</label>
         <div class="type-readonly">https://api.fastmail.com</div>
-        <span class="field-hint">Fastmail's JMAP API. Authentication uses Authorization: Bearer with the API token above.</span>
+        <span class="field-hint">{{ t("Fastmail's JMAP API. Authentication uses Authorization: Bearer with the API token above.") }}</span>
       </div>
     </template>
 
     <!-- For standalone CalDAV / CardDAV the URL is the entire
-         reason the account exists, so it stays as a manual
-         input. IMAP accounts go through auto-discovery instead
-         (inside ImapServerSection); the discovered URL drives
-         whether the calendar / contacts toggles appear in the
-         per-service section. -->
+         reason the account exists, so it stays as a manual input. -->
     <DavSection
       v-if="accountType === 'caldav' || accountType === 'carddav'"
       :form="form"
@@ -1103,24 +1196,23 @@ async function signInWithVisio() {
     />
 
     <template v-if="accountType === 'gmail' && !editingAccountId">
-      <div class="info-box">Gmail uses IMAP (imap.gmail.com:993) and SMTP (smtp.gmail.com:587) with your Google sign-in, along with Calendar and Contacts. Sign in with Google above.</div>
+      <div class="info-box">{{ t("Gmail uses IMAP (imap.gmail.com:993) and SMTP (smtp.gmail.com:587) with your Google sign-in, along with Calendar and Contacts. Sign in with Google above.") }}</div>
     </template>
-
-    <div v-if="!isMeetTab" class="form-group">
-      <label>Email Signature</label>
-      <textarea
-        v-model="form.signature"
-        class="signature-textarea"
-        rows="4"
-        placeholder="-- &#10;Your Name&#10;Your Title"
-      ></textarea>
-      <template v-if="isHtmlSignature(form.signature)">
-        <div class="signature-hint">HTML signature — added below the message and sent as HTML.</div>
-        <SignaturePreview :html="form.signature" />
-      </template>
-      <div v-else class="signature-hint">Plain text, or paste the HTML of a signature file.</div>
     </div>
 
+    <!-- Signatures -->
+    <div v-if="hasSignatures" v-show="inTab('signatures')" class="form-tab" data-tab="signatures">
+      <div class="form-group">
+        <label v-if="variant === 'modal'">{{ t("Email Signatures") }}</label>
+        <p class="tab-intro">
+          {{ t("Create one signature per use (formal, short, replies…). The default one is added to new messages; you can switch in the composer.") }}
+        </p>
+        <SignatureEditor v-model="signatures" />
+      </div>
+    </div>
+
+    <!-- Sync -->
+    <div v-show="inTab('sync')" class="form-tab" data-tab="sync">
     <!-- Per-binding sync controls. Only meaningful for accounts
          that have multiple bindings; the standalone CalDAV /
          CardDAV tabs hide the irrelevant rows. -->
@@ -1136,8 +1228,6 @@ async function signInWithVisio() {
       :available-import-calendars="availableImportCalendars"
     />
 
-    <PgpAdvancedSection v-if="!isMeetTab && form.mail_protocol" :form="form" />
-
     <!-- For standalone CalDAV/CardDAV the only relevant toggle is
          the calendar/contacts one for the matching service. -->
     <div
@@ -1150,7 +1240,7 @@ async function signInWithVisio() {
           type="checkbox"
           data-testid="calendar-sync-enabled"
         />
-        Sync calendar
+        {{ t("Sync calendar") }}
       </label>
     </div>
     <div
@@ -1163,26 +1253,34 @@ async function signInWithVisio() {
           type="checkbox"
           data-testid="contacts-sync-enabled"
         />
-        Sync contacts
+        {{ t("Sync contacts") }}
       </label>
     </div>
     </div>
 
+    <!-- OpenPGP -->
+    <div v-show="inTab('security')" class="form-tab" data-tab="security">
+      <PgpAdvancedSection v-if="!isMeetTab && form.mail_protocol" :form="form" />
+    </div>
+    </div>
+
     <template #footer>
-      <button class="btn-secondary" @click="cancelForm">Cancel</button>
+      <button class="btn-secondary" :class="{ compact: variant === 'page' }" data-testid="account-cancel" @click="cancelForm">{{ t("Cancel") }}</button>
       <!-- New meet accounts persist through the Sign-in
            button above; no separate Save step. Editing
            keeps Save so the user can rename the account. -->
       <button
         v-if="!isMeetTab || editingAccountId"
         class="btn-primary"
+        :class="{ compact: variant === 'page' }"
+        data-testid="account-save"
         :disabled="saving || meetSigningIn"
         @click="saveAccount"
       >
-        {{ saving ? "Saving..." : (editingAccountId ? "Save" : "Add Account") }}
+        {{ saving ? t("Saving...") : (editingAccountId ? t("Save") : t("Add Account")) }}
       </button>
     </template>
-  </ModalShell>
+  </component>
 </template>
 
 <style scoped>
@@ -1353,27 +1451,23 @@ async function signInWithVisio() {
   font-weight: 500;
 }
 
-.signature-textarea {
-  width: 100%;
-  padding: 8px 10px;
-  font-size: 13px;
-  font-family: 'Liberation Mono', monospace;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: var(--color-bg);
-  color: var(--color-text);
-  resize: vertical;
-}
-
-.signature-textarea:focus {
-  outline: none;
-  border-color: var(--color-accent);
-}
-
-.signature-hint {
-  margin: 6px 0;
+.tab-intro {
+  margin: 0 0 12px;
   font-size: 12px;
+  line-height: 1.5;
   color: var(--color-text-muted);
+}
+
+/* Page variant: calmer inputs sized for a wide panel. */
+.account-form.is-page :deep(.form-group input) {
+  height: 36px;
+  font-size: 14px;
+}
+
+.btn-primary.compact,
+.btn-secondary.compact {
+  height: 34px;
+  font-size: 14px;
 }
 
 .info-box {

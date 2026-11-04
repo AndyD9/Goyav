@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
+import { t } from "@/i18n";
 import {
   dispatch,
   formatShortcut,
@@ -86,96 +87,96 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
 <template>
   <div class="menu-bar" @mouseleave="closeMenus" data-testid="compose-menu-bar">
     <div class="menu-item" @click.stop="toggleMenu('file')">
-      <span class="menu-label">File</span>
+      <span class="menu-label">{{ t("File") }}</span>
       <div v-if="openMenu === 'file'" class="menu-dropdown" @click.stop data-testid="compose-menu-file-dropdown">
         <button class="menu-action" data-testid="compose-menu-save-draft" @click="runAction('saveDraft')">
           <span class="action-prefix">&#160;</span>
-          <span class="action-label">Save Draft</span>
+          <span class="action-label">{{ t("Save Draft") }}</span>
           <span class="action-shortcut">{{ formatShortcut(shortcuts.saveDraft) }}</span>
         </button>
         <button class="menu-action" data-testid="compose-menu-send" @click="runAction('send')">
           <span class="action-prefix">&#160;</span>
-          <span class="action-label">Send</span>
+          <span class="action-label">{{ t("Send") }}</span>
           <span class="action-shortcut">{{ formatShortcut(shortcuts.send) }}</span>
         </button>
         <div class="menu-separator"></div>
         <button class="menu-action" data-testid="compose-menu-close-window" @click="runAction('closeWindow')">
           <span class="action-prefix">&#160;</span>
-          <span class="action-label">Close Window</span>
+          <span class="action-label">{{ t("Close Window") }}</span>
           <span class="action-shortcut">{{ formatShortcut(shortcuts.closeWindow) }}</span>
         </button>
       </div>
     </div>
 
     <div class="menu-item" @click.stop="toggleMenu('edit')">
-      <span class="menu-label">Edit</span>
+      <span class="menu-label">{{ t("Edit") }}</span>
       <div v-if="openMenu === 'edit'" class="menu-dropdown" @click.stop data-testid="compose-menu-edit-dropdown">
         <button class="menu-action" data-testid="compose-menu-undo" @click="execEdit('undo')">
           <span class="action-prefix">&#160;</span>
-          <span class="action-label">Undo</span>
+          <span class="action-label">{{ t("Undo") }}</span>
           <span class="action-shortcut">{{ formatShortcut(shortcuts.undo) }}</span>
         </button>
         <button class="menu-action" data-testid="compose-menu-redo" @click="execEdit('redo')">
           <span class="action-prefix">&#160;</span>
-          <span class="action-label">Redo</span>
+          <span class="action-label">{{ t("Redo") }}</span>
           <span class="action-shortcut">{{ formatShortcut(shortcuts.redo) }}</span>
         </button>
         <div class="menu-separator"></div>
         <button class="menu-action" data-testid="compose-menu-cut" @click="execEdit('cut')">
           <span class="action-prefix">&#160;</span>
-          <span class="action-label">Cut</span>
+          <span class="action-label">{{ t("Cut") }}</span>
           <span class="action-shortcut">{{ formatShortcut(shortcuts.cut) }}</span>
         </button>
         <button class="menu-action" data-testid="compose-menu-copy" @click="execEdit('copy')">
           <span class="action-prefix">&#160;</span>
-          <span class="action-label">Copy</span>
+          <span class="action-label">{{ t("Copy") }}</span>
           <span class="action-shortcut">{{ formatShortcut(shortcuts.copy) }}</span>
         </button>
         <button class="menu-action" data-testid="compose-menu-paste" @click="execEdit('paste')">
           <span class="action-prefix">&#160;</span>
-          <span class="action-label">Paste</span>
+          <span class="action-label">{{ t("Paste") }}</span>
           <span class="action-shortcut">{{ formatShortcut(shortcuts.paste) }}</span>
         </button>
         <div class="menu-separator"></div>
         <button class="menu-action" data-testid="compose-menu-select-all" @click="execEdit('selectAll')">
           <span class="action-prefix">&#160;</span>
-          <span class="action-label">Select All</span>
+          <span class="action-label">{{ t("Select All") }}</span>
           <span class="action-shortcut">{{ formatShortcut(shortcuts.selectAll) }}</span>
         </button>
       </div>
     </div>
 
     <div class="menu-item" @click.stop="toggleMenu('view')">
-      <span class="menu-label">View</span>
+      <span class="menu-label">{{ t("View") }}</span>
       <div v-if="openMenu === 'view'" class="menu-dropdown" @click.stop data-testid="compose-menu-view-dropdown">
         <button class="menu-action" data-testid="compose-menu-show-cc" @click="runAction('toggleCc')">
           <span class="action-prefix">{{ showCc ? '\u2713' : '\u00A0' }}</span>
-          <span class="action-label">Show Cc</span>
+          <span class="action-label">{{ t("Show Cc") }}</span>
         </button>
         <button class="menu-action" data-testid="compose-menu-show-bcc" @click="runAction('toggleBcc')">
           <span class="action-prefix">{{ showBcc ? '\u2713' : '\u00A0' }}</span>
-          <span class="action-label">Show Bcc</span>
+          <span class="action-label">{{ t("Show Bcc") }}</span>
         </button>
       </div>
     </div>
 
     <div class="menu-item" @click.stop="toggleMenu('options')">
-      <span class="menu-label">Options</span>
+      <span class="menu-label">{{ t("Options") }}</span>
       <div v-if="openMenu === 'options'" class="menu-dropdown" @click.stop data-testid="compose-menu-options-dropdown">
         <button class="menu-action" data-testid="compose-menu-attach" @click="runAction('attach')">
           <span class="action-prefix">&#160;</span>
-          <span class="action-label">Attach File&hellip;</span>
+          <span class="action-label">{{ t("Attach File…") }}</span>
           <span class="action-shortcut">{{ formatShortcut(shortcuts.attach) }}</span>
         </button>
       </div>
     </div>
 
     <div class="menu-item" @click.stop="toggleMenu('help')">
-      <span class="menu-label">Help</span>
+      <span class="menu-label">{{ t("Help") }}</span>
       <div v-if="openMenu === 'help'" class="menu-dropdown" @click.stop data-testid="compose-menu-help-dropdown">
         <button class="menu-action" data-testid="compose-menu-about" @click="runAction('about')">
           <span class="action-prefix">&#160;</span>
-          <span class="action-label">About Chithi&hellip;</span>
+          <span class="action-label">{{ t("About Chithi…") }}</span>
         </button>
       </div>
     </div>

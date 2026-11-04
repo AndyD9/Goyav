@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "@/i18n";
 import { useAccountsStore } from "@/stores/accounts";
 import { useUiStore } from "@/stores/ui";
 import type { Contact, ContactBook } from "@/lib/types";
@@ -58,11 +59,11 @@ function onPhoneClick(number: string) {
       <div class="detail-actions">
         <button class="action-btn" data-testid="contact-edit-btn" @click="emit('edit', contact)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /></svg>
-          Edit
+          {{ t('Edit') }}
         </button>
         <button class="action-btn danger" data-testid="contact-delete-btn" @click="emit('delete', contact.id)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-          Delete
+          {{ t('Delete') }}
         </button>
       </div>
       <div class="detail-fields">
@@ -89,7 +90,7 @@ function onPhoneClick(number: string) {
           >{{ ph.number }}</a>
         </div>
         <div v-if="contact.notes" class="field-row">
-          <span class="field-label">Notes</span>
+          <span class="field-label">{{ t('Notes') }}</span>
           <LinkifiedText
             :text="contact.notes"
             class="field-value notes"
@@ -98,7 +99,7 @@ function onPhoneClick(number: string) {
         </div>
       </div>
     </template>
-    <div v-else class="empty-text">Select a contact to view details</div>
+    <div v-else class="empty-text">{{ t('Select a contact to view details') }}</div>
   </div>
 </template>
 

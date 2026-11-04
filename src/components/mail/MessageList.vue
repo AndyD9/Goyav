@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
+import { t, dateLocale } from "@/i18n";
 import { dragMessageIds, dragSourceAccountId, isDragging } from "@/lib/drag-state";
 import { showToast, dismissToast } from "@/lib/toast";
 import { useMessagesStore } from "@/stores/messages";
@@ -13,6 +14,8 @@ import * as api from "@/lib/tauri";
 import MessageListItem from "./MessageListItem.vue";
 import ThreadRow from "./ThreadRow.vue";
 import QuickFilterBar from "./QuickFilterBar.vue";
+import SearchResults from "./SearchResults.vue";
+import SearchScopeBar from "./SearchScopeBar.vue";
 
 const messagesStore = useMessagesStore();
 const accountsStore = useAccountsStore();
@@ -154,7 +157,7 @@ function onDragMouseDown(event: MouseEvent, messageId: string) {
 
       // Keep the non-interactive badge away from drop targets.
       const ghost = document.createElement("div");
-      ghost.textContent = `${dragMessageIds.value.length} message(s)`;
+      ghost.textContent = t("{count} message(s)", { count: dragMessageIds.value.length });
       ghost.style.cssText = "position:fixed;z-index:99999;padding:4px 10px;background:var(--color-accent);color:white;border-radius:4px;font-size:12px;font-weight:500;white-space:nowrap;pointer-events:none;";
       document.body.appendChild(ghost);
       dragGhost.value = ghost;
@@ -212,11 +215,11 @@ const cardsLayout = computed(
   () => props.mode === "desktop" && uiStore.messageListLayout === "cards",
 );
 
-const SORT_OPTIONS: { column: SortColumn; label: string }[] = [
-  { column: "date", label: "Date" },
-  { column: "from", label: "Sender" },
-  { column: "subject", label: "Subject" },
-];
+const SORT_OPTIONS = computed<{ column: SortColumn; label: string }[]>(() => [
+  { column: "date", label: t("Date") },
+  { column: "from", label: t("Sender") },
+  { column: "subject", label: t("Subject") },
+]);
 
 function sortIndicator(column: SortColumn): string {
   if (messagesStore.sortColumn !== column) return "";
@@ -259,7 +262,7 @@ async function ctxReply() {
   if (!context) return;
   const { messageId, message: msg } = context;
   const body = msg.body_text || "";
-  const date = new Date(msg.date).toLocaleString(undefined, { hour12: uiStore.hour12 });
+  const date = new Date(msg.date).toLocaleString(dateLocale(), { hour12: uiStore.hour12 });
   const from = msg.from.name ? `${msg.from.name} <${msg.from.email}>` : msg.from.email;
   const quoted = body.split("\n").map((line) => `> ${line}`).join("\n");
   openComposeWindow({
@@ -267,7 +270,7 @@ async function ctxReply() {
     replyTo: messageId,
     to: msg.from.email,
     subject: msg.subject?.startsWith("Re:") ? msg.subject : `Re: ${msg.subject || ""}`,
-    body: `\n\nOn ${date}, ${from} wrote:\n${quoted}`,
+    body: `\n\n${t("On {date}, {from} wrote:", { date, from })}\n${quoted}`,
   });
 }
 
@@ -279,7 +282,7 @@ async function ctxReplyAll() {
   const allTo = [msg.from.email, ...msg.to.map((address) => address.email).filter((email) => email !== myEmail)];
   const allCc = msg.cc.map((address) => address.email).filter((email) => email !== myEmail);
   const body = msg.body_text || "";
-  const date = new Date(msg.date).toLocaleString(undefined, { hour12: uiStore.hour12 });
+  const date = new Date(msg.date).toLocaleString(dateLocale(), { hour12: uiStore.hour12 });
   const from = msg.from.name ? `${msg.from.name} <${msg.from.email}>` : msg.from.email;
   const quoted = body.split("\n").map((line) => `> ${line}`).join("\n");
   openComposeWindow({
@@ -288,7 +291,7 @@ async function ctxReplyAll() {
     to: allTo.join(", "),
     cc: allCc.join(", "),
     subject: msg.subject?.startsWith("Re:") ? msg.subject : `Re: ${msg.subject || ""}`,
-    body: `\n\nOn ${date}, ${from} wrote:\n${quoted}`,
+    body: `\n\n${t("On {date}, {from} wrote:", { date, from })}\n${quoted}`,
   });
 }
 
@@ -297,13 +300,13 @@ async function ctxForward() {
   if (!context) return;
   const { message: msg } = context;
   const text = msg.body_text || "";
-  const date = new Date(msg.date).toLocaleString(undefined, { hour12: uiStore.hour12 });
+  const date = new Date(msg.date).toLocaleString(dateLocale(), { hour12: uiStore.hour12 });
   const from = msg.from.name ? `${msg.from.name} <${msg.from.email}>` : msg.from.email;
   const toStr = msg.to.map((address) => address.name || address.email).join(", ");
   openComposeWindow({
     accountId: accountsStore.activeAccountId ?? undefined,
     subject: msg.subject?.startsWith("Fwd:") ? msg.subject : `Fwd: ${msg.subject || ""}`,
-    body: `\n\n---------- Forwarded message ----------\nFrom: ${from}\nDate: ${date}\nSubject: ${msg.subject || ""}\nTo: ${toStr}\n\n${text}`,
+    body: `\n\n${t("---------- Forwarded message ----------")}\n${t("From:")} ${from}\n${t("Date:")} ${date}\n${t("Subject:")} ${msg.subject || ""}\n${t("To:")} ${toStr}\n\n${text}`,
   });
 }
 
@@ -318,7 +321,7 @@ async function ctxMoveTo(folderPath: string) {
   if (!accountId) return;
   const ids = messagesStore.resolveSelectedIds();
   closeContextMenu();
-  const toastId = showToast(`Moving ${ids.length} message(s)...`, "info", 0);
+  const toastId = showToast(t("Moving {count} message(s)...", { count: ids.length }), "info", 0);
   try {
     await api.moveMessages(accountId, ids, folderPath);
     clearSelectionAndMessage();
@@ -376,7 +379,7 @@ async function ctxSaveAsEml() {
   } catch (error) {
     console.error("Save as .eml failed:", error);
     const message = error instanceof Error ? error.message : String(error);
-    showToast(`Save as .eml failed: ${message}`, "error");
+    showToast(t("Save as .eml failed: {error}", { error: message }), "error");
   }
 }
 
@@ -445,14 +448,21 @@ function toggleQuickFilter() {
 
 const displayedCount = () => {
   if (uiStore.threadingEnabled) {
-    return `${messagesStore.threads.length} of ${messagesStore.totalThreads} threads (${messagesStore.total} messages)`;
+    return t("{count} of {total} threads ({messages} messages)", {
+      count: messagesStore.threads.length,
+      total: messagesStore.totalThreads,
+      messages: messagesStore.total,
+    });
   }
-  return `${messagesStore.messages.length} of ${messagesStore.total}`;
+  return t("{count} of {total}", {
+    count: messagesStore.messages.length,
+    total: messagesStore.total,
+  });
 };
 
 function formatHitDate(secs: number): string {
   if (!secs) return "";
-  return new Date(secs * 1000).toLocaleDateString();
+  return new Date(secs * 1000).toLocaleDateString(dateLocale());
 }
 
 interface ThreadChildEntry {
@@ -528,13 +538,21 @@ const folderNameByPath = computed(
 );
 
 function resolveFolderName(path: string): string {
-  if (!path) return "(unknown folder)";
+  if (!path) return t("(unknown folder)");
   return folderNameByPath.value.get(path) ?? path;
 }
 </script>
 
 <template>
-  <div class="message-list" data-testid="message-list" @click.left="closeContextMenu">
+  <SearchResults
+    v-if="messagesStore.globalSearchActive"
+    @open-message="emit('openMessage', $event)"
+  />
+  <div v-else class="message-list" data-testid="message-list" @click.left="closeContextMenu">
+    <SearchScopeBar
+      v-if="messagesStore.searchScope === 'folder' && messagesStore.searchText.trim()"
+      class="folder-search-scope"
+    />
     <QuickFilterBar v-if="messagesStore.quickFilterVisible" />
     <div class="column-headers" :class="{ cards: cardsLayout }">
       <div
@@ -551,7 +569,7 @@ function resolveFolderName(path: string): string {
         />
       </div>
       <template v-if="cardsLayout">
-        <span class="sort-label">Sort by</span>
+        <span class="sort-label">{{ t("Sort by") }}</span>
         <button
           v-for="option in SORT_OPTIONS"
           :key="option.column"
@@ -562,39 +580,39 @@ function resolveFolderName(path: string): string {
       </template>
       <template v-else>
       <div class="col col-icons">
-        <span class="col-icon" title="Read/Star">&#x2606;</span>
+        <span class="col-icon" :title="t('Read/Star')">&#x2606;</span>
       </div>
       <button
         class="col col-subject sortable"
         :class="{ active: messagesStore.sortColumn === 'subject' }"
         @click="messagesStore.setSort('subject')"
       >
-        Subject{{ sortIndicator('subject') }}
+        {{ t("Subject") }}{{ sortIndicator('subject') }}
       </button>
       <button
         class="col col-from sortable"
         :class="{ active: messagesStore.sortColumn === 'from' }"
         @click="messagesStore.setSort('from')"
       >
-        Correspondents{{ sortIndicator('from') }}
+        {{ t("Correspondents") }}{{ sortIndicator('from') }}
       </button>
       <button
         class="col col-date sortable"
         :class="{ active: messagesStore.sortColumn === 'date' }"
         @click="messagesStore.setSort('date')"
       >
-        Date{{ sortIndicator('date') }}
+        {{ t("Date") }}{{ sortIndicator('date') }}
       </button>
       </template>
     </div>
     <div
       v-if="messagesStore.loading && messagesStore.messages.length === 0 && messagesStore.threads.length === 0"
       class="loading"
-    >Loading...</div>
+    >{{ t("Loading...") }}</div>
     <div
       v-else-if="messagesStore.messages.length === 0 && messagesStore.threads.length === 0"
       class="empty"
-    >No messages</div>
+    >{{ t("No messages") }}</div>
 
     <div
       v-else-if="uiStore.threadingEnabled"
@@ -644,7 +662,7 @@ function resolveFolderName(path: string): string {
           </div>
         </template>
       </template>
-      <div v-if="messagesStore.loadingMore" class="loading-more">Loading more...</div>
+      <div v-if="messagesStore.loadingMore" class="loading-more">{{ t("Loading more...") }}</div>
     </div>
 
     <div
@@ -673,7 +691,7 @@ function resolveFolderName(path: string): string {
           @delete="onMobileSwipeDelete(msg.id)"
         />
       </div>
-      <div v-if="messagesStore.loadingMore" class="loading-more">Loading more...</div>
+      <div v-if="messagesStore.loadingMore" class="loading-more">{{ t("Loading more...") }}</div>
     </div>
 
     <div
@@ -682,7 +700,7 @@ function resolveFolderName(path: string): string {
       data-testid="server-results"
     >
       <div class="server-results-header">
-        Server results ({{ messagesStore.serverHits.length }})
+        {{ t("Server results ({count})", { count: messagesStore.serverHits.length }) }}
       </div>
       <div
         v-for="hit in messagesStore.serverHits"
@@ -696,12 +714,12 @@ function resolveFolderName(path: string): string {
         @keydown.space.prevent="messagesStore.openServerHit(hit)"
       >
         <div class="hit-line">
-          <span class="hit-from">{{ hit.from_name || hit.from_email || "(unknown sender)" }}</span>
+          <span class="hit-from">{{ hit.from_name || hit.from_email || t("(unknown sender)") }}</span>
           <span class="hit-date">{{ formatHitDate(hit.date) }}</span>
         </div>
-        <div class="hit-subject">{{ hit.subject || "(no subject)" }}</div>
+        <div class="hit-subject">{{ hit.subject || t("(no subject)") }}</div>
         <div v-if="hit.snippet" class="hit-snippet">{{ hit.snippet }}</div>
-        <div class="hit-folder">in {{ resolveFolderName(hit.folder_path) }}</div>
+        <div class="hit-folder">{{ t("in {folder}", { folder: resolveFolderName(hit.folder_path) }) }}</div>
       </div>
     </div>
 
@@ -714,7 +732,7 @@ function resolveFolderName(path: string): string {
         @click.stop="toggleQuickFilter"
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-        Quick Filter
+        {{ t("Quick Filter") }}
       </button>
     </div>
 
@@ -727,26 +745,26 @@ function resolveFolderName(path: string): string {
         <template v-if="isSingleSelection()">
           <button class="ctx-item" data-testid="ctx-reply" @click="ctxReply">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 0 0-4-4H4" /></svg>
-            Reply
+            {{ t("Reply") }}
           </button>
           <button class="ctx-item" data-testid="ctx-reply-all" @click="ctxReplyAll">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 0 0-4-4H4" /></svg>
-            Reply All
+            {{ t("Reply All") }}
           </button>
           <button class="ctx-item" data-testid="ctx-forward" @click="ctxForward">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 17 20 12 15 7" /><path d="M4 18v-2a4 4 0 0 1 4-4h12" /></svg>
-            Forward
+            {{ t("Forward") }}
           </button>
           <button class="ctx-item" data-testid="ctx-save-eml" @click="ctxSaveAsEml">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
-            Save as .eml…
+            {{ t("Save as .eml…") }}
           </button>
           <div class="ctx-separator"></div>
         </template>
 
         <div class="ctx-item-parent" @mouseenter="subMenu = 'move'" @mouseleave="subMenu = null">
           <button class="ctx-item" data-testid="ctx-move-to" @click="subMenu = 'move'">
-            Move To
+            {{ t("Move To") }}
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6" /></svg>
           </button>
           <div v-if="subMenu === 'move'" class="ctx-submenu">
@@ -763,7 +781,7 @@ function resolveFolderName(path: string): string {
 
         <div class="ctx-item-parent" @mouseenter="subMenu = 'copy'" @mouseleave="subMenu = null">
           <button class="ctx-item" data-testid="ctx-copy-to" @click="subMenu = 'copy'">
-            Copy To
+            {{ t("Copy To") }}
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6" /></svg>
           </button>
           <div v-if="subMenu === 'copy'" class="ctx-submenu">
@@ -781,32 +799,38 @@ function resolveFolderName(path: string): string {
 
         <button v-if="hasSelectedReadStatus(true)" class="ctx-item" data-testid="ctx-mark-unread" @click="ctxSetReadStatus(false)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="3" fill="currentColor" /></svg>
-          Mark Unread
+          {{ t("Mark Unread") }}
         </button>
         <button v-if="hasSelectedReadStatus(false)" class="ctx-item" data-testid="ctx-mark-read" @click="ctxSetReadStatus(true)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M9 12l2 2 4-4" /></svg>
-          Mark Read
+          {{ t("Mark Read") }}
         </button>
 
         <button v-if="isJunkFolder()" class="ctx-item" data-testid="ctx-not-spam" @click="ctxNotSpam">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
-          Not Spam
+          {{ t("Not Spam") }}
         </button>
 
         <button class="ctx-item danger" data-testid="ctx-delete" @click="ctxDelete">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-          Delete
+          {{ t("Delete") }}
         </button>
 
         <div class="ctx-separator"></div>
-        <button v-if="!uiStore.threadingEnabled" class="ctx-item" @click="ctxShowAsThread">Show as Thread</button>
-        <button v-if="uiStore.threadingEnabled" class="ctx-item" @click="ctxUnthread">Remove from Thread</button>
+        <button v-if="!uiStore.threadingEnabled" class="ctx-item" @click="ctxShowAsThread">{{ t("Show as Thread") }}</button>
+        <button v-if="uiStore.threadingEnabled" class="ctx-item" @click="ctxUnthread">{{ t("Remove from Thread") }}</button>
       </div>
     </Teleport>
   </div>
 </template>
 
 <style scoped>
+.folder-search-scope {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+}
+
 .message-list {
   width: 100%;
   min-width: 0;

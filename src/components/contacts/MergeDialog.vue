@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { t } from "@/i18n";
 import type { Contact } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import {
@@ -77,17 +78,17 @@ async function applyMerge() {
     >
       <div class="modal">
         <div class="modal-header">
-          <h3>Merge contacts</h3>
+          <h3>{{ t('Merge contacts') }}</h3>
           <button class="modal-close" @click="emit('cancel')">&times;</button>
         </div>
         <div class="modal-body merge-dialog-body">
           <p class="merge-picker-hint">
-            Keeping <strong>{{ pair.keeper.display_name }}</strong>'s identity. <strong>{{ pair.loser.display_name }}</strong> will be deleted after the merge. Pick which value to keep for any field where the two disagree.
+            {{ t("Keeping {keeper}'s identity. {loser} will be deleted after the merge. Pick which value to keep for any field where the two disagree.", { keeper: pair.keeper.display_name, loser: pair.loser.display_name }) }}
           </p>
           <div v-if="mergeError" class="form-error" data-testid="merge-error">{{ mergeError }}</div>
 
           <fieldset class="merge-field" data-testid="merge-field-name">
-            <legend>Name</legend>
+            <legend>{{ t('Name') }}</legend>
             <template v-if="fieldsDiffer(pair.keeper.display_name, pair.loser.display_name)">
               <label class="merge-radio">
                 <input
@@ -112,7 +113,7 @@ async function applyMerge() {
           </fieldset>
 
           <fieldset class="merge-field" data-testid="merge-field-org">
-            <legend>Organization</legend>
+            <legend>{{ t('Organization') }}</legend>
             <template v-if="fieldsDiffer(pair.keeper.organization, pair.loser.organization)">
               <label class="merge-radio">
                 <input type="radio" value="keeper" v-model="mergeChoices.organization" />
@@ -127,7 +128,7 @@ async function applyMerge() {
           </fieldset>
 
           <fieldset class="merge-field" data-testid="merge-field-title">
-            <legend>Title</legend>
+            <legend>{{ t('Title') }}</legend>
             <template v-if="fieldsDiffer(pair.keeper.title, pair.loser.title)">
               <label class="merge-radio">
                 <input type="radio" value="keeper" v-model="mergeChoices.title" />
@@ -142,7 +143,7 @@ async function applyMerge() {
           </fieldset>
 
           <fieldset class="merge-field" data-testid="merge-field-notes">
-            <legend>Notes</legend>
+            <legend>{{ t('Notes') }}</legend>
             <template v-if="fieldsDiffer(pair.keeper.notes, pair.loser.notes)">
               <label class="merge-radio">
                 <input type="radio" value="keeper" v-model="mergeChoices.notes" />
@@ -154,7 +155,7 @@ async function applyMerge() {
               </label>
               <label class="merge-radio">
                 <input type="radio" value="both" v-model="mergeChoices.notes" />
-                <span>Combine both</span>
+                <span>{{ t('Combine both') }}</span>
               </label>
             </template>
             <span v-else class="merge-resolved merge-notes-snippet">{{ mergePreview?.notes || "—" }}</span>
@@ -165,7 +166,7 @@ async function applyMerge() {
             class="merge-field"
             data-testid="merge-field-emails"
           >
-            <legend>Emails</legend>
+            <legend>{{ t('Emails') }}</legend>
             <label
               v-for="(it, idx) in mergeChoices.emails"
               :key="String(it.item.email ?? '') + '-' + idx"
@@ -184,7 +185,7 @@ async function applyMerge() {
             class="merge-field"
             data-testid="merge-field-phones"
           >
-            <legend>Phones</legend>
+            <legend>{{ t('Phones') }}</legend>
             <label
               v-for="(it, idx) in mergeChoices.phones"
               :key="String(it.item.number ?? '') + '-' + idx"
@@ -203,7 +204,7 @@ async function applyMerge() {
             class="merge-field"
             data-testid="merge-field-addresses"
           >
-            <legend>Addresses</legend>
+            <legend>{{ t('Addresses') }}</legend>
             <label
               v-for="(it, idx) in mergeChoices.addresses"
               :key="addressItemDisplay(it) + '-' + idx"
@@ -218,14 +219,14 @@ async function applyMerge() {
           </fieldset>
         </div>
         <div class="modal-footer">
-          <button class="btn-cancel" :disabled="merging" @click="emit('cancel')">Cancel</button>
+          <button class="btn-cancel" :disabled="merging" @click="emit('cancel')">{{ t('Cancel') }}</button>
           <button
             class="btn-save"
             data-testid="merge-confirm-btn"
             :disabled="merging"
             @click="applyMerge"
           >
-            {{ merging ? "Merging…" : "Merge" }}
+            {{ merging ? t("Merging…") : t("Merge") }}
           </button>
         </div>
       </div>

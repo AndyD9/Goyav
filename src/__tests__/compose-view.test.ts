@@ -52,6 +52,7 @@ vi.mock("@/stores/pgp-prompts", () => ({
 vi.mock("@/lib/tauri", () => ({
   listAccounts: vi.fn<Api["listAccounts"]>(),
   getAccountConfig: vi.fn<Api["getAccountConfig"]>(),
+  listAccountSignatures: vi.fn<Api["listAccountSignatures"]>(),
   getSignaturePreviewHtml: vi.fn<Api["getSignaturePreviewHtml"]>(),
   getMessageBody: vi.fn<Api["getMessageBody"]>(),
   sendMessage: vi.fn<Api["sendMessage"]>(),
@@ -293,6 +294,8 @@ beforeEach(() => {
   native.pgpStart.mockResolvedValue(undefined);
   vi.mocked(api.listAccounts).mockResolvedValue([account]);
   vi.mocked(api.getAccountConfig).mockResolvedValue(accountConfig);
+  // Default to the legacy single-signature path via getAccountConfig.
+  vi.mocked(api.listAccountSignatures).mockRejectedValue(new Error("unsupported"));
   vi.mocked(api.getMessageBody).mockResolvedValue(draft);
   vi.mocked(api.sendMessage).mockResolvedValue(undefined);
   vi.mocked(api.saveDraft).mockResolvedValue({ plaintext_fallback: false });
@@ -1328,5 +1331,66 @@ describe("ComposeView HTML signature", () => {
     expect(sent.signature_html).not.toContain("internal note");
     expect(sent.signature_html).not.toContain("<title>");
     expect(sent.signature_text).toBe("Andy Dodakal\nLinkedIn <https://www.linkedin.com/in/andy/>");
+  });
+});
+
+describe("ComposeView multiple signatures", () => {
+  const signatures = [
+    { id: "work", name: "Work", body: "-- \nAndy\nWork", is_default: false },
+    { id: "short", name: "Short", body: "-- \nA.", is_default: true },
+    { id: "html", name: "Logo", body: "<p><b>Andy</b></p>", is_default: false },
+  ];
+
+  beforeEach(() => {
+    vi.mocked(api.listAccountSignatures).mockResolvedValue(signatures);
+    vi.mocked(api.getSignaturePreviewHtml).mockImplementation(async (html) => html);
+  });
+
+  function body(wrapper: Awaited<ReturnType<typeof mountCompose>>) {
+    return (wrapper.get('[data-testid="compose-body"]').element as HTMLTextAreaElement).value;
+  }
+
+  async function pick(wrapper: Awaited<ReturnType<typeof mountCompose>>, label: string) {
+    await wrapper.get('[data-testid="compose-signature-select"]').trigger("click");
+    const option = wrapper.findAll(".select-option").find((o) => o.text() === label);
+    expect(option, label).toBeDefined();
+    await option!.trigger("mousedown");
+    await flushPromises();
+  }
+
+  it("starts with the default signature and lists the others", async () => {
+    const wrapper = await mountCompose();
+    expect(body(wrapper)).toBe("\n\n\n\n\n-- \nA.");
+    expect(wrapper.get('[data-testid="compose-signature-select"]').text()).toBe("Short");
+  });
+
+  it("swaps the text signature and switches to an HTML one", async () => {
+    const wrapper = await mountCompose();
+    await pick(wrapper, "Work");
+    expect(body(wrapper)).toBe("\n\n\n\n\n-- \nAndy\nWork");
+
+    await pick(wrapper, "Logo");
+    expect(body(wrapper)).toBe("");
+    expect(wrapper.find('[data-testid="signature-preview"]').exists()).toBe(true);
+
+    await fillRecipients(wrapper);
+    await wrapper.get('[data-testid="compose-send"]').trigger("click");
+    await flushPromises();
+    expect(vi.mocked(api.sendMessage).mock.calls[0][1].signature_html).toBe("<p><b>Andy</b></p>");
+  });
+
+  it("can send without a signature", async () => {
+    const wrapper = await mountCompose();
+    await pick(wrapper, "No signature");
+    expect(body(wrapper)).toBe("");
+    expect(wrapper.find('[data-testid="signature-preview"]').exists()).toBe(false);
+  });
+
+  it("keeps text typed above the signature when switching", async () => {
+    const wrapper = await mountCompose();
+    const textarea = wrapper.get('[data-testid="compose-body"]');
+    await textarea.setValue("Hello" + body(wrapper));
+    await pick(wrapper, "Work");
+    expect(body(wrapper)).toBe("Hello\n\n\n\n\n-- \nAndy\nWork");
   });
 });

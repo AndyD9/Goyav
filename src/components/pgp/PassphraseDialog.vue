@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, nextTick } from "vue";
 import type { PgpSecretPrompt } from "@/stores/pgp-prompts";
 import { usePgpPromptsStore } from "@/stores/pgp-prompts";
+import { t } from "@/i18n";
 
 const props = defineProps<{ prompt: PgpSecretPrompt }>();
 const prompts = usePgpPromptsStore();
@@ -34,7 +35,7 @@ onUnmounted(() => {
 async function submit() {
   if (busy.value) return;
   if (!secret.value) {
-    errorMsg.value = "Enter the passphrase.";
+    errorMsg.value = t("Enter the passphrase.");
     return;
   }
   errorMsg.value = null;
@@ -79,11 +80,11 @@ function onKeydown(e: KeyboardEvent) {
 <template>
   <div class="overlay" @click.self="cancel">
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pgp-pass-title">
-      <h3 id="pgp-pass-title">Unlock OpenPGP key</h3>
+      <h3 id="pgp-pass-title">{{ t("Unlock OpenPGP key") }}</h3>
       <p class="reason">{{ prompt.reason }}</p>
       <code class="target">{{ prompt.target.toUpperCase() }}</code>
       <label class="field">
-        <span>Passphrase</span>
+        <span>{{ t("Passphrase") }}</span>
         <input
           ref="inputEl"
           v-model="secret"
@@ -98,14 +99,14 @@ function onKeydown(e: KeyboardEvent) {
       <p v-if="errorMsg" class="error">{{ errorMsg }}</p>
       <div class="actions">
         <span class="spacer"></span>
-        <button class="btn" :disabled="busy" @click="cancel">Cancel</button>
+        <button class="btn" :disabled="busy" @click="cancel">{{ t("Cancel") }}</button>
         <button
           class="btn btn-primary"
           :disabled="busy"
           data-testid="pgp-passphrase-submit"
           @click="submit"
         >
-          Unlock
+          {{ t("Unlock") }}
         </button>
       </div>
     </div>

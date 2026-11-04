@@ -9,13 +9,14 @@
 /// `form` is the modal's shared AccountConfig draft, passed by
 /// reference — the checkboxes write into it.
 import type { AccountConfig } from "@/lib/types";
+import { t } from "@/i18n";
 
 defineProps<{ form: AccountConfig }>();
 </script>
 
 <template>
   <div class="form-group bindings-section" data-testid="pgp-advanced-settings">
-    <label class="bindings-section-title">Advanced settings</label>
+    <label class="bindings-section-title">{{ t("Advanced settings") }}</label>
 
     <div class="form-group form-group-checkbox">
       <label class="checkbox-label">
@@ -24,7 +25,7 @@ defineProps<{ form: AccountConfig }>();
           type="checkbox"
           data-testid="pgp-attach-pubkey-on-sign"
         />
-        Attach my public key when adding an OpenPGP digital signature
+        {{ t("Attach my public key when adding an OpenPGP digital signature") }}
       </label>
     </div>
 
@@ -35,7 +36,7 @@ defineProps<{ form: AccountConfig }>();
           type="checkbox"
           data-testid="pgp-autocrypt-header"
         />
-        Send OpenPGP public key(s) in the email headers for compatibility with Autocrypt
+        {{ t("Send OpenPGP public key(s) in the email headers for compatibility with Autocrypt") }}
       </label>
     </div>
 
@@ -46,7 +47,7 @@ defineProps<{ form: AccountConfig }>();
           type="checkbox"
           data-testid="pgp-encrypt-subject"
         />
-        Encrypt the subject of OpenPGP messages
+        {{ t("Encrypt the subject of OpenPGP messages") }}
       </label>
     </div>
 
@@ -57,7 +58,7 @@ defineProps<{ form: AccountConfig }>();
           type="checkbox"
           data-testid="pgp-encrypt-drafts"
         />
-        Store draft messages in encrypted format
+        {{ t("Store draft messages in encrypted format") }}
       </label>
     </div>
   </div>

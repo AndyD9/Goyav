@@ -95,6 +95,15 @@ export function searchMessagesServer(
   return invoke("search_messages_server", { accountId, query });
 }
 
+/** Search the local cache across folders; `null` accounts = every mail account. */
+export function searchMessagesLocal(
+  accountIds: string[] | null,
+  filter: Types.QuickFilter,
+  limit?: number,
+): Promise<Types.LocalSearchPage> {
+  return invoke("search_messages_local", { accountIds, filter, limit });
+}
+
 export function importSearchHit(
   accountId: string,
   hit: Types.SearchHit,
@@ -986,4 +995,22 @@ export function pgpCheckRecipients(
   recipients: string[],
 ): Promise<Types.PgpRecipientStatus[]> {
   return invoke("pgp_check_recipients", { recipients });
+}
+
+export function listAccountSignatures(
+  accountId: string,
+): Promise<Types.AccountSignature[]> {
+  return invoke("list_account_signatures", { accountId });
+}
+
+export function saveAccountSignatures(
+  accountId: string,
+  signatures: Types.AccountSignature[],
+): Promise<Types.AccountSignature[]> {
+  return invoke("save_account_signatures", { accountId, signatures });
+}
+
+/** Native picker for an .html/.htm/.txt signature; null when cancelled. */
+export function pickSignatureFile(): Promise<Types.PickedSignatureFile | null> {
+  return invoke("pick_signature_file");
 }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { dateLocale, t } from "@/i18n";
 import { ref, computed, watch } from "vue";
 import { useCalendarStore } from "@/stores/calendar";
 import { useAccountsStore } from "@/stores/accounts";
@@ -127,7 +128,7 @@ async function addVideoLink(accountId: string) {
       if (previousBinding) await discardMeetBinding(previousBinding);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      meetError.value = `Could not create meeting: ${message}`;
+      meetError.value = t("Could not create meeting: {message}", { message });
     }
   })();
   meetCreationPromise = operation;
@@ -233,10 +234,10 @@ const suggestedSlots = computed(() => {
 });
 
 function formatSlot(slot: { start: Date; end: Date }) {
-  const date = new Intl.DateTimeFormat(undefined, {
+  const date = new Intl.DateTimeFormat(dateLocale(), {
     weekday: "short", month: "short", day: "numeric", timeZone: uiStore.displayTimezone,
   }).format(slot.start);
-  const time = new Intl.DateTimeFormat(undefined, {
+  const time = new Intl.DateTimeFormat(dateLocale(), {
     hour: "numeric", minute: "2-digit", timeZone: uiStore.displayTimezone,
   });
   return `${date}, ${time.format(slot.start)}–${time.format(slot.end)}`;
@@ -307,7 +308,7 @@ function formatAvailabilityTime(value: string | null) {
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(dateLocale(), {
     hour: "numeric",
     minute: "2-digit",
     month: "short",
@@ -318,18 +319,18 @@ function formatAvailabilityTime(value: string | null) {
 
 const roomAvailabilityMessage = computed(() => {
   if (checkingRoomAvailability.value) {
-    return "Checking room availability...";
+    return t("Checking room availability...");
   }
   if (!roomAvailability.value) {
     return null;
   }
   if (roomAvailability.value.state === "available") {
-    return "Available for the selected time";
+    return t("Available for the selected time");
   }
   if (roomAvailability.value.state === "busy") {
-    return `Busy ${formatAvailabilityTime(roomAvailability.value.busy_start)} - ${formatAvailabilityTime(roomAvailability.value.busy_end)}`;
+    return t("Busy {start} - {end}", { start: formatAvailabilityTime(roomAvailability.value.busy_start), end: formatAvailabilityTime(roomAvailability.value.busy_end) });
   }
-  return "Availability unknown";
+  return t("Availability unknown");
 });
 
 async function refreshRoomAvailability() {
@@ -415,11 +416,11 @@ watch([location, startDate, startTime, endDate, endTime, allDay], () => {
 
 async function save() {
   if (!title.value.trim()) {
-    error.value = "Title is required";
+    error.value = t("Title is required");
     return;
   }
   if (!calendarId.value) {
-    error.value = "Select a calendar";
+    error.value = t("Select a calendar");
     return;
   }
 
@@ -427,7 +428,7 @@ async function save() {
     const sUTC = localInputToUTC(startDate.value, startTime.value, uiStore.displayTimezone);
     const eUTC = localInputToUTC(endDate.value, endTime.value, uiStore.displayTimezone);
     if (new Date(eUTC) <= new Date(sUTC)) {
-      error.value = "End time must be after start time";
+      error.value = t("End time must be after start time");
       return;
     }
   }
@@ -506,7 +507,7 @@ async function save() {
   <div class="event-form-overlay" @click.self="closeForm">
     <div class="event-form">
       <div class="form-header">
-        <h3>New Event</h3>
+        <h3>{{ t("New Event") }}</h3>
         <button class="close-btn" :disabled="closing || saving" @click="closeForm">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
         </button>
@@ -516,30 +517,30 @@ async function save() {
         <div v-if="error" class="form-error">{{ error }}</div>
 
         <div class="form-group">
-          <label>Title *</label>
-          <input v-model="title" type="text" placeholder="Event title" autofocus data-testid="event-form-title" />
+          <label>{{ t("Title *") }}</label>
+          <input v-model="title" type="text" :placeholder="t('Event title')" autofocus data-testid="event-form-title" />
         </div>
 
         <div class="form-group">
-          <label>Calendar</label>
+          <label>{{ t("Calendar") }}</label>
           <Select v-model="calendarId" :options="calendarOptions" testid="event-form-calendar" />
         </div>
 
         <label class="checkbox-row">
           <input type="checkbox" v-model="allDay" data-testid="event-form-allday" />
-          All day event
+          {{ t("All day event") }}
         </label>
 
         <div class="form-row-datetime">
           <div class="form-group">
-            <label>Start</label>
+            <label>{{ t("Start") }}</label>
             <div class="datetime-inputs">
               <DateInput v-model="startDate" class="date-input" testid="event-form-start" />
               <TimeInput v-if="!allDay" v-model="startTime" class="time-input" testid="event-form-start-time" />
             </div>
           </div>
           <div class="form-group">
-            <label>End</label>
+            <label>{{ t("End") }}</label>
             <div class="datetime-inputs">
               <DateInput v-model="endDate" class="date-input" :min="startDate" testid="event-form-end" />
               <TimeInput v-if="!allDay" v-model="endTime" class="time-input" :min="minEndTime" testid="event-form-end-time" />
@@ -548,11 +549,11 @@ async function save() {
         </div>
 
         <div class="form-group">
-          <label>Location</label>
+          <label>{{ t("Location") }}</label>
           <input
             v-model="location"
             type="text"
-            placeholder="Add location"
+            :placeholder="t('Add location')"
             :list="roomSuggestions.length > 0 ? 'event-form-room-suggestions' : undefined"
             data-testid="event-form-location"
           />
@@ -574,7 +575,7 @@ async function save() {
             class="room-suggestions-loading"
             data-testid="event-form-room-suggestions-loading"
           >
-            Loading rooms...
+            {{ t("Loading rooms...") }}
           </span>
           <span
             v-if="roomAvailabilityMessage"
@@ -601,7 +602,7 @@ async function save() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
               </svg>
-              {{ generatingMeetUrl ? "Creating…" : `Add ${opt.label}` }}
+              {{ generatingMeetUrl ? t("Creating…") : t("Add {label}", { label: opt.label }) }}
             </button>
           </div>
           <span v-if="meetError" class="meet-error" data-testid="event-form-meet-error">
@@ -610,12 +611,12 @@ async function save() {
         </div>
 
         <div class="form-group">
-          <label>Repeat</label>
+          <label>{{ t("Repeat") }}</label>
           <RecurrenceEditor v-model="recurrenceRule" />
         </div>
 
         <div class="form-group">
-          <label>Attendees</label>
+          <label>{{ t("Attendees") }}</label>
           <AttendeeEditor
             v-model="attendeeEmails"
             :account-id="selectedCalendarAccountId"
@@ -628,16 +629,16 @@ async function save() {
             :disabled="loadingSchedules"
             @click="loadSchedulingAssistant"
           >
-            {{ loadingSchedules ? "Checking availability…" : "Find a time" }}
+            {{ loadingSchedules ? t("Checking availability…") : t("Find a time") }}
           </button>
           <section v-if="schedulingOpen" class="scheduling-assistant" data-testid="scheduling-assistant">
-            <strong>Scheduling assistant</strong>
-            <p v-if="schedulingError" class="scheduling-error">Could not load availability: {{ schedulingError }}</p>
+            <strong>{{ t("Scheduling assistant") }}</strong>
+            <p v-if="schedulingError" class="scheduling-error">{{ t("Could not load availability: {error}", { error: schedulingError }) }}</p>
             <template v-else-if="!loadingSchedules">
               <p v-if="unknownParticipants.length > 0" class="scheduling-warning" data-testid="scheduling-unknown">
-                Availability unknown for {{ unknownParticipants.join(", ") }}. Suggestions only reflect calendars shown by the provider.
+                {{ t("Availability unknown for {participants}. Suggestions only reflect calendars shown by the provider.", { participants: unknownParticipants.join(", ") }) }}
               </p>
-              <p v-if="suggestedSlots.length === 0">No conflict-free working-hour slots found in the next two weeks.</p>
+              <p v-if="suggestedSlots.length === 0">{{ t("No conflict-free working-hour slots found in the next two weeks.") }}</p>
               <div v-else class="scheduling-slots">
                 <button
                   v-for="slot in suggestedSlots"
@@ -653,17 +654,17 @@ async function save() {
         </div>
 
         <div class="form-group">
-          <label>Description</label>
-          <textarea v-model="description" rows="3" placeholder="Add description"></textarea>
+          <label>{{ t("Description") }}</label>
+          <textarea v-model="description" rows="3" :placeholder="t('Add description')"></textarea>
         </div>
       </div>
 
       <div class="form-footer">
         <div></div>
         <div class="footer-actions">
-          <button class="btn-cancel" :disabled="closing || saving" @click="closeForm">Cancel</button>
+          <button class="btn-cancel" :disabled="closing || saving" @click="closeForm">{{ t("Cancel") }}</button>
           <button class="btn-create" :disabled="saving || closing || generatingMeetUrl" @click="save" data-testid="event-form-save">
-            {{ saving ? "Saving..." : "Create" }}
+            {{ saving ? t("Saving...") : t("Create") }}
           </button>
         </div>
       </div>

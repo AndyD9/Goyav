@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { dateLocale, t } from "@/i18n";
 import { computed, onMounted, onActivated, onUnmounted, ref, nextTick } from "vue";
 import { useCalendarStore } from "@/stores/calendar";
 import { useUiStore } from "@/stores/ui";
@@ -103,7 +104,7 @@ const now = ref(new Date());
 let nowIntervalId: ReturnType<typeof setInterval> | null = null;
 
 function formatDayName(date: Date): string {
-  return date.toLocaleDateString(undefined, { weekday: "short" }).toUpperCase();
+  return date.toLocaleDateString(dateLocale(), { weekday: "short" }).toUpperCase();
 }
 
 function formatDayNum(date: Date): string {
@@ -123,7 +124,7 @@ function formatHour(hour: number): string {
   }
   const d = new Date();
   d.setHours(hour, 0, 0, 0);
-  return d.toLocaleTimeString(undefined, { hour: "numeric" });
+  return d.toLocaleTimeString(dateLocale(), { hour: "numeric" });
 }
 
 function isToday(date: Date): boolean {
@@ -506,7 +507,7 @@ onUnmounted(() => {
       :style="{ maxHeight: `${allDayMaxHeight}px` }"
     >
       <div class="all-day-row">
-        <div class="time-gutter all-day-label">all-day</div>
+        <div class="time-gutter all-day-label">{{ t("all-day") }}</div>
         <div
           v-for="day in days"
           :key="calendarDay(day) + 'ad'"
@@ -521,7 +522,7 @@ onUnmounted(() => {
             :style="{ '--ev': getEventColor(event), ...getEventStyle(event) }"
             @click="emit('eventClick', event.id)"
           >
-            {{ event.title || '(No title)' }}
+            {{ event.title || t('(No title)') }}
           </div>
         </div>
       </div>
@@ -531,7 +532,7 @@ onUnmounted(() => {
       data-testid="cal-all-day-resizer"
       role="separator"
       aria-orientation="horizontal"
-      aria-label="Resize all-day events"
+      :aria-label="t('Resize all-day events')"
       @mousedown="onAllDayResizeStart"
     ></div>
 
@@ -593,7 +594,7 @@ onUnmounted(() => {
           @click.stop="emit('eventClick', seg.event.id)"
           @mousedown="onEventMouseDown($event, seg)"
         >
-          <span class="event-title">{{ seg.event.title || '(No title)' }}</span>
+          <span class="event-title">{{ seg.event.title || t('(No title)') }}</span>
           <span class="event-time">
             {{ formatInTimezone(seg.segStart.toISOString(), uiStore.displayTimezone, { weekday: undefined, month: undefined, day: undefined, year: undefined, hour: 'numeric', minute: '2-digit', hour12: uiStore.hour12 }) }}
           </span>

@@ -1,22 +1,23 @@
 <script setup lang="ts">
-import { ref, shallowRef } from "vue";
+import { computed, ref, shallowRef } from "vue";
+import { t } from "@/i18n";
 import { useAccountsStore } from "@/stores/accounts";
 import type { Contact, ContactBook } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { parseEmails, parsePhones } from "@/lib/contact-json";
 import Select from "@/components/common/Select.vue";
 
-const EMAIL_LABEL_OPTIONS = [
-  { value: "work", label: "Work" },
-  { value: "home", label: "Home" },
-  { value: "other", label: "Other" },
-];
+const EMAIL_LABEL_OPTIONS = computed(() => [
+  { value: "work", label: t("Work") },
+  { value: "home", label: t("Home") },
+  { value: "other", label: t("Other") },
+]);
 
-const PHONE_LABEL_OPTIONS = [
-  { value: "mobile", label: "Mobile" },
-  { value: "work", label: "Work" },
-  { value: "home", label: "Home" },
-];
+const PHONE_LABEL_OPTIONS = computed(() => [
+  { value: "mobile", label: t("Mobile") },
+  { value: "work", label: t("Work") },
+  { value: "home", label: t("Home") },
+]);
 
 defineProps<{
   books: ContactBook[];
@@ -102,8 +103,8 @@ function addPhoneField() { formPhones.value.push({ number: "", label: "mobile" }
 function removePhoneField(idx: number) { formPhones.value.splice(idx, 1); }
 
 async function saveContact() {
-  if (!formFirstName.value.trim()) { error.value = "First name is required"; return; }
-  if (!formLastName.value.trim()) { error.value = "Last name is required"; return; }
+  if (!formFirstName.value.trim()) { error.value = t("First name is required"); return; }
+  if (!formLastName.value.trim()) { error.value = t("Last name is required"); return; }
   saving.value = true;
   error.value = null;
 
@@ -139,7 +140,7 @@ async function saveContact() {
     <div v-if="showForm" class="modal-overlay" @click.self="showForm = false">
       <div class="modal">
         <div class="modal-header">
-          <h3>{{ editingContact ? "Edit Contact" : "New Contact" }}</h3>
+          <h3>{{ editingContact ? t("Edit Contact") : t("New Contact") }}</h3>
           <button class="modal-close" @click="showForm = false">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
@@ -148,7 +149,7 @@ async function saveContact() {
           <div v-if="error" class="form-error">{{ error }}</div>
 
           <div class="form-group">
-            <label>Contact Book</label>
+            <label>{{ t('Contact Book') }}</label>
             <Select
               v-model="formBookId"
               :options="books.map(book => ({ value: book.id, label: `${book.name} (${getAccountName(book.account_id)})` }))"
@@ -157,58 +158,58 @@ async function saveContact() {
 
           <div class="name-row">
             <div class="form-group">
-              <label>First Name *</label>
-              <input v-model="formFirstName" type="text" placeholder="First" autofocus />
+              <label>{{ t('First Name *') }}</label>
+              <input v-model="formFirstName" type="text" :placeholder="t('First')" autofocus />
             </div>
             <div v-if="!compact" class="form-group">
-              <label>Middle Name</label>
-              <input v-model="formMiddleName" type="text" placeholder="Middle" />
+              <label>{{ t('Middle Name') }}</label>
+              <input v-model="formMiddleName" type="text" :placeholder="t('Middle')" />
             </div>
             <div class="form-group">
-              <label>Last Name *</label>
-              <input v-model="formLastName" type="text" placeholder="Last" />
+              <label>{{ t('Last Name *') }}</label>
+              <input v-model="formLastName" type="text" :placeholder="t('Last')" />
             </div>
           </div>
 
           <div class="form-group">
-            <label>Email</label>
+            <label>{{ t('Email') }}</label>
             <div v-for="(em, idx) in formEmails" :key="idx" class="multi-row">
               <input v-model="em.email" type="email" placeholder="email@example.com" />
               <Select v-if="!compact" v-model="em.label" :options="EMAIL_LABEL_OPTIONS" class="label-select" />
               <button v-if="formEmails.length > 1" class="rm-btn" @click="removeEmailField(idx)">&times;</button>
             </div>
-            <button class="add-btn" @click="addEmailField">+ Add email</button>
+            <button class="add-btn" @click="addEmailField">{{ t('+ Add email') }}</button>
           </div>
 
           <div class="form-group">
-            <label>Phone</label>
+            <label>{{ t('Phone') }}</label>
             <div v-for="(ph, idx) in formPhones" :key="idx" class="multi-row">
               <input v-model="ph.number" type="tel" placeholder="+1 (555) 123-4567" />
               <Select v-if="!compact" v-model="ph.label" :options="PHONE_LABEL_OPTIONS" class="label-select" />
               <button class="rm-btn" @click="removePhoneField(idx)">&times;</button>
             </div>
-            <button class="add-btn" @click="addPhoneField">+ Add phone</button>
+            <button class="add-btn" @click="addPhoneField">{{ t('+ Add phone') }}</button>
           </div>
 
           <div class="form-group">
-            <label>Organization</label>
-            <input v-model="formOrg" type="text" placeholder="Company name" />
+            <label>{{ t('Organization') }}</label>
+            <input v-model="formOrg" type="text" :placeholder="t('Company name')" />
           </div>
 
           <div v-if="!compact" class="form-group">
-            <label>Job Title</label>
-            <input v-model="formTitle" type="text" placeholder="Job title" />
+            <label>{{ t('Job Title') }}</label>
+            <input v-model="formTitle" type="text" :placeholder="t('Job title')" />
           </div>
 
           <div v-if="!compact" class="form-group">
-            <label>Notes</label>
-            <textarea v-model="formNotes" rows="3" placeholder="Notes"></textarea>
+            <label>{{ t('Notes') }}</label>
+            <textarea v-model="formNotes" rows="3" :placeholder="t('Notes')"></textarea>
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-cancel" @click="showForm = false">Cancel</button>
+          <button class="btn-cancel" @click="showForm = false">{{ t('Cancel') }}</button>
           <button class="btn-save" :disabled="saving" data-testid="contact-save-btn" @click="saveContact">
-            {{ saving ? "Saving..." : editingContact ? "Save" : "Add Contact" }}
+            {{ saving ? t("Saving...") : editingContact ? t("Save") : t("Add Contact") }}
           </button>
         </div>
       </div>

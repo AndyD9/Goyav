@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { isOccurrenceId } from "./rrule";
 import type { CalendarEvent } from "./types";
 
@@ -14,12 +15,12 @@ type SupportResult<Details extends object = object> = Details &
 
 export type CalendarEditScope = "standalone" | "this-occurrence" | "entire-series";
 
-const RECURRING_REASON =
-  "Editing, deleting, or moving recurring events is not supported in Goyav.";
-const MEETING_OCCURRENCE_REASON =
-  "Editing one occurrence of a meeting with attendees is not supported yet.";
-const UNKNOWN_REASON =
-  "Recurrence information is unavailable. Refresh this event before editing.";
+const RECURRING_REASON = () =>
+  t("Editing, deleting, or moving recurring events is not supported in Goyav.");
+const MEETING_OCCURRENCE_REASON = () =>
+  t("Editing one occurrence of a meeting with attendees is not supported yet.");
+const UNKNOWN_REASON = () =>
+  t("Recurrence information is unavailable. Refresh this event before editing.");
 
 function hasNoAttendees(attendeesJson: string | null | undefined): boolean {
   try {
@@ -41,10 +42,10 @@ export function calendarMutationSupport(
       event.recurrence_kind === "occurrence" ||
       Boolean(event.recurrence_rule))
   ) {
-    return { supported: false, reason: RECURRING_REASON };
+    return { supported: false, reason: RECURRING_REASON() };
   }
   if (event?.recurrence_kind !== "standalone") {
-    return { supported: false, reason: UNKNOWN_REASON };
+    return { supported: false, reason: UNKNOWN_REASON() };
   }
   return { supported: true, reason: null };
 }
@@ -67,7 +68,7 @@ export function calendarEditSupport(
     return {
       supported: false,
       occurrence: true,
-      reason: MEETING_OCCURRENCE_REASON,
+      reason: MEETING_OCCURRENCE_REASON(),
     };
   }
   return { supported: true, occurrence: true, reason: null };
@@ -82,7 +83,7 @@ export function calendarScopedEditSupport(
     return { supported: true, scopes: ["standalone"], reason: null };
   }
   if (!event || event.recurrence_kind === "unknown") {
-    return { supported: false, scopes: [], reason: UNKNOWN_REASON };
+    return { supported: false, scopes: [], reason: UNKNOWN_REASON() };
   }
   const hasOccurrenceId = isOccurrenceId(event.id);
   if (event.recurrence_kind === "series" && !hasOccurrenceId) {
@@ -93,7 +94,7 @@ export function calendarScopedEditSupport(
     (event.recurrence_kind !== "occurrence" &&
       event.recurrence_kind !== "series")
   ) {
-    return { supported: false, scopes: [], reason: RECURRING_REASON };
+    return { supported: false, scopes: [], reason: RECURRING_REASON() };
   }
   const scopes: CalendarEditScope[] = hasNoAttendees(event.attendees_json)
     ? ["this-occurrence", "entire-series"]

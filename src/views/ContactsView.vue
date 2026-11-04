@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "@/i18n";
 import { ref, onMounted, onUnmounted, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { listen } from "@tauri-apps/api/event";
@@ -393,12 +394,12 @@ async function onMerged(surviving: Contact) {
       <div class="contacts-toolbar">
         <button class="btn-new" data-testid="contacts-new-btn" @click="openNewForm">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><line x1="20" y1="8" x2="20" y2="14" /><line x1="23" y1="11" x2="17" y2="11" /></svg>
-          New Contact
+          {{ t('New Contact') }}
         </button>
         <div class="toolbar-sep"></div>
         <button class="btn-sync" :disabled="syncing" @click="syncAllContacts">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="{ spinning: syncing }"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" /></svg>
-          {{ syncing ? "Syncing..." : "Sync" }}
+          {{ syncing ? t("Syncing...") : t("Sync") }}
         </button>
       </div>
 
@@ -434,12 +435,12 @@ async function onMerged(surviving: Contact) {
       <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="showDeleteConfirm = false">
         <div class="modal modal-sm">
           <div class="modal-body">
-            <h3 class="confirm-title">Delete Contact</h3>
-            <p class="confirm-text">Are you sure? This cannot be undone.</p>
+            <h3 class="confirm-title">{{ t('Delete Contact') }}</h3>
+            <p class="confirm-text">{{ t('Are you sure? This cannot be undone.') }}</p>
           </div>
           <div class="modal-footer">
-            <button class="btn-cancel" @click="showDeleteConfirm = false">Cancel</button>
-            <button class="btn-delete" @click="doDelete">Delete</button>
+            <button class="btn-cancel" @click="showDeleteConfirm = false">{{ t('Cancel') }}</button>
+            <button class="btn-delete" @click="doDelete">{{ t('Delete') }}</button>
           </div>
         </div>
       </div>

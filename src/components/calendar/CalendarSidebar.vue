@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "@/i18n";
 import { ref, computed, onBeforeUnmount, onMounted } from "vue";
 import { useCalendarStore } from "@/stores/calendar";
 import { useAccountsStore } from "@/stores/accounts";
@@ -173,7 +174,7 @@ async function confirmRecolor() {
     return;
   }
   if (!HEX_COLOR_RE.test(newColor)) {
-    recolorError.value = "Color must be a hex value like #4285f4 or #4285f4ff.";
+    recolorError.value = t("Color must be a hex value like #4285f4 or #4285f4ff.");
     return;
   }
   recolorSaving.value = true;
@@ -192,7 +193,7 @@ async function confirmRecolor() {
   // Close before the potentially slow background refresh.
   recoloring.value = null;
   recolorSaving.value = false;
-  showToast("Color updated", "success");
+  showToast(t("Color updated"), "success");
   void calendarStore
     .fetchCalendars()
     .catch((error) => console.error("post-recolor refresh failed:", error));
@@ -230,7 +231,7 @@ async function confirmRename() {
       renaming.value.calendar.color,
     );
     await calendarStore.fetchCalendars();
-    showToast(`Renamed to "${newName}"`, "success");
+    showToast(t('Renamed to "{name}"', { name: newName }), "success");
     renaming.value = null;
   } catch (error) {
     renameError.value = error instanceof Error ? error.message : String(error);
@@ -246,21 +247,21 @@ async function unsubscribeThisCalendar() {
   const calName = cal?.name || calendarId;
   closeContextMenu();
 
-  if (!confirm(`Unsubscribe from "${calName}"? Local events will be removed.`)) return;
+  if (!confirm(t('Unsubscribe from "{name}"? Local events will be removed.', { name: calName }))) return;
 
   try {
     await calendarStore.unsubscribeCalendar(calendarId);
-    showToast(`Unsubscribed from "${calName}"`, "success");
+    showToast(t('Unsubscribed from "{name}"', { name: calName }), "success");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    showToast(`Failed to unsubscribe: ${message}`, "error", 5000);
+    showToast(t("Failed to unsubscribe: {message}", { message }), "error", 5000);
   }
 }
 </script>
 
 <template>
   <div class="calendar-sidebar">
-    <div class="app-sidebar-header">Calendars</div>
+    <div class="app-sidebar-header">{{ t("Calendars") }}</div>
     <div class="calendar-list">
       <div
         v-for="cal in calendarStore.calendars"
@@ -301,7 +302,7 @@ async function unsubscribeThisCalendar() {
         </div>
       </div>
       <div v-if="calendarStore.calendars.length === 0" class="empty">
-        No calendars
+        {{ t("No calendars") }}
       </div>
     </div>
 
@@ -311,10 +312,10 @@ async function unsubscribeThisCalendar() {
         class="cal-context-menu"
         :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
       >
-        <button class="ctx-item" @click="syncThisCalendar" data-testid="calendar-sync">Sync this calendar</button>
-        <button class="ctx-item" @click="startRename" data-testid="calendar-rename">Rename…</button>
-        <button class="ctx-item" @click="startRecolor" data-testid="calendar-recolor">Change color…</button>
-        <button class="ctx-item" @click="unsubscribeThisCalendar" data-testid="calendar-unsubscribe">Unsubscribe</button>
+        <button class="ctx-item" @click="syncThisCalendar" data-testid="calendar-sync">{{ t("Sync this calendar") }}</button>
+        <button class="ctx-item" @click="startRename" data-testid="calendar-rename">{{ t("Rename…") }}</button>
+        <button class="ctx-item" @click="startRecolor" data-testid="calendar-recolor">{{ t("Change color…") }}</button>
+        <button class="ctx-item" @click="unsubscribeThisCalendar" data-testid="calendar-unsubscribe">{{ t("Unsubscribe") }}</button>
       </div>
     </Teleport>
 
@@ -327,15 +328,15 @@ async function unsubscribeThisCalendar() {
       >
         <div class="rename-modal">
           <div class="rename-body">
-            <h3>Rename Calendar</h3>
-            <p class="rename-sub">Renaming will update the calendar on the server.</p>
+            <h3>{{ t("Rename Calendar") }}</h3>
+            <p class="rename-sub">{{ t("Renaming will update the calendar on the server.") }}</p>
             <input
               v-model="renaming.value"
               type="text"
               class="rename-input"
               data-testid="calendar-rename-input"
               :disabled="renameSaving"
-              placeholder="Calendar name"
+              :placeholder="t('Calendar name')"
               @keyup.enter="confirmRename"
               @keyup.escape="cancelRename"
             />
@@ -350,7 +351,7 @@ async function unsubscribeThisCalendar() {
               data-testid="calendar-rename-cancel"
               @click="cancelRename"
             >
-              Cancel
+              {{ t("Cancel") }}
             </button>
             <button
               class="rename-btn-save"
@@ -358,7 +359,7 @@ async function unsubscribeThisCalendar() {
               data-testid="calendar-rename-save"
               @click="confirmRename"
             >
-              {{ renameSaving ? "Renaming…" : "Rename" }}
+              {{ renameSaving ? t("Renaming…") : t("Rename") }}
             </button>
           </div>
         </div>
@@ -374,9 +375,9 @@ async function unsubscribeThisCalendar() {
       >
         <div class="rename-modal">
           <div class="rename-body">
-            <h3>Change color</h3>
+            <h3>{{ t("Change color") }}</h3>
             <p class="rename-sub">
-              Pick a color for "{{ recoloring.calendar.name }}". CalDAV / JMAP store the exact hex you pick. Microsoft 365 and Google use a fixed palette, so the picked color is approximated and may not match this swatch one-for-one. System calendars (Birthdays, Holidays, etc.) on Microsoft are read-only — the change is kept locally if the server rejects it.
+              {{ t('Pick a color for "{name}". CalDAV / JMAP store the exact hex you pick. Microsoft 365 and Google use a fixed palette, so the picked color is approximated and may not match this swatch one-for-one. System calendars (Birthdays, Holidays, etc.) on Microsoft are read-only — the change is kept locally if the server rejects it.', { name: recoloring.calendar.name }) }}
             </p>
             <div class="color-swatches">
               <button
@@ -386,7 +387,7 @@ async function unsubscribeThisCalendar() {
                 class="color-swatch"
                 :class="{ selected: recoloring.value.toLowerCase() === entry.hex.toLowerCase() }"
                 :style="{ backgroundColor: entry.hex }"
-                :title="entry.name"
+                :title="t(entry.name)"
                 :data-testid="`calendar-color-${entry.hex.slice(1)}`"
                 :disabled="recolorSaving"
                 @click="recoloring.value = entry.hex"
@@ -413,7 +414,7 @@ async function unsubscribeThisCalendar() {
               data-testid="calendar-recolor-cancel"
               @click="cancelRecolor"
             >
-              Cancel
+              {{ t("Cancel") }}
             </button>
             <button
               class="rename-btn-save"
@@ -421,7 +422,7 @@ async function unsubscribeThisCalendar() {
               data-testid="calendar-recolor-save"
               @click="confirmRecolor"
             >
-              {{ recolorSaving ? "Saving…" : "Save" }}
+              {{ recolorSaving ? t("Saving…") : t("Save") }}
             </button>
           </div>
         </div>

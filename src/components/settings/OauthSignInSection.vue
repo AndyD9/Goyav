@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "@/i18n";
 /// Branded OAuth sign-in row shared by the Gmail and Microsoft 365
 /// tabs: a green "signed in" status with a re-auth button once tokens
 /// exist, or the provider's sign-in button. The actual flow lives in
@@ -14,13 +15,13 @@ const emit = defineEmits<{ signIn: []; reauth: [] }>();
 
 <template>
   <div class="form-group">
-    <label>{{ provider === 'google' ? 'Calendar & Contacts Sync' : 'Microsoft 365 Sign In' }}</label>
+    <label>{{ provider === 'google' ? t('Calendar & Contacts Sync') : t('Microsoft 365 Sign In') }}</label>
     <div v-if="status" class="oauth-row">
       <div class="oauth-status">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00a63e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
         {{ status }}
       </div>
-      <button class="btn-reauth" @click="emit('reauth')">Sign in again</button>
+      <button class="btn-reauth" @click="emit('reauth')">{{ t("Sign in again") }}</button>
     </div>
     <button
       v-else
@@ -40,13 +41,13 @@ const emit = defineEmits<{ signIn: []; reauth: [] }>();
         <rect x="1" y="13" width="10" height="10" fill="#00A4EF"/>
         <rect x="13" y="13" width="10" height="10" fill="#FFB900"/>
       </svg>
-      {{ inProgress ? "Waiting for browser..." : (provider === 'google' ? "Sign in with Google" : "Sign in with Microsoft") }}
+      {{ inProgress ? t("Waiting for browser...") : (provider === 'google' ? t("Sign in with Google") : t("Sign in with Microsoft")) }}
     </button>
     <span
       v-if="provider === 'google'"
       class="field-hint"
       data-testid="google-oauth-hint"
-    >Sign in to sync Gmail, Google Calendar and Contacts. On Google's consent screen, select all requested permissions.</span>
-    <span v-else class="field-hint">Sign in to access mail, calendar, and contacts via Microsoft Graph API.</span>
+    >{{ t("Sign in to sync Gmail, Google Calendar and Contacts. On Google's consent screen, select all requested permissions.") }}</span>
+    <span v-else class="field-hint">{{ t("Sign in to access mail, calendar, and contacts via Microsoft Graph API.") }}</span>
   </div>
 </template>
