@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/niceda/releases/devtools/schema.json",
+  "$schema": "https://schema.tauri.app/config/2",
   "productName": "Goyav",
   "version": "0.3.0",
   "identifier": "fr.goyav.mail",
@@ -70,7 +70,8 @@
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI4OThBNzU5ODY3QjUzRkIKUldUN1UzdUdXYWVZdVB5VUdDZzlaWkwzVEdvVVcrRExoSGNhckJ0RnhRcG9HL0pjOW9RK3p1RCsK",
       "endpoints": [
         "https://github.com/AndyD9/Goyav/releases/latest/download/latest.json"
-      ]
+      ],
+      "requireSignedVersion": true
     }
   }
 }

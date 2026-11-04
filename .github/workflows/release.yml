@@ -83,7 +83,9 @@ jobs:
           '
 
       - name: Build and release
-        uses: tauri-apps/tauri-action@v0
+        # Pinned to a commit like every other action: this step holds the
+        # update-signing key and a contents:write token.
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -97,4 +99,5 @@ jobs:
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
-          args: --bundles app
+          # --locked: fail instead of re-resolving if Cargo.lock is stale.
+          args: --bundles app -- --locked
