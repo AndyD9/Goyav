@@ -11,25 +11,111 @@ use crate::message::{BackendMessageRef, BodyLocation, SearchHit, SearchQuery};
 use crate::state::AppState;
 
 /// Check if an IP address is in a private/reserved range (SSRF protection).
+/// IPv4-mapped/compatible IPv6 addresses are classified as their IPv4 form.
 fn is_private_ip(ip: &std::net::IpAddr) -> bool {
-    match ip {
+    match ip.to_canonical() {
         std::net::IpAddr::V4(v4) => {
+            let [a, b, ..] = v4.octets();
             v4.is_loopback()            // 127.0.0.0/8
             || v4.is_private()          // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
             || v4.is_link_local()       // 169.254.0.0/16
             || v4.is_broadcast()        // 255.255.255.255
-            || v4.is_unspecified()      // 0.0.0.0
-            || v4.octets()[0] == 100 && v4.octets()[1] >= 64 && v4.octets()[1] <= 127
-            // 100.64.0.0/10 (CGNAT)
+            || v4.is_multicast()        // 224.0.0.0/4
+            || a == 0                   // 0.0.0.0/8
+            || a >= 240                 // 240.0.0.0/4 reserved
+            || (a == 100 && (64..=127).contains(&b)) // 100.64.0.0/10 (CGNAT)
+            || (a == 198 && (b & 0xfe) == 18) // 198.18.0.0/15 (benchmarking)
         }
         std::net::IpAddr::V6(v6) => {
+            let s = v6.segments();
             v6.is_loopback()            // ::1
             || v6.is_unspecified()      // ::
-            // ULA (fc00::/7) and link-local (fe80::/10)
-            || v6.segments()[0] & 0xfe00 == 0xfc00
-            || v6.segments()[0] & 0xffc0 == 0xfe80
+            || v6.is_multicast()        // ff00::/8
+            || s[0] & 0xfe00 == 0xfc00  // ULA fc00::/7
+            || s[0] & 0xffc0 == 0xfe80  // link-local fe80::/10
+            || s[0] == 0x2002           // 6to4 (embeds an IPv4 address)
+            || (s[0] == 0x64 && s[1] == 0xff9b) // NAT64 64:ff9b::/96
+            || v6.to_ipv4().is_some()   // ::a.b.c.d (IPv4-compatible)
         }
     }
+}
+
+const MAX_REMOTE_IMAGE_BYTES: usize = 5 * 1024 * 1024;
+
+/// A remote image URL may only be fetched over https from a public host.
+/// Checked for the initial URL and again for every redirect hop.
+fn remote_image_url_allowed(url: &reqwest::Url) -> bool {
+    if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
+        return false;
+    }
+    match url.host() {
+        Some(url::Host::Ipv4(ip)) => !is_private_ip(&ip.into()),
+        Some(url::Host::Ipv6(ip)) => !is_private_ip(&ip.into()),
+        Some(url::Host::Domain(domain)) => {
+            let domain = domain.trim_end_matches('.').to_ascii_lowercase();
+            !(domain == "localhost"
+                || domain.ends_with(".localhost")
+                || domain.ends_with(".local")
+                || domain.ends_with(".internal"))
+        }
+        None => false,
+    }
+}
+
+/// Bare image MIME types accepted into a data: URI.
+fn allowed_image_content_type(header: &str) -> Option<&'static str> {
+    let essence = header.split(';').next()?.trim().to_ascii_lowercase();
+    [
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "image/avif",
+        "image/bmp",
+        "image/x-icon",
+        "image/vnd.microsoft.icon",
+    ]
+    .into_iter()
+    .find(|allowed| *allowed == essence)
+}
+
+/// DNS resolver for remote images that drops private/reserved addresses, so
+/// the address actually connected to is the one validated (no DNS-rebinding
+/// window between a pre-check and the connection).
+struct PublicOnlyResolver;
+
+impl reqwest::dns::Resolve for PublicOnlyResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        Box::pin(async move {
+            let addrs: Vec<std::net::SocketAddr> = tokio::net::lookup_host((name.as_str(), 0))
+                .await?
+                .filter(|addr| !is_private_ip(&addr.ip()))
+                .collect();
+            if addrs.is_empty() {
+                return Err("remote image host resolves only to private addresses".into());
+            }
+            Ok(Box::new(addrs.into_iter()) as reqwest::dns::Addrs)
+        })
+    }
+}
+
+/// HTTP client for fetching remote images on behalf of email content:
+/// https only, public addresses only (checked at connect time), and every
+/// redirect re-validated, capped at 5 hops.
+fn remote_image_client() -> Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .https_only(true)
+        .dns_resolver(std::sync::Arc::new(PublicOnlyResolver))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= 5 || !remote_image_url_allowed(attempt.url()) {
+                attempt.stop()
+            } else {
+                attempt.follow()
+            }
+        }))
+        .build()
+        .map_err(|e| Error::Other(format!("HTTP client error: {}", e)))
 }
 
 /// Split a folder path of the form `parentId/name` into its parent ID and
@@ -524,10 +610,7 @@ async fn inline_remote_images(html: &str) -> Result<String> {
     let re = regex::Regex::new(r#"src="(https://[^"]+)""#)
         .map_err(|e| Error::Other(format!("Regex error: {}", e)))?;
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| Error::Other(format!("HTTP client error: {}", e)))?;
+    let client = remote_image_client()?;
 
     // Collect all unique URLs
     let urls: Vec<String> = re
@@ -548,52 +631,41 @@ async fn inline_remote_images(html: &str) -> Result<String> {
             let client = client.clone();
             let url = url.clone();
             async move {
-                // SSRF protection: resolve hostname and reject private/internal IPs
-                if let Ok(parsed) = reqwest::Url::parse(&url) {
-                    if let Some(host) = parsed.host_str() {
-                        // Block obvious private hostnames
-                        let h = host.to_lowercase();
-                        if h == "localhost" || h.ends_with(".local") || h.ends_with(".internal") {
-                            log::debug!("Image proxy: blocked private host {}", host);
-                            return None;
-                        }
-                        // Resolve DNS and check for private IPs
-                        if let Ok(addrs) = tokio::net::lookup_host(format!(
-                            "{}:{}",
-                            host,
-                            parsed.port_or_known_default().unwrap_or(443)
-                        ))
-                        .await
-                        {
-                            for addr in addrs {
-                                let ip = addr.ip();
-                                if ip.is_loopback() || ip.is_unspecified() || is_private_ip(&ip) {
-                                    log::debug!(
-                                        "Image proxy: blocked private IP {} for {}",
-                                        ip,
-                                        host
-                                    );
-                                    return None;
-                                }
-                            }
-                        }
-                    }
+                // Fail closed: unparsable URLs, non-https schemes and blocked
+                // hosts are never fetched. The client re-checks every redirect
+                // hop and the resolved address at connect time.
+                let parsed = reqwest::Url::parse(&url).ok()?;
+                if !remote_image_url_allowed(&parsed) {
+                    log::debug!("Image proxy: blocked {}", parsed.host_str().unwrap_or(""));
+                    return None;
                 }
 
-                let resp = client.get(&url).send().await.ok()?;
-                let content_type = resp
-                    .headers()
-                    .get("content-type")
-                    .and_then(|v| v.to_str().ok())
-                    .unwrap_or("image/png")
-                    .to_string();
-                // Only allow image content types, max 5MB
-                if !content_type.starts_with("image/") {
+                let mut resp = client.get(parsed).send().await.ok()?;
+                if !resp.status().is_success() {
                     return None;
                 }
-                let bytes = resp.bytes().await.ok()?;
-                if bytes.len() > 5 * 1024 * 1024 {
+                // The Content-Type is copied into the data: URI, so only a
+                // fixed allowlist of bare image types is accepted (no
+                // parameters, no quotes or markup from the image host).
+                let content_type = resp
+                    .headers()
+                    .get(reqwest::header::CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(allowed_image_content_type)?;
+                if resp
+                    .content_length()
+                    .is_some_and(|len| len > MAX_REMOTE_IMAGE_BYTES as u64)
+                {
                     return None;
+                }
+                // Enforce the size cap while streaming (gzip/deflate bodies
+                // are decompressed before reaching us).
+                let mut bytes = Vec::new();
+                while let Some(chunk) = resp.chunk().await.ok()? {
+                    if bytes.len() + chunk.len() > MAX_REMOTE_IMAGE_BYTES {
+                        return None;
+                    }
+                    bytes.extend_from_slice(&chunk);
                 }
                 let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
                 Some((url, format!("data:{};base64,{}", content_type, b64)))
@@ -998,6 +1070,43 @@ pub async fn save_attachment(
 /// `blocking_save_file()` on the tokio worker that invoked the command
 /// starves the GTK main thread on Linux, which manifests as a dialog that
 /// opens but never renders its Save button.
+/// Tag a file written from email content as downloaded, so macOS Gatekeeper
+/// and the "downloaded from the internet" prompt apply when the user later
+/// opens it (or an app extracted from it), as Mail and browsers do. Goyav is
+/// not sandboxed and does not declare LSFileQuarantineEnabled, so the OS does
+/// not add the attribute on its own. Best effort: failure is only logged.
+#[cfg(target_os = "macos")]
+fn mark_downloaded(file: &std::fs::File) {
+    use std::os::unix::io::AsRawFd;
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    // flags;timestamp(hex);agent;event-uuid
+    let value = format!("0083;{seconds:08x};Goyav;");
+    let name = c"com.apple.quarantine";
+    // SAFETY: valid fd for the lifetime of `file`; name is NUL-terminated;
+    // value pointer/length describe an initialized buffer.
+    let rc = unsafe {
+        libc::fsetxattr(
+            file.as_raw_fd(),
+            name.as_ptr(),
+            value.as_ptr().cast(),
+            value.len(),
+            0,
+            0,
+        )
+    };
+    if rc != 0 {
+        log::warn!(
+            "Could not set quarantine attribute on saved file: {}",
+            std::io::Error::last_os_error()
+        );
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn mark_downloaded(_file: &std::fs::File) {}
+
 async fn prompt_save_and_stream<R: std::io::Read>(
     app: &tauri::AppHandle,
     suggested_filename: &str,
@@ -1079,6 +1188,7 @@ async fn prompt_save_and_stream<R: std::io::Read>(
         let _ = std::fs::remove_file(&temp_path);
         return Err(Error::Other(format!("Failed to flush {}: {}", what, e)));
     }
+    mark_downloaded(&file);
     drop(file);
 
     #[cfg(not(unix))]
@@ -1147,6 +1257,74 @@ pub async fn save_message_as_eml(
         std::io::BufReader::new(source),
     )
     .await
+}
+
+#[cfg(test)]
+mod remote_image_safety_tests {
+    use super::{allowed_image_content_type, is_private_ip, remote_image_url_allowed};
+
+    fn allowed(url: &str) -> bool {
+        remote_image_url_allowed(&reqwest::Url::parse(url).unwrap())
+    }
+
+    #[test]
+    fn private_and_mapped_addresses_are_blocked() {
+        for ip in [
+            "127.0.0.1", "10.1.2.3", "192.168.1.1", "169.254.169.254", "0.1.2.3",
+            "100.64.0.1", "198.18.0.1", "224.0.0.1", "::1", "fd00::1", "fe80::1",
+            "::ffff:127.0.0.1", "::ffff:192.168.1.1", "64:ff9b::7f00:1", "2002:7f00:1::1",
+        ] {
+            assert!(is_private_ip(&ip.parse().unwrap()), "{ip}");
+        }
+        for ip in ["93.184.216.34", "2606:2800:220:1::1"] {
+            assert!(!is_private_ip(&ip.parse().unwrap()), "{ip}");
+        }
+    }
+
+    #[test]
+    fn redirect_targets_are_rechecked() {
+        assert!(allowed("https://images.example.com/a.png"));
+        for url in [
+            "http://images.example.com/a.png",
+            "http://192.168.1.1/router?reboot=1",
+            "https://127.0.0.1/a.png",
+            "https://[::ffff:7f00:1]/a.png",
+            "https://localhost/a.png",
+            "https://printer.local./a.png",
+            "https://user:pw@images.example.com/a.png",
+        ] {
+            assert!(!allowed(url), "{url}");
+        }
+    }
+
+    #[test]
+    fn only_bare_image_types_reach_the_data_uri() {
+        assert_eq!(allowed_image_content_type("image/PNG"), Some("image/png"));
+        assert_eq!(allowed_image_content_type("image/jpeg; charset=x"), Some("image/jpeg"));
+        assert_eq!(
+            allowed_image_content_type("image/png\"><meta http-equiv=refresh content=0>"),
+            None
+        );
+        assert_eq!(allowed_image_content_type("image/svg+xml"), None);
+        assert_eq!(allowed_image_content_type("text/html"), None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn saved_files_get_the_quarantine_attribute() {
+        use std::os::unix::io::AsRawFd;
+        let file = tempfile::tempfile().unwrap();
+        super::mark_downloaded(&file);
+        let mut buf = [0u8; 128];
+        let name = c"com.apple.quarantine";
+        // SAFETY: valid fd, NUL-terminated name, buffer length matches.
+        let len = unsafe {
+            libc::fgetxattr(file.as_raw_fd(), name.as_ptr(), buf.as_mut_ptr().cast(), buf.len(), 0, 0)
+        };
+        assert!(len > 0, "{}", std::io::Error::last_os_error());
+        let value = std::str::from_utf8(&buf[..len as usize]).unwrap();
+        assert!(value.starts_with("0083;") && value.contains(";Goyav;"), "{value}");
+    }
 }
 
 #[cfg(test)]
