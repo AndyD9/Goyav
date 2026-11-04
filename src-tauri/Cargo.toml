@@ -68,6 +68,8 @@ clearurls = "0.0.4"
 # (honors $TUMPA_DIR / $TUMPA_KEYSTORE).
 libtumpa = { version = "0.4.1", default-features = false, features = ["card", "network"] }
 zeroize = { version = "1", features = ["derive"] }
+# Self-update from the GitHub releases (see src/updater.rs).
+tauri-plugin-updater = "2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

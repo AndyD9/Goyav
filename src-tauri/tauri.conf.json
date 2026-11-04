@@ -37,6 +37,10 @@
       "icons/icon.png"
     ],
     "category": "Productivity",
+    "createUpdaterArtifacts": true,
+    "macOS": {
+      "signingIdentity": "-"
+    },
     "linux": {
       "deb": {
         "depends": [
@@ -59,6 +63,14 @@
           "pcsc-lite-libs"
         ]
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI4OThBNzU5ODY3QjUzRkIKUldUN1UzdUdXYWVZdVB5VUdDZzlaWkwzVEdvVVcrRExoSGNhckJ0RnhRcG9HL0pjOW9RK3p1RCsK",
+      "endpoints": [
+        "https://github.com/AndyD9/Goyav/releases/latest/download/latest.json"
+      ]
     }
   }
 }

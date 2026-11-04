@@ -19,6 +19,7 @@ mod ops;
 mod path_validation;
 mod provider;
 mod state;
+mod updater;
 
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
@@ -37,6 +38,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data_dir = resolve_data_dir(app.handle())?;
             std::fs::create_dir_all(&data_dir)?;
@@ -58,9 +60,11 @@ pub fn run() {
                 let state = handle.state::<AppState>();
                 commands::meet::sweep_pending(&state, lifecycle_ids).await;
             });
+            updater::check_on_startup(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            updater::check_for_updates,
             commands::app::quit_app,
             commands::app::get_last_view,
             commands::app::save_last_view,

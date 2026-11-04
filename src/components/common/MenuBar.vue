@@ -71,6 +71,12 @@ function openAbout() {
   aboutOpen.value = true;
 }
 
+// The backend shows its own dialogs (update found, up to date, error).
+function checkForUpdates() {
+  closeMenus();
+  invoke("check_for_updates").catch((e) => console.error("Update check failed:", e));
+}
+
 const shortcuts = {
   preferences: { key: ",", ctrl: true } satisfies ShortcutDef,
   quit: { key: "q", ctrl: true } satisfies ShortcutDef,
@@ -215,6 +221,10 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
         <button class="menu-action" data-testid="menu-help-about" @click="openAbout">
           <span class="action-prefix">&#160;</span>
           <span class="action-label">About Goyav&hellip;</span>
+        </button>
+        <button class="menu-action" data-testid="menu-help-updates" @click="checkForUpdates">
+          <span class="action-prefix">&#160;</span>
+          <span class="action-label">Check for Updates&hellip;</span>
         </button>
       </div>
     </div>
