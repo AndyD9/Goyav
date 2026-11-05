@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { storeToRefs } from "pinia";
-import { listen } from "@tauri-apps/api/event";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useAccountsStore } from "@/stores/accounts";
 import { useFoldersStore } from "@/stores/folders";
 import { useMessagesStore } from "@/stores/messages";
@@ -105,6 +105,16 @@ function activateMessageTab(messageId: string) {
 function activateListTab() {
   activeTabId.value = null;
 }
+
+// Changing folder or account clears the store's active message, so a
+// message tab left in front would show an empty reader. Go back to the
+// list; the open tabs stay and reload their message when picked again.
+watch(
+  () => [accountsStore.activeAccountId, foldersStore.activeFolderPath],
+  () => {
+    if (activeTabId.value !== null) activeTabId.value = null;
+  },
+);
 
 function closeTab(messageId: string) {
   const idx = messageTabs.value.findIndex((t) => t.messageId === messageId);
@@ -219,6 +229,22 @@ async function startBackgroundPrefetch() {
 // Periodic sync every 2 minutes
 let syncIntervalId: ReturnType<typeof setInterval> | null = null;
 
+// MailView is not kept alive: leaving /mail unmounts it and coming back
+// mounts a new instance. Everything onMounted registers must therefore be
+// undone in onUnmounted, including what is registered after an await that
+// finishes once the view is already gone.
+let unmounted = false;
+const unlisteners: UnlistenFn[] = [];
+
+async function listenWhileMounted<T>(
+  event: string,
+  handler: Parameters<typeof listen<T>>[1],
+) {
+  const unlisten = await listen<T>(event, handler);
+  if (unmounted) unlisten();
+  else unlisteners.push(unlisten);
+}
+
 async function periodicSync() {
   // Skip calendar-/contacts-only accounts (mail_protocol === "" via #43).
   // Accounts sync concurrently — the backend serializes per account via
@@ -250,8 +276,9 @@ onMounted(async () => {
     // fetchMessages() here — that would double-fetch on cold start.
     await foldersStore.fetchFolders();
   }
+  if (unmounted) return;
 
-  await listen("sync-complete", async (event) => {
+  await listenWhileMounted("sync-complete", async (event) => {
     const payload = event.payload as { account_id: string; total_synced: number };
     console.log("sync-complete:", payload);
     // Always refresh folders to update counts
@@ -268,7 +295,7 @@ onMounted(async () => {
   });
 
   let lastRefresh = 0;
-  await listen("sync-progress", async (event) => {
+  await listenWhileMounted("sync-progress", async (event) => {
     const now = Date.now();
     const payload = event.payload as {
       account_id: string;
@@ -289,6 +316,7 @@ onMounted(async () => {
     }
   });
 
+  if (unmounted) return;
   // Start periodic sync every 2 minutes
   syncIntervalId = setInterval(periodicSync, 2 * 60 * 1000);
 
@@ -296,26 +324,34 @@ onMounted(async () => {
   api.startIdle().catch((e) => console.error("Failed to start IDLE:", e));
 
   // Listen for IDLE events
-  await listen("idle-new-mail", async (event) => {
+  await listenWhileMounted("idle-new-mail", async (event) => {
     const accountId = event.payload as string;
     console.log("IDLE new mail for account", accountId);
     try {
-      await api.triggerSync(accountId, foldersStore.activeFolderPath ?? undefined);
+      // The open folder is a priority hint only for its own account.
+      await api.triggerSync(
+        accountId,
+        accountId === accountsStore.activeAccountId
+          ? (foldersStore.activeFolderPath ?? undefined)
+          : undefined,
+      );
     } catch (e) {
       console.error("IDLE sync trigger failed:", e);
     }
   });
 
-  await listen("idle-disconnected", (event) => {
+  await listenWhileMounted("idle-disconnected", (event) => {
     console.warn("IDLE disconnected for account", event.payload);
   });
 
-  await listen("idle-reconnected", (event) => {
+  await listenWhileMounted("idle-reconnected", (event) => {
     console.log("IDLE reconnected for account", event.payload);
   });
 });
 
 onUnmounted(() => {
+  unmounted = true;
+  for (const unlisten of unlisteners.splice(0)) unlisten();
   if (syncIntervalId) clearInterval(syncIntervalId);
   api.stopIdle().catch(() => {});
 });
