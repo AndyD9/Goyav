@@ -222,8 +222,78 @@ pub async fn send_message(
         .iter()
         .map(|a| a.token.clone())
         .collect();
+    let raw_message =
+        build_outgoing_message(&app, &window, &state, &account, &message, &tokens).await?;
+
+    // Resolve SMTP credentials now because OAuth refresh needs keyring access.
+    let smtp_creds = match send_route {
+        SendRoute::Jmap => None,
+        SendRoute::SmtpOnly | SendRoute::SmtpWithImapSent => Some(
+            state
+                .providers
+                .credentials()
+                .mail_credentials(&account)
+                .await?,
+        ),
+    };
+
+    let subject_display = if message.subject.is_empty() {
+        "(no subject)".to_string()
+    } else {
+        message.subject.clone()
+    };
+
+    let outbox_id = persist_send_to_outbox(
+        &app,
+        &state,
+        &account,
+        &message,
+        &raw_message,
+        &subject_display,
+    )
+    .await?;
+
+    // From here on the outbox owns the payload — the attachment bytes
+    // are already inlined in raw_message. Releasing tokens is safe even
+    // if the background send retries, and prevents the registry from
+    // leaking paths for the lifetime of the process.
+    crate::commands::attachments::release_tokens(&state, &tokens);
+
+    // --- Background: actual network send ---
+    // The command returns Ok(()) here so the compose window can close.
+    let job = BackgroundSend {
+        app: app.clone(),
+        db: state.db.clone(),
+        providers: state.providers.clone(),
+        account,
+        to: message.to,
+        cc: message.cc,
+        bcc: message.bcc,
+        raw_message,
+        smtp_creds,
+        send_route,
+        outbox_id,
+        subject: subject_display,
+        account_guard,
+    };
+    tokio::spawn(job.run());
+
+    Ok(())
+}
+
+/// Build the final MIME bytes for `message`: attachments, the signer's
+/// public key, threading headers, HTML alternative, optional PGP wrap and
+/// the Autocrypt header.
+async fn build_outgoing_message(
+    app: &tauri::AppHandle,
+    window: &tauri::Window,
+    state: &State<'_, AppState>,
+    account: &db::accounts::AccountFull,
+    message: &ComposeMessage,
+    tokens: &[String],
+) -> Result<std::sync::Arc<[u8]>> {
     let names: Vec<String> = message.attachments.iter().map(|a| a.name.clone()).collect();
-    let paths = crate::commands::attachments::peek_tokens(&state, &tokens)?;
+    let paths = crate::commands::attachments::peek_tokens(state, tokens)?;
     let mut attachment_data = build_attachment_data(&paths, &names)?;
 
     // Feature: attach sender's public key when adding an OpenPGP digital
@@ -238,7 +308,7 @@ pub async fn send_message(
     // pattern as the existing encrypt-to-self fallback in
     // apply_pgp_envelope.
     if message.pgp_sign && account.pgp_attach_pubkey_on_sign {
-        if let Some(att) = build_signer_pubkey_attachment(&state, &account.email).await {
+        if let Some(att) = build_signer_pubkey_attachment(state, &account.email).await {
             attachment_data.push(att);
         }
     }
@@ -247,14 +317,14 @@ pub async fn send_message(
     // to (if any). This is what makes the next sync render the new
     // message under its parent in the thread tree.
     let (in_reply_to, references) =
-        resolve_reply_headers(&state, &account_id, message.reply_to_message_id.as_deref());
+        resolve_reply_headers(state, &account.id, message.reply_to_message_id.as_deref());
 
     // Resolve the HTML alternative: an explicit body_html, or Markdown
     // rendered to safe HTML when "Compose in Markdown" is on. `body_text`
     // (the Markdown source, when in Markdown mode) always rides as the
     // plaintext part, so recipients get both.
-    let body_html = resolve_body_html(&message);
-    let body_text = resolve_body_text(&message);
+    let body_html = resolve_body_html(message);
+    let body_text = resolve_body_text(message);
 
     // Build the plain MIME bytes. `plain_raw` stays a `Vec<u8>` so the
     // optional PGP wrap and Autocrypt header inject below can each
@@ -282,9 +352,9 @@ pub async fn send_message(
     let raw_message = if message.pgp_sign || message.pgp_encrypt {
         let origin = window.label().to_string();
         apply_pgp_envelope(
-            &app,
-            &state,
-            &account,
+            app,
+            state,
+            account,
             &plain_raw,
             &message.to,
             &message.cc,
@@ -308,7 +378,7 @@ pub async fn send_message(
     // silently when the sender has no usable key in the keystore — the
     // header is an enhancement, not a guarantee.
     let raw_message = if account.pgp_autocrypt_header {
-        match build_autocrypt_header(&state, &account.email).await {
+        match build_autocrypt_header(state, &account.email).await {
             Some(header_line) => smtp::insert_header_before_body(&raw_message, &header_line),
             None => raw_message,
         }
@@ -320,35 +390,28 @@ pub async fn send_message(
     // share them between the SMTP `send_raw` call and the IMAP APPEND-
     // to-Sent path (#189) via a refcount bump, rather than deep-cloning
     // the inlined attachment bytes (potentially many MB).
-    let raw_message: std::sync::Arc<[u8]> = raw_message.into();
+    Ok(raw_message.into())
+}
 
-    // Resolve SMTP credentials now because OAuth refresh needs keyring access.
-    let smtp_creds = match send_route {
-        SendRoute::Jmap => None,
-        SendRoute::SmtpOnly | SendRoute::SmtpWithImapSent => Some(
-            state
-                .providers
-                .credentials()
-                .mail_credentials(&account)
-                .await?,
-        ),
-    };
-
-    let subject_display = if message.subject.is_empty() {
-        "(no subject)".to_string()
-    } else {
-        message.subject.clone()
-    };
-
-    // --- Persist to outbox before spawning background send ---
-    // The row is inserted with status 'sending' so the worker's replay
-    // loop won't pick it up while the first attempt is still in flight.
-    // On success the row is deleted. A definite failure flips to
-    // 'pending' for worker replay; an indeterminate delivery is kept as
-    // 'dead' so only an explicit manual retry can resend it.
+/// Persist the send to the outbox before the background attempt and
+/// announce it with `send-started`. Returns the outbox row id.
+///
+/// The row is inserted with status 'sending' so the worker's replay
+/// loop won't pick it up while the first attempt is still in flight.
+/// On success the row is deleted. A definite failure flips to
+/// 'pending' for worker replay; an indeterminate delivery is kept as
+/// 'dead' so only an explicit manual retry can resend it.
+async fn persist_send_to_outbox(
+    app: &tauri::AppHandle,
+    state: &State<'_, AppState>,
+    account: &db::accounts::AccountFull,
+    message: &ComposeMessage,
+    raw_message: &[u8],
+    subject_display: &str,
+) -> Result<i64> {
     let raw_message_b64 = {
         use base64::Engine;
-        base64::engine::general_purpose::STANDARD.encode(&raw_message)
+        base64::engine::general_purpose::STANDARD.encode(raw_message)
     };
     let send_payload = serde_json::json!({
         "raw_message_b64": raw_message_b64,
@@ -362,7 +425,7 @@ pub async fn send_message(
         let conn = state.db.writer().await;
         crate::ops::offline::queue_offline_op_with_status(
             &conn,
-            &account_id,
+            &account.id,
             "send",
             &send_payload,
             "sending",
@@ -371,58 +434,66 @@ pub async fn send_message(
     log::info!(
         "Persisted send to outbox (id={}) for account {}",
         outbox_id,
-        account_id
+        account.id
     );
     app.emit(
         "send-started",
         serde_json::json!({
-            "account_id": account_id,
+            "account_id": account.id,
             "subject": subject_display,
             "outbox_id": outbox_id,
         }),
     )
     .ok();
+    Ok(outbox_id)
+}
 
-    // From here on the outbox owns the payload — the attachment bytes
-    // are already inlined in raw_message. Releasing tokens is safe even
-    // if the background send retries, and prevents the registry from
-    // leaking paths for the lifetime of the process.
-    crate::commands::attachments::release_tokens(&state, &tokens);
+/// Everything the background send needs once the command has returned.
+struct BackgroundSend {
+    app: tauri::AppHandle,
+    db: std::sync::Arc<crate::db::pool::DbPool>,
+    providers: std::sync::Arc<crate::provider::ProviderServices>,
+    account: db::accounts::AccountFull,
+    to: Vec<String>,
+    cc: Vec<String>,
+    bcc: Vec<String>,
+    raw_message: std::sync::Arc<[u8]>,
+    smtp_creds: Option<crate::provider::MailCredentials>,
+    send_route: SendRoute,
+    outbox_id: i64,
+    subject: String,
+    /// Held until the outcome is durable, so account mutation waits for it.
+    account_guard: tokio::sync::OwnedMutexGuard<()>,
+}
 
-    // --- Background: actual network send ---
-    // The command returns Ok(()) here so the compose window can close.
-    let app_bg = app.clone();
-    let account_id_bg = account_id.clone();
-    let subject_bg = subject_display.clone();
-    let db_bg = state.db.clone();
-    let providers_bg = state.providers.clone();
-    let recipients: Vec<String> = message
-        .to
-        .iter()
-        .chain(message.cc.iter())
-        .cloned()
-        .collect();
+impl BackgroundSend {
+    async fn run(self) {
+        match self.deliver().await {
+            Ok(()) => self.complete().await,
+            Err(error) => self.fail(error).await,
+        }
+    }
 
-    tokio::spawn(async move {
-        let result: std::result::Result<(), Error> = match send_route {
+    /// The network send itself, over JMAP submission or SMTP.
+    async fn deliver(&self) -> Result<()> {
+        let account = &self.account;
+        match self.send_route {
             SendRoute::Jmap => {
-                async {
-                    log::info!("Sending via JMAP for account {}", account.email);
-                    let envelope = crate::mail::jmap::JmapSubmissionEnvelope::new(
-                        &account.email,
-                        &message.to,
-                        &message.cc,
-                        &message.bcc,
-                    )?;
-                    let (jmap_config, conn_jmap) = providers_bg.jmap_client(&account).await?;
-                    conn_jmap
-                        .send_email(&jmap_config, &raw_message, &envelope)
-                        .await
-                }
-                .await
+                log::info!("Sending via JMAP for account {}", account.email);
+                let envelope = crate::mail::jmap::JmapSubmissionEnvelope::new(
+                    &account.email,
+                    &self.to,
+                    &self.cc,
+                    &self.bcc,
+                )?;
+                let (jmap_config, conn_jmap) = self.providers.jmap_client(account).await?;
+                conn_jmap
+                    .send_email(&jmap_config, &self.raw_message, &envelope)
+                    .await
             }
             SendRoute::SmtpOnly | SendRoute::SmtpWithImapSent => {
-                let smtp_creds = smtp_creds
+                let smtp_creds = self
+                    .smtp_creds
                     .as_ref()
                     .expect("SMTP send route must have credentials");
                 log::info!(
@@ -441,242 +512,260 @@ pub async fn send_message(
                     account.use_tls,
                     smtp_creds.use_xoauth2,
                     &account.email,
-                    &message.to,
-                    &message.cc,
-                    &message.bcc,
-                    &raw_message,
+                    &self.to,
+                    &self.cc,
+                    &self.bcc,
+                    &self.raw_message,
                 )
                 .await
             }
-        };
+        }
+    }
 
-        match result {
-            Ok(()) => {
-                let app_complete = app_bg.clone();
-                let account_id_complete = account_id_bg.clone();
-                let subject_complete = subject_bg.clone();
-                let db_postprocess = db_bg.clone();
-                let completion = crate::ops::offline::complete_send_before(
-                    &db_bg,
-                    outbox_id,
-                    move || async move {
-                        // Account mutation only needs to wait through the
-                        // durable transition, not best-effort maintenance.
-                        drop(account_guard);
-                        app_complete
-                            .emit(
-                                "send-complete",
-                                serde_json::json!({
-                                    "account_id": account_id_complete,
-                                    "subject": subject_complete,
-                                    "outbox_id": outbox_id,
-                                }),
-                            )
-                            .ok();
-
-                        if send_route.appends_to_imap_sent() {
-                            let smtp_creds = smtp_creds
-                                .expect("IMAP Sent postprocess must have SMTP credentials");
-                            // SMTP delivery is already durable locally. A
-                            // failed APPEND can lose the Sent copy but must
-                            // never put the message back in the send queue.
-                            let sent_folder_path = {
-                                let conn = db_postprocess.reader();
-                                crate::db::folders::folder_path_by_type(
-                                    &conn,
-                                    &account_id_complete,
-                                    "sent",
-                                )
-                                .ok()
-                                .flatten()
-                            };
-                            let imap_config = crate::mail::imap::ImapConfig {
-                                host: account.imap_host.clone(),
-                                port: account.imap_port,
-                                username: account.username.clone(),
-                                password: smtp_creds.secret,
-                                use_tls: account.use_tls,
-                                use_xoauth2: smtp_creds.use_xoauth2,
-                            };
-                            let raw_for_append = std::sync::Arc::clone(&raw_message);
-                            let append_result = tokio::task::spawn_blocking(move || {
-                                crate::mail::imap::append_message_to_sent(
-                                    &imap_config,
-                                    sent_folder_path.as_deref(),
-                                    &raw_for_append,
-                                )
-                            })
-                            .await;
-                            match append_result {
-                                Ok(Ok(sent_folder)) => {
-                                    log::info!(
-                                        "APPENDed sent message to '{}' for account {}",
-                                        sent_folder,
-                                        account_id_complete
-                                    );
-                                    let op_sender = app_complete
-                                        .state::<AppState>()
-                                        .get_op_sender(&account_id_complete, &app_complete)
-                                        .await;
-                                    let send_res = op_sender
-                                        .send(crate::ops::queue::OpEntry {
-                                            op: crate::ops::queue::MailOp::SyncFolder {
-                                                folder_path: sent_folder,
-                                            },
-                                            priority: crate::ops::queue::OpPriority::User,
-                                        })
-                                        .await;
-                                    if let Err(e) = send_res {
-                                        log::warn!(
-                                            "Failed to queue Sent-folder sync for account {}: {}",
-                                            account_id_complete,
-                                            e
-                                        );
-                                    }
-                                }
-                                Ok(Err(e)) => log::warn!(
-                                    "Sent delivered but APPEND to Sent failed for account {}: {}",
-                                    account_id_complete,
-                                    e
-                                ),
-                                Err(e) => {
-                                    let kind = if e.is_panic() {
-                                        "panicked"
-                                    } else if e.is_cancelled() {
-                                        "cancelled"
-                                    } else {
-                                        "failed"
-                                    };
-                                    log::warn!(
-                                        "APPEND-to-Sent task {} for account {}: {}",
-                                        kind,
-                                        account_id_complete,
-                                        e
-                                    );
-                                }
-                            }
-                        }
-
-                        let conn = db_postprocess.writer().await;
-                        for addr in &recipients {
-                            if let Err(e) = db::contacts::collect_contact(
-                                &conn,
-                                &account_id_complete,
-                                addr,
-                                None,
-                            ) {
-                                log::warn!("Failed to collect contact '{}': {}", addr, e);
-                            }
-                        }
-                    },
+    /// Delivery succeeded: record it durably, then run best-effort
+    /// maintenance (APPEND to Sent, recipient collection).
+    async fn complete(self) {
+        let BackgroundSend {
+            app,
+            db,
+            account,
+            to,
+            cc,
+            raw_message,
+            smtp_creds,
+            send_route,
+            outbox_id,
+            subject,
+            account_guard,
+            ..
+        } = self;
+        let recipients: Vec<String> = to.into_iter().chain(cc).collect();
+        let account_id = account.id.clone();
+        let db_postprocess = db.clone();
+        let completion = crate::ops::offline::complete_send_before(&db, outbox_id, {
+            let account_id = account_id.clone();
+            move || async move {
+                // Account mutation only needs to wait through the
+                // durable transition, not best-effort maintenance.
+                drop(account_guard);
+                app.emit(
+                    "send-complete",
+                    serde_json::json!({
+                        "account_id": account_id,
+                        "subject": subject,
+                        "outbox_id": outbox_id,
+                    }),
                 )
-                .await;
-                match completion {
-                    Ok(true) => log::info!(
-                        "Message sent successfully for account {}",
-                        account_id_bg
-                    ),
-                    Ok(false) => log::error!(
-                        "Send {} succeeded but its sending claim was missing",
-                        outbox_id
-                    ),
-                    Err(error) => log::error!(
-                        "Send {} succeeded but completion persistence failed; row remains sending: {}",
-                        outbox_id,
-                        error
-                    ),
+                .ok();
+
+                if send_route.appends_to_imap_sent() {
+                    let smtp_creds =
+                        smtp_creds.expect("IMAP Sent postprocess must have SMTP credentials");
+                    append_to_imap_sent(&app, &db_postprocess, &account, smtp_creds, raw_message)
+                        .await;
                 }
+
+                collect_recipients(&db_postprocess, &account_id, &recipients).await;
             }
-            Err(e) => {
-                log::error!("Send failed for account {}: {}", account_id_bg, e);
-                let indeterminate = e.is_indeterminate_delivery();
-                let error_message = if indeterminate {
-                    crate::ops::offline::INDETERMINATE_DELIVERY_ERROR_MESSAGE.to_string()
-                } else {
-                    e.to_string()
-                };
-                let event_decision = if indeterminate {
-                    let transition = {
-                        let conn = db_bg.writer().await;
-                        crate::ops::offline::quarantine_sending_send(
-                            &conn,
-                            outbox_id,
-                            &error_message,
-                        )
-                    };
-                    let decision = quarantine_failure_events(&transition);
-                    drop(account_guard);
-                    match transition {
-                        Ok(true) => {}
-                        Ok(false) => log::error!(
-                            "Send {} failed but its sending claim was missing",
-                            outbox_id
-                        ),
-                        Err(db_error) => log::error!(
-                            "Failed to quarantine indeterminate send {}; row remains sending: {}",
-                            outbox_id,
-                            db_error
-                        ),
-                    }
-                    decision
-                } else {
-                    let transition = {
-                        let conn = db_bg.writer().await;
-                        crate::ops::offline::retry_sending_send(&conn, outbox_id, &error_message)
-                    };
-                    let decision = retry_failure_events(&transition);
-                    drop(account_guard);
-                    match transition {
-                        Ok(SendRetryDisposition::Pending | SendRetryDisposition::Dead) => {}
-                        Ok(SendRetryDisposition::MissingClaim) => {
-                            log::error!(
-                                "Send {} failed but its sending claim was missing",
-                                outbox_id
-                            )
-                        }
-                        Err(db_error) => log::error!(
-                            "Failed to persist retry for send {}; row remains sending: {}",
-                            outbox_id,
-                            db_error
-                        ),
-                    }
-                    decision
-                };
-                if event_decision != SendFailureEvents::Suppress {
-                    let event_name = if indeterminate {
-                        "send-unknown"
-                    } else {
-                        "send-failed"
-                    };
-                    app_bg
-                        .emit(
-                            event_name,
-                            serde_json::json!({
-                                "account_id": account_id_bg,
-                                "subject": subject_bg,
-                                "outbox_id": outbox_id,
-                                "error": error_message,
-                            }),
-                        )
-                        .ok();
+        })
+        .await;
+        match completion {
+            Ok(true) => log::info!("Message sent successfully for account {}", account_id),
+            Ok(false) => log::error!(
+                "Send {} succeeded but its sending claim was missing",
+                outbox_id
+            ),
+            Err(error) => log::error!(
+                "Send {} succeeded but completion persistence failed; row remains sending: {}",
+                outbox_id,
+                error
+            ),
+        }
+    }
+
+    /// Delivery failed: quarantine an indeterminate send or queue a retry,
+    /// then tell the main window.
+    async fn fail(self, e: Error) {
+        let BackgroundSend {
+            app,
+            db,
+            account,
+            outbox_id,
+            subject,
+            account_guard,
+            ..
+        } = self;
+        let account_id = account.id;
+        log::error!("Send failed for account {}: {}", account_id, e);
+        let indeterminate = e.is_indeterminate_delivery();
+        let error_message = if indeterminate {
+            crate::ops::offline::INDETERMINATE_DELIVERY_ERROR_MESSAGE.to_string()
+        } else {
+            e.to_string()
+        };
+        let event_decision = if indeterminate {
+            let transition = {
+                let conn = db.writer().await;
+                crate::ops::offline::quarantine_sending_send(&conn, outbox_id, &error_message)
+            };
+            let decision = quarantine_failure_events(&transition);
+            drop(account_guard);
+            match transition {
+                Ok(true) => {}
+                Ok(false) => log::error!(
+                    "Send {} failed but its sending claim was missing",
+                    outbox_id
+                ),
+                Err(db_error) => log::error!(
+                    "Failed to quarantine indeterminate send {}; row remains sending: {}",
+                    outbox_id,
+                    db_error
+                ),
+            }
+            decision
+        } else {
+            let transition = {
+                let conn = db.writer().await;
+                crate::ops::offline::retry_sending_send(&conn, outbox_id, &error_message)
+            };
+            let decision = retry_failure_events(&transition);
+            drop(account_guard);
+            match transition {
+                Ok(SendRetryDisposition::Pending | SendRetryDisposition::Dead) => {}
+                Ok(SendRetryDisposition::MissingClaim) => {
+                    log::error!(
+                        "Send {} failed but its sending claim was missing",
+                        outbox_id
+                    )
                 }
-                if event_decision == SendFailureEvents::FailureAndQueueChanged {
-                    app_bg
-                        .emit(
-                            "offline-queue-changed",
-                            serde_json::json!({
-                                "account_id": account_id_bg,
-                                "dead_op_id": outbox_id,
-                                "action_type": "send",
-                            }),
-                        )
-                        .ok();
-                }
+                Err(db_error) => log::error!(
+                    "Failed to persist retry for send {}; row remains sending: {}",
+                    outbox_id,
+                    db_error
+                ),
+            }
+            decision
+        };
+        if event_decision != SendFailureEvents::Suppress {
+            let event_name = if indeterminate {
+                "send-unknown"
+            } else {
+                "send-failed"
+            };
+            app.emit(
+                event_name,
+                serde_json::json!({
+                    "account_id": account_id,
+                    "subject": subject,
+                    "outbox_id": outbox_id,
+                    "error": error_message,
+                }),
+            )
+            .ok();
+        }
+        if event_decision == SendFailureEvents::FailureAndQueueChanged {
+            app.emit(
+                "offline-queue-changed",
+                serde_json::json!({
+                    "account_id": account_id,
+                    "dead_op_id": outbox_id,
+                    "action_type": "send",
+                }),
+            )
+            .ok();
+        }
+    }
+}
+
+/// Best-effort copy of a delivered message into the IMAP Sent folder, then
+/// a Sent-folder sync. SMTP delivery is already durable locally: a failed
+/// APPEND can lose the Sent copy but must never put the message back in the
+/// send queue.
+async fn append_to_imap_sent(
+    app: &tauri::AppHandle,
+    db: &crate::db::pool::DbPool,
+    account: &db::accounts::AccountFull,
+    smtp_creds: crate::provider::MailCredentials,
+    raw_message: std::sync::Arc<[u8]>,
+) {
+    let account_id = &account.id;
+    let sent_folder_path = {
+        let conn = db.reader();
+        crate::db::folders::folder_path_by_type(&conn, account_id, "sent")
+            .ok()
+            .flatten()
+    };
+    let imap_config = crate::mail::imap::ImapConfig {
+        host: account.imap_host.clone(),
+        port: account.imap_port,
+        username: account.username.clone(),
+        password: smtp_creds.secret,
+        use_tls: account.use_tls,
+        use_xoauth2: smtp_creds.use_xoauth2,
+    };
+    let append_result = tokio::task::spawn_blocking(move || {
+        crate::mail::imap::append_message_to_sent(
+            &imap_config,
+            sent_folder_path.as_deref(),
+            &raw_message,
+        )
+    })
+    .await;
+    match append_result {
+        Ok(Ok(sent_folder)) => {
+            log::info!(
+                "APPENDed sent message to '{}' for account {}",
+                sent_folder,
+                account_id
+            );
+            let op_sender = app.state::<AppState>().get_op_sender(account_id, app).await;
+            let send_res = op_sender
+                .send(crate::ops::queue::OpEntry {
+                    op: crate::ops::queue::MailOp::SyncFolder {
+                        folder_path: sent_folder,
+                    },
+                    priority: crate::ops::queue::OpPriority::User,
+                })
+                .await;
+            if let Err(e) = send_res {
+                log::warn!(
+                    "Failed to queue Sent-folder sync for account {}: {}",
+                    account_id,
+                    e
+                );
             }
         }
-    });
+        Ok(Err(e)) => log::warn!(
+            "Sent delivered but APPEND to Sent failed for account {}: {}",
+            account_id,
+            e
+        ),
+        Err(e) => {
+            let kind = if e.is_panic() {
+                "panicked"
+            } else if e.is_cancelled() {
+                "cancelled"
+            } else {
+                "failed"
+            };
+            log::warn!(
+                "APPEND-to-Sent task {} for account {}: {}",
+                kind,
+                account_id,
+                e
+            );
+        }
+    }
+}
 
-    Ok(())
+/// Add the To and Cc addresses of a sent message to the collected contacts.
+async fn collect_recipients(db: &crate::db::pool::DbPool, account_id: &str, recipients: &[String]) {
+    let conn = db.writer().await;
+    for addr in recipients {
+        if let Err(e) = db::contacts::collect_contact(&conn, account_id, addr, None) {
+            log::warn!("Failed to collect contact '{}': {}", addr, e);
+        }
+    }
 }
 
 /// Outcome of `save_draft`, returned to the renderer so it can tell the
