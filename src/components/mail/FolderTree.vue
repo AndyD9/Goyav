@@ -4,6 +4,7 @@ import { useFoldersStore } from "@/stores/folders";
 import { useAccountsStore } from "@/stores/accounts";
 import { useMessagesStore } from "@/stores/messages";
 import { OUTBOX_FOLDER, type Folder } from "@/lib/types";
+import { errorMessage } from "@/lib/errors";
 import * as api from "@/lib/tauri";
 import { dragMessageIds, dragSourceAccountId, isDragging } from "@/lib/drag-state";
 import { showToast, dismissToast } from "@/lib/toast";
@@ -17,6 +18,8 @@ const messagesStore = useMessagesStore();
 
 const contextMenu = ref<{ x: number; y: number; folder: Folder; accountId: string } | null>(null);
 const accountMenu = ref<{ x: number; y: number; accountId: string } | null>(null);
+// "accountId:path" of the folder being synced: paths like INBOX repeat
+// across accounts, so the account is part of the key.
 const syncing = ref<string | null>(null);
 const collapsedAccounts = ref<string[]>([]);
 const dropTarget = ref<string | null>(null);
@@ -112,6 +115,12 @@ function toggleAccountCollapse(accountId: string) {
     : [...collapsedAccounts.value, accountId];
 }
 
+function containsFolder(folders: Folder[], path: string): boolean {
+  return folders.some(
+    (folder) => folder.path === path || containsFolder(folder.children, path),
+  );
+}
+
 function isActiveFolder(accountId: string, folderPath: string): boolean {
   return (
     accountsStore.activeAccountId === accountId &&
@@ -203,7 +212,7 @@ async function syncThisFolder() {
   const { folder, accountId } = contextMenu.value;
   closeContextMenu();
 
-  syncing.value = folder.path;
+  syncing.value = `${accountId}:${folder.path}`;
   try {
     await api.syncFolder(accountId, folder.path);
   } catch (error) {
@@ -248,7 +257,17 @@ async function createNewFolder() {
     newFolderError.value = t("Folder name is required");
     return;
   }
-  const [accountId, parentPath] = newFolderParent.value.split("|", 2);
+  // The path sent to the backend is "parent/name", so a "/" in the name
+  // would be read as another level.
+  if (folderName.includes("/")) {
+    newFolderError.value = t('Folder name cannot contain "/"');
+    return;
+  }
+  // "accountId|parentPath": split at the first "|" only, so a parent path
+  // that itself contains "|" is kept whole.
+  const separator = newFolderParent.value.indexOf("|");
+  const accountId = separator === -1 ? newFolderParent.value : newFolderParent.value.slice(0, separator);
+  const parentPath = separator === -1 ? "" : newFolderParent.value.slice(separator + 1);
   if (!accountId) {
     newFolderError.value = t("Select a location");
     return;
@@ -262,14 +281,35 @@ async function createNewFolder() {
   const createToastId = showToast(t("Creating folder..."), "info", 0);
   try {
     await api.createFolder(accountId, folderPath);
-    showNewFolderModal.value = false;
-    await api.triggerSync(accountId);
-    await foldersStore.fetchAllAccountFolders();
   } catch (error) {
-    newFolderError.value = String(error);
-  } finally {
+    // The dialog stays open so the user can fix the name and retry.
+    newFolderError.value = errorMessage(error);
     newFolderSaving.value = false;
     dismissToast(createToastId);
+    return;
+  }
+  // The folder exists on the server from here on; close the dialog. A
+  // failed sync must not hide that, and the tree is refreshed regardless.
+  showNewFolderModal.value = false;
+  newFolderSaving.value = false;
+  dismissToast(createToastId);
+  try {
+    await api.triggerSync(accountId);
+  } catch (error) {
+    console.error("Sync after folder creation failed:", error);
+    showToast(
+      t('Folder "{name}" was created but could not be synced yet: {error}', {
+        name: folderName,
+        error: errorMessage(error),
+      }),
+      "error",
+      5000,
+    );
+  }
+  try {
+    await foldersStore.fetchAllAccountFolders();
+  } catch (error) {
+    console.error("Folder refresh after creation failed:", error);
   }
 }
 
@@ -340,14 +380,12 @@ async function markFolderRead() {
   closeContextMenu();
 
   try {
-    // Fetch a large page so every unread message is included.
-    const result = await api.getMessages(accountId, folder.path, 0, 10000, "date", false);
-    const unreadIds = result.messages
-      .filter((message) => !message.flags.includes("seen"))
-      .map((message) => message.id);
-
-    if (unreadIds.length > 0) {
-      await api.setMessageFlags(accountId, unreadIds, ["seen"], true);
+    // The backend marks the whole folder, with no page limit, and updates
+    // the folder counts; refresh the badges and the open list after it.
+    await api.markFolderRead(accountId, folder.path);
+    await foldersStore.fetchAllAccountFolders();
+    if (isActiveFolder(accountId, folder.path)) {
+      await messagesStore.fetchMessages();
     }
   } catch (error) {
     console.error("Mark folder read failed:", error);
@@ -370,7 +408,16 @@ async function doDeleteFolder() {
   try {
     await api.deleteFolder(accountId, folder.path);
     await foldersStore.fetchAllAccountFolders();
-    if (isActiveFolder(accountId, folder.path)) {
+    // Deleting a folder deletes its subfolders too: fall back to the inbox
+    // whenever the open folder no longer exists, not only when it is the
+    // deleted one.
+    const activePath = foldersStore.activeFolderPath;
+    if (
+      accountsStore.activeAccountId === accountId &&
+      activePath !== null &&
+      activePath !== OUTBOX_FOLDER &&
+      !containsFolder(foldersStore.getAccountFolders(accountId), activePath)
+    ) {
       const folders = foldersStore.getAccountFolders(accountId);
       const inbox = folders.find((candidate) => candidate.folder_type === "inbox");
       foldersStore.setActiveFolder(inbox?.path ?? folders[0]?.path ?? "");
@@ -421,84 +468,93 @@ async function doDeleteFolder() {
       </button>
 
       <div v-if="!collapsedAccounts.includes(account.id)" class="folder-list">
-        <button
+        <div
           v-for="item in flattenTree(foldersStore.getAccountFolders(account.id), 0, account.id)"
           :key="account.id + '/' + item.folder.path"
-          class="folder-item"
-          :class="{
-            active: isActiveFolder(account.id, item.folder.path),
-            syncing: syncing === item.folder.path,
-            'drop-target': dropTarget === `${account.id}:${item.folder.path}`,
-          }"
-          :data-testid="`folder-${account.id}-${item.folder.path}`"
-          :style="{ paddingLeft: (12 + item.depth * 16) + 'px' }"
-          @click.stop="selectFolder(account.id, item.folder.path)"
-          @contextmenu="onFolderContextMenu($event, item.folder, account.id)"
-          @mouseenter="onFolderMouseEnter(account.id, item.folder.path)"
-          @mouseleave="onFolderMouseLeave(account.id, item.folder.path)"
-          @mouseup="onFolderMouseUp(account.id, item.folder.path)"
+          class="folder-row"
         >
-          <span
+          <!-- The toggle is a sibling of the folder button, not inside it:
+               a button cannot contain another interactive element. It sits
+               over the spacer the folder button keeps for it. -->
+          <button
             v-if="item.hasChildren"
+            type="button"
             class="folder-toggle"
-            role="button"
-            tabindex="0"
+            :data-testid="`folder-toggle-${account.id}-${item.folder.path}`"
+            :style="{ left: (12 + item.depth * 16) + 'px' }"
             :aria-expanded="!isFolderCollapsed(account.id, item.folder.path)"
+            :aria-label="isFolderCollapsed(account.id, item.folder.path)
+              ? t('Expand {name}', { name: item.folder.name })
+              : t('Collapse {name}', { name: item.folder.name })"
             @click.stop="toggleFolderCollapse(account.id, item.folder.path)"
-            @keydown.enter.stop="toggleFolderCollapse(account.id, item.folder.path)"
-            @keydown.space.stop.prevent="toggleFolderCollapse(account.id, item.folder.path)"
           >
             <svg
               width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
               :style="{ transform: isFolderCollapsed(account.id, item.folder.path) ? 'rotate(-90deg)' : '', transition: 'transform 0.15s' }"
             >
               <path d="M6 9l6 6 6-6" />
             </svg>
-          </span>
-          <span v-else class="folder-toggle-spacer"></span>
-
-          <svg
-            class="folder-svg"
-            :class="'folder-svg--' + item.icon"
-            width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"
+          </button>
+          <button
+            class="folder-item"
+            :class="{
+              active: isActiveFolder(account.id, item.folder.path),
+              syncing: syncing === `${account.id}:${item.folder.path}`,
+              'drop-target': dropTarget === `${account.id}:${item.folder.path}`,
+            }"
+            :data-testid="`folder-${account.id}-${item.folder.path}`"
+            :style="{ paddingLeft: (12 + item.depth * 16) + 'px' }"
+            @click.stop="selectFolder(account.id, item.folder.path)"
+            @contextmenu="onFolderContextMenu($event, item.folder, account.id)"
+            @mouseenter="onFolderMouseEnter(account.id, item.folder.path)"
+            @mouseleave="onFolderMouseLeave(account.id, item.folder.path)"
+            @mouseup="onFolderMouseUp(account.id, item.folder.path)"
           >
-            <template v-if="item.icon === 'inbox'">
-              <path fill="currentColor" d="M3 13h4l1.5 2h7L17 13h4v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Z"/>
-              <path fill="currentColor" opacity=".55" d="M7 4h10l3 8h-5l-1.5 2h-3L9 12H4l3-8Z"/>
-            </template>
-            <template v-else-if="item.icon === 'sent'">
-              <path fill="currentColor" d="M21 3 3 11l7 2 2 7 9-17Z"/>
-            </template>
-            <template v-else-if="item.icon === 'drafts'">
-              <path fill="currentColor" opacity=".55" d="M5 3h10l4 4v14H5V3Z"/>
-              <path fill="currentColor" d="m14 8 3 3-6.5 6.5H8V15l6-7Z"/>
-            </template>
-            <template v-else-if="item.icon === 'trash'">
-              <path fill="currentColor" d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"/>
-              <path fill="currentColor" d="M9 4h6l1 3H8l1-3Z"/>
-            </template>
-            <template v-else-if="item.icon === 'spam'">
-              <path fill="currentColor" d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3Z"/>
-              <path fill="#fff" d="M11 7h2v6h-2V7Zm0 8h2v2h-2v-2Z"/>
-            </template>
-            <template v-else-if="item.icon === 'archive'">
-              <path fill="currentColor" opacity=".55" d="M3 4h18v4H3V4Z"/>
-              <path fill="currentColor" d="M4 9h16v11H4V9Zm5 3h6v2H9v-2Z"/>
-            </template>
-            <template v-else-if="item.icon === 'outbox'">
-              <path fill="currentColor" d="M3 13h5l1 2h6l1-2h5v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Z"/>
-              <path fill="currentColor" opacity=".55" d="m12 3 5 6h-3v4h-4V9H7l5-6Z"/>
-            </template>
-            <template v-else>
-              <path fill="currentColor" d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Z"/>
-            </template>
-          </svg>
+            <span class="folder-toggle-spacer"></span>
 
-          <span class="folder-name">{{ item.folder.name }}</span>
-          <span v-if="syncing === item.folder.path" class="sync-spinner"></span>
-          <span v-else-if="item.folder.unread_count > 0" class="unread-badge">{{ item.folder.unread_count }}</span>
-        </button>
+            <svg
+              class="folder-svg"
+              :class="'folder-svg--' + item.icon"
+              width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"
+            >
+              <template v-if="item.icon === 'inbox'">
+                <path fill="currentColor" d="M3 13h4l1.5 2h7L17 13h4v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Z"/>
+                <path fill="currentColor" opacity=".55" d="M7 4h10l3 8h-5l-1.5 2h-3L9 12H4l3-8Z"/>
+              </template>
+              <template v-else-if="item.icon === 'sent'">
+                <path fill="currentColor" d="M21 3 3 11l7 2 2 7 9-17Z"/>
+              </template>
+              <template v-else-if="item.icon === 'drafts'">
+                <path fill="currentColor" opacity=".55" d="M5 3h10l4 4v14H5V3Z"/>
+                <path fill="currentColor" d="m14 8 3 3-6.5 6.5H8V15l6-7Z"/>
+              </template>
+              <template v-else-if="item.icon === 'trash'">
+                <path fill="currentColor" d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"/>
+                <path fill="currentColor" d="M9 4h6l1 3H8l1-3Z"/>
+              </template>
+              <template v-else-if="item.icon === 'spam'">
+                <path fill="currentColor" d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3Z"/>
+                <path fill="#fff" d="M11 7h2v6h-2V7Zm0 8h2v2h-2v-2Z"/>
+              </template>
+              <template v-else-if="item.icon === 'archive'">
+                <path fill="currentColor" opacity=".55" d="M3 4h18v4H3V4Z"/>
+                <path fill="currentColor" d="M4 9h16v11H4V9Zm5 3h6v2H9v-2Z"/>
+              </template>
+              <template v-else-if="item.icon === 'outbox'">
+                <path fill="currentColor" d="M3 13h5l1 2h6l1-2h5v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Z"/>
+                <path fill="currentColor" opacity=".55" d="m12 3 5 6h-3v4h-4V9H7l5-6Z"/>
+              </template>
+              <template v-else>
+                <path fill="currentColor" d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Z"/>
+              </template>
+            </svg>
+
+            <span class="folder-name">{{ item.folder.name }}</span>
+            <span v-if="syncing === `${account.id}:${item.folder.path}`" class="sync-spinner"></span>
+            <span v-else-if="item.folder.unread_count > 0" class="unread-badge">{{ item.folder.unread_count }}</span>
+          </button>
+        </div>
 
         <!-- Outbox is synthetic rather than part of the server folder tree. -->
         <button
@@ -720,15 +776,27 @@ async function doDeleteFolder() {
   outline-offset: -1.5px;
 }
 
+.folder-row {
+  position: relative;
+}
+
 .folder-toggle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
   display: grid;
   place-items: center;
   width: 16px;
   height: 16px;
-  flex-shrink: 0;
   color: var(--color-text-muted);
   cursor: pointer;
   border-radius: 4px;
+}
+
+.folder-toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .folder-toggle:hover {

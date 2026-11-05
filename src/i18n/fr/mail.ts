@@ -144,4 +144,9 @@ export const mail: Record<string, string> = {
   "Send failed: {error}": "Échec de l'envoi : {error}",
   "Delivery status unknown: {error}": "État de la livraison inconnu : {error}",
   "Delivery status unknown for \"{subject}\": {error}": "État de la livraison inconnu pour « {subject} » : {error}",
+  'Folder "{name}" was created but could not be synced yet: {error}':
+    'Le dossier « {name} » a été créé mais n\'a pas encore pu être synchronisé : {error}',
+  'Folder name cannot contain "/"': "Le nom du dossier ne peut pas contenir « / »",
+  "Expand {name}": "Développer {name}",
+  "Collapse {name}": "Réduire {name}",
 };

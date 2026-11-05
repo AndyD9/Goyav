@@ -69,7 +69,8 @@ export const useFoldersStore = defineStore("folders", () => {
   }
 
   async function fetchAllAccountFolders() {
-    for (const account of accountsStore.accounts) {
+    // Calendar- and contacts-only accounts have no folders to list.
+    for (const account of accountsStore.mailAccounts) {
       try {
         const accountFolders = await api.listFolders(account.id);
         foldersByAccount.value = {
