@@ -259,85 +259,25 @@ async fn sync_jmap_folder(
         },
     );
 
-    let mut total_synced = 0u32;
-    let mut new_ids: Vec<String> = Vec::new();
-
-    {
-        let conn = db.writer().await;
-
-        for email in &filtered_emails {
-            // Use the JMAP email ID as the unique identifier
-            let message_ref = BackendMessageRef::jmap(mailbox_id, &email.id);
-            let id = message_ref.to_db_id(account_id);
-
-            // Check if this message already exists (by JMAP ID in the folder)
-            if jmap_message_exists(&conn, account_id, mailbox_id, &email.id)? {
-                // Update flags in case they changed on the server (read/unread, flagged, etc.)
-                let new_flags = serde_json::to_string(&email.flags).unwrap_or_default();
-                let msg_id = message_ref.to_db_id(account_id);
-                let _ = db::messages::update_flags(&conn, &msg_id, &new_flags);
-                continue;
-            }
-
-            let snippet = email
-                .preview
-                .as_deref()
-                .or(email.subject.as_deref())
-                .map(|s| s.chars().take(200).collect());
-
-            // Compute thread_id
-            let refs_slice: Option<&[String]> = if email.references.is_empty() {
-                None
-            } else {
-                Some(email.references.as_slice())
-            };
-            let thread_id = db::messages::compute_thread_id(
-                &conn,
-                account_id,
-                email.message_id.as_deref(),
-                email.in_reply_to.as_deref(),
-                email.subject.as_deref(),
-                refs_slice,
-            );
-            if let Some(ref tid) = thread_id {
-                log::debug!("JMAP assigned thread_id '{}' to email {}", tid, email.id);
-            }
-
-            let new_msg = db::messages::NewMessage {
-                id: id.clone(),
-                account_id: account_id.to_string(),
-                folder_path: mailbox_id.to_string(),
-                uid: 0, // JMAP doesn't use UIDs; we store 0
-                message_id: email.message_id.clone(),
-                in_reply_to: email.in_reply_to.clone(),
-                thread_id,
-                subject: email.subject.clone(),
-                from_name: email.from_name.clone(),
-                from_email: email
-                    .from_email
-                    .clone()
-                    .unwrap_or_else(|| "unknown".to_string()),
-                to_addresses: email.to_addresses.clone(),
-                cc_addresses: email.cc_addresses.clone(),
-                date: email.date.clone(),
-                size: email.size,
-                has_attachments: email.has_attachments,
-                is_encrypted: false,
-                is_signed: false,
-                flags: serde_json::to_string(&email.flags).unwrap_or_default(),
-                maildir_path: String::new(), // Body fetched on-demand
-                snippet,
-            };
-            db::messages::insert_message(&conn, &new_msg)?;
-            new_ids.push(id);
-            total_synced += 1;
-        }
-
-        // Update JMAP state for this folder
-        if !new_state.is_empty() {
-            db::folders::update_jmap_state(&conn, account_id, mailbox_id, &new_state)?;
-        }
-    }
+    // A full sync can insert thousands of rows: do it in one transaction on
+    // a blocking thread, so it neither commits once per message nor holds an
+    // async worker thread while the writer is busy.
+    let (total_synced, new_ids) = {
+        let db = Arc::clone(db);
+        let account_id = account_id.to_string();
+        let mailbox_id = mailbox_id.to_string();
+        let emails: Vec<crate::mail::jmap::JmapEmail> = filtered_emails
+            .iter()
+            .map(|email| (*email).clone())
+            .collect();
+        let new_state = new_state.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db.writer_blocking();
+            store_jmap_emails(&conn, &account_id, &mailbox_id, &emails, &new_state)
+        })
+        .await
+        .map_err(|e| Error::Other(format!("JMAP store task failed: {e}")))??
+    };
 
     // Remove local messages that no longer exist on the server.
     // Delta sync (Email/changes): server told us exactly which IDs were
@@ -443,6 +383,96 @@ async fn sync_jmap_folder(
 
 /// Check if a message with the given JMAP email ID already exists in a folder.
 /// We store the JMAP ID as part of the composite message ID.
+/// Insert new JMAP emails (or refresh the flags of known ones) and record
+/// the folder's new JMAP state, in one transaction. Returns the number of
+/// inserted messages and their ids.
+fn store_jmap_emails(
+    conn: &rusqlite::Connection,
+    account_id: &str,
+    mailbox_id: &str,
+    emails: &[crate::mail::jmap::JmapEmail],
+    new_state: &str,
+) -> Result<(u32, Vec<String>)> {
+    let tx = conn.unchecked_transaction()?;
+    let conn = &tx;
+    let mut total_synced = 0u32;
+    let mut new_ids: Vec<String> = Vec::new();
+    for email in emails {
+        // Use the JMAP email ID as the unique identifier
+        let message_ref = BackendMessageRef::jmap(mailbox_id, &email.id);
+        let id = message_ref.to_db_id(account_id);
+
+        // Check if this message already exists (by JMAP ID in the folder)
+        if jmap_message_exists(conn, account_id, mailbox_id, &email.id)? {
+            // Update flags in case they changed on the server (read/unread, flagged, etc.)
+            let new_flags = serde_json::to_string(&email.flags).unwrap_or_default();
+            let msg_id = message_ref.to_db_id(account_id);
+            let _ = db::messages::update_flags(conn, &msg_id, &new_flags);
+            continue;
+        }
+
+        let snippet = email
+            .preview
+            .as_deref()
+            .or(email.subject.as_deref())
+            .map(|s| s.chars().take(200).collect());
+
+        // Compute thread_id
+        let refs_slice: Option<&[String]> = if email.references.is_empty() {
+            None
+        } else {
+            Some(email.references.as_slice())
+        };
+        let thread_id = db::messages::compute_thread_id(
+            conn,
+            account_id,
+            email.message_id.as_deref(),
+            email.in_reply_to.as_deref(),
+            email.subject.as_deref(),
+            refs_slice,
+        );
+        if let Some(ref tid) = thread_id {
+            log::debug!("JMAP assigned thread_id '{}' to email {}", tid, email.id);
+        }
+
+        let new_msg = db::messages::NewMessage {
+            id: id.clone(),
+            account_id: account_id.to_string(),
+            folder_path: mailbox_id.to_string(),
+            uid: 0, // JMAP doesn't use UIDs; we store 0
+            message_id: email.message_id.clone(),
+            in_reply_to: email.in_reply_to.clone(),
+            thread_id,
+            subject: email.subject.clone(),
+            from_name: email.from_name.clone(),
+            from_email: email
+                .from_email
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string()),
+            to_addresses: email.to_addresses.clone(),
+            cc_addresses: email.cc_addresses.clone(),
+            date: email.date.clone(),
+            size: email.size,
+            has_attachments: email.has_attachments,
+            is_encrypted: false,
+            is_signed: false,
+            flags: serde_json::to_string(&email.flags).unwrap_or_default(),
+            maildir_path: String::new(), // Body fetched on-demand
+            snippet,
+        };
+        db::messages::insert_message(conn, &new_msg)?;
+        new_ids.push(id);
+        total_synced += 1;
+    }
+
+    // Update JMAP state for this folder
+    if !new_state.is_empty() {
+        db::folders::update_jmap_state(conn, account_id, mailbox_id, new_state)?;
+    }
+    tx.commit()?;
+    Ok((total_synced, new_ids))
+}
+
 fn jmap_message_exists(
     conn: &rusqlite::Connection,
     account_id: &str,
@@ -658,6 +688,105 @@ mod tests {
             pgp_encrypt_subject: false,
             pgp_encrypt_drafts: false,
         }
+    }
+
+    fn store_test_db() -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        db::schema::initialize(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO accounts (id, display_name, email, username)
+             VALUES ('acct', 'Test', 'test@example.test', 'test');",
+        )
+        .unwrap();
+        db::folders::upsert_folder(&conn, "acct", "Inbox", "mbox", Some("inbox"), None).unwrap();
+        conn
+    }
+
+    fn email(id: &str, flags: &[&str]) -> crate::mail::jmap::JmapEmail {
+        crate::mail::jmap::JmapEmail {
+            id: id.into(),
+            subject: Some(format!("Subject {id}")),
+            from_name: None,
+            from_email: Some("sender@example.test".into()),
+            to_addresses: "[]".into(),
+            cc_addresses: "[]".into(),
+            date: "2026-11-01T10:00:00Z".into(),
+            message_id: Some(format!("<{id}@example.test>")),
+            in_reply_to: None,
+            references: Vec::new(),
+            size: 10,
+            has_attachments: false,
+            flags: flags.iter().map(|f| f.to_string()).collect(),
+            preview: None,
+            mailbox_ids: vec!["mbox".into()],
+        }
+    }
+
+    fn stored_flags(conn: &rusqlite::Connection, id: &str) -> String {
+        let db_id = BackendMessageRef::jmap("mbox", id).to_db_id("acct");
+        conn.query_row(
+            "SELECT flags FROM messages WHERE id = ?1",
+            rusqlite::params![db_id],
+            |row| row.get(0),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn store_jmap_emails_inserts_new_and_refreshes_known_messages() {
+        let conn = store_test_db();
+        let (inserted, ids) = store_jmap_emails(
+            &conn,
+            "acct",
+            "mbox",
+            &[email("a", &[]), email("b", &[])],
+            "s1",
+        )
+        .unwrap();
+        assert_eq!(inserted, 2);
+        assert_eq!(ids.len(), 2);
+        assert_eq!(
+            db::folders::get_jmap_state(&conn, "acct", "mbox")
+                .unwrap()
+                .as_deref(),
+            Some("s1")
+        );
+
+        // A second pass only refreshes flags: nothing is inserted twice.
+        let (inserted, ids) =
+            store_jmap_emails(&conn, "acct", "mbox", &[email("a", &["seen"])], "s2").unwrap();
+        assert_eq!((inserted, ids.len()), (0, 0));
+        assert_eq!(stored_flags(&conn, "a"), r#"["seen"]"#);
+        assert_eq!(
+            db::folders::get_jmap_state(&conn, "acct", "mbox")
+                .unwrap()
+                .as_deref(),
+            Some("s2")
+        );
+    }
+
+    #[test]
+    fn store_jmap_emails_rolls_back_everything_on_failure() {
+        let conn = store_test_db();
+        // Make the third insert fail after two succeeded.
+        conn.execute_batch(
+            "CREATE TRIGGER fail_on_c BEFORE INSERT ON messages
+             WHEN NEW.subject = 'Subject c'
+             BEGIN SELECT RAISE(ABORT, 'simulated failure'); END;",
+        )
+        .unwrap();
+        let emails = [email("a", &[]), email("b", &[]), email("c", &[])];
+        assert!(store_jmap_emails(&conn, "acct", "mbox", &emails, "s1").is_err());
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM messages", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0, "partial inserts must be rolled back");
+        // The state is not advanced, so the next sync fetches these again.
+        assert_eq!(
+            db::folders::get_jmap_state(&conn, "acct", "mbox").unwrap(),
+            None
+        );
     }
 
     #[tokio::test]

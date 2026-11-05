@@ -57,6 +57,13 @@ impl DbPool {
         self.writer.lock().await
     }
 
+    /// Acquire the writer from a blocking thread (`spawn_blocking`), for
+    /// large write transactions that must not hold an async worker thread.
+    /// Panics if called from async code, like `blocking_lock`.
+    pub fn writer_blocking(&self) -> tokio::sync::MutexGuard<'_, Connection> {
+        self.writer.blocking_lock()
+    }
+
     /// Coordinate IMAP syncs sharing this pool by account and raw folder path.
     /// Acquire the returned mutex before reading sync state, without holding a
     /// database reader/writer guard, and retain it through the complete pass.
