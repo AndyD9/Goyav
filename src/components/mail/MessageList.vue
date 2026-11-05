@@ -3,12 +3,13 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { t, dateLocale } from "@/i18n";
 import { dragMessageIds, dragSourceAccountId, isDragging } from "@/lib/drag-state";
 import { showToast, dismissToast } from "@/lib/toast";
+import { withProgressToast } from "@/lib/loading";
 import { useMessagesStore } from "@/stores/messages";
 import { useAccountsStore } from "@/stores/accounts";
 import { useFoldersStore } from "@/stores/folders";
 import { useUiStore } from "@/stores/ui";
 import type { SortColumn } from "@/stores/messages";
-import type { MessageSummary } from "@/lib/types";
+import type { MessageSummary, SearchHit } from "@/lib/types";
 import { openComposeWindow } from "@/lib/compose-window";
 import * as api from "@/lib/tauri";
 import MessageListItem from "./MessageListItem.vue";
@@ -16,6 +17,7 @@ import ThreadRow from "./ThreadRow.vue";
 import QuickFilterBar from "./QuickFilterBar.vue";
 import SearchResults from "./SearchResults.vue";
 import SearchScopeBar from "./SearchScopeBar.vue";
+import LoadingState from "@/components/common/LoadingState.vue";
 
 const messagesStore = useMessagesStore();
 const accountsStore = useAccountsStore();
@@ -321,7 +323,7 @@ async function ctxMoveTo(folderPath: string) {
   if (!accountId) return;
   const ids = messagesStore.resolveSelectedIds();
   closeContextMenu();
-  const toastId = showToast(t("Moving {count} message(s)...", { count: ids.length }), "info", 0);
+  const toastId = showToast(t("Moving {count} message(s)...", { count: ids.length }), "loading", 0);
   try {
     await api.moveMessages(accountId, ids, folderPath);
     clearSelectionAndMessage();
@@ -338,9 +340,13 @@ async function ctxCopyTo(folderPath: string) {
   const ids = messagesStore.resolveSelectedIds();
   closeContextMenu();
   try {
-    await api.copyMessages(accountId, ids, folderPath);
+    await withProgressToast(t("Copying {count} message(s)…", { count: ids.length }), () =>
+      api.copyMessages(accountId, ids, folderPath),
+    );
   } catch (error) {
     console.error("Copy failed:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    showToast(t("Copy failed: {error}", { error: message }), "error");
   }
 }
 
@@ -375,7 +381,9 @@ async function ctxSaveAsEml() {
   closeContextMenu();
   if (!msgId || !accountId) return;
   try {
-    await api.saveMessageAsEml(accountId, msgId, "message.eml");
+    await withProgressToast(t("Saving message…"), () =>
+      api.saveMessageAsEml(accountId, msgId, "message.eml"),
+    );
   } catch (error) {
     console.error("Save as .eml failed:", error);
     const message = error instanceof Error ? error.message : String(error);
@@ -385,16 +393,33 @@ async function ctxSaveAsEml() {
 
 function ctxShowAsThread() {
   if (contextMenu.value) {
-    messagesStore.showAsThread(contextMenu.value.messageId);
+    const messageId = contextMenu.value.messageId;
+    void withProgressToast(t("Loading conversation…"), () =>
+      messagesStore.showAsThread(messageId),
+    ).catch((error) => console.error("Show as thread failed:", error));
   }
   closeContextMenu();
 }
 
 function ctxUnthread() {
   if (contextMenu.value) {
-    messagesStore.unthreadMessage(contextMenu.value.messageId);
+    const messageId = contextMenu.value.messageId;
+    void withProgressToast(t("Removing from conversation…"), () =>
+      messagesStore.unthreadMessage(messageId),
+    ).catch((error) => console.error("Unthread failed:", error));
   }
   closeContextMenu();
+}
+
+function onThreadToggle(threadId: string) {
+  // Collapsing is instant; expanding may fetch the thread's children.
+  void withProgressToast(t("Loading conversation…"), () =>
+    messagesStore.toggleThread(threadId),
+  );
+}
+
+function onOpenServerHit(hit: SearchHit) {
+  void withProgressToast(t("Opening message…"), () => messagesStore.openServerHit(hit));
 }
 
 const isJunkFolder = () => {
@@ -605,10 +630,11 @@ function resolveFolderName(path: string): string {
       </button>
       </template>
     </div>
-    <div
+    <LoadingState
       v-if="messagesStore.loading && messagesStore.messages.length === 0 && messagesStore.threads.length === 0"
       class="loading"
-    >{{ t("Loading...") }}</div>
+      :label="t('Loading messages…')"
+    />
     <div
       v-else-if="messagesStore.messages.length === 0 && messagesStore.threads.length === 0"
       class="empty"
@@ -632,7 +658,7 @@ function resolveFolderName(path: string): string {
             :expanded="messagesStore.isThreadExpanded(thread.thread_id)"
             :active="thread.message_ids.includes(messagesStore.activeMessageId ?? '')"
             :selected="messagesStore.isSelected(thread.message_ids[0])"
-            @toggle="messagesStore.toggleThread(thread.thread_id)"
+            @toggle="onThreadToggle(thread.thread_id)"
             @toggle-select="messagesStore.toggleSelectMessage(thread.message_ids[0])"
             @open="onThreadOpen(thread)"
             @toggle-star="messagesStore.toggleStar(thread.message_ids[0])"
@@ -662,7 +688,12 @@ function resolveFolderName(path: string): string {
           </div>
         </template>
       </template>
-      <div v-if="messagesStore.loadingMore" class="loading-more">{{ t("Loading more...") }}</div>
+      <LoadingState
+        v-if="messagesStore.loadingMore"
+        class="loading-more"
+        inline
+        :label="t('Loading more...')"
+      />
     </div>
 
     <div
@@ -691,7 +722,12 @@ function resolveFolderName(path: string): string {
           @delete="onMobileSwipeDelete(msg.id)"
         />
       </div>
-      <div v-if="messagesStore.loadingMore" class="loading-more">{{ t("Loading more...") }}</div>
+      <LoadingState
+        v-if="messagesStore.loadingMore"
+        class="loading-more"
+        inline
+        :label="t('Loading more...')"
+      />
     </div>
 
     <div
@@ -709,9 +745,9 @@ function resolveFolderName(path: string): string {
         data-testid="server-hit-row"
         role="button"
         tabindex="0"
-        @click="messagesStore.openServerHit(hit)"
-        @keydown.enter.prevent="messagesStore.openServerHit(hit)"
-        @keydown.space.prevent="messagesStore.openServerHit(hit)"
+        @click="onOpenServerHit(hit)"
+        @keydown.enter.prevent="onOpenServerHit(hit)"
+        @keydown.space.prevent="onOpenServerHit(hit)"
       >
         <div class="hit-line">
           <span class="hit-from">{{ hit.from_name || hit.from_email || t("(unknown sender)") }}</span>
@@ -968,10 +1004,7 @@ function resolveFolderName(path: string): string {
 }
 
 .loading-more {
-  padding: 8px;
-  text-align: center;
-  font-size: 11px;
-  color: var(--color-text-muted);
+  justify-content: center;
 }
 
 .list-footer {
@@ -1085,7 +1118,6 @@ function resolveFolderName(path: string): string {
   border-color: var(--color-accent);
 }
 
-.loading,
 .empty {
   padding: 24px;
   text-align: center;

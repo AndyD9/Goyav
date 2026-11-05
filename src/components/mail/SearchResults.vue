@@ -7,9 +7,11 @@ import { useAccountsStore } from "@/stores/accounts";
 import { useFoldersStore } from "@/stores/folders";
 import { useUiStore } from "@/stores/ui";
 import { acctColor } from "@/lib/account-colors";
-import type { Folder, LocalSearchHit } from "@/lib/types";
+import type { Folder, LocalSearchHit, SearchHit } from "@/lib/types";
 import { t, tn, dateLocale } from "@/i18n";
 import SearchScopeBar from "./SearchScopeBar.vue";
+import LoadingState from "@/components/common/LoadingState.vue";
+import { withProgressToast } from "@/lib/loading";
 
 const emit = defineEmits<{
   openMessage: [messageId: string];
@@ -113,8 +115,12 @@ function segments(text: string | null): Array<{ text: string; match: boolean }> 
 }
 
 async function open(hit: LocalSearchHit) {
-  await messagesStore.openSearchHit(hit);
+  await withProgressToast(t("Opening message…"), () => messagesStore.openSearchHit(hit));
   emit("openMessage", hit.id);
+}
+
+function openServerHit(hit: SearchHit) {
+  void withProgressToast(t("Opening message…"), () => messagesStore.openServerHit(hit));
 }
 </script>
 
@@ -123,13 +129,20 @@ async function open(hit: LocalSearchHit) {
     <div class="search-head">
       <SearchScopeBar />
       <div class="summary-row">
-        <span v-if="messagesStore.searchLoading" class="summary">{{ t("Searching…") }}</span>
+        <LoadingState
+          v-if="messagesStore.searchLoading"
+          class="summary summary-loading"
+          inline
+          :size="12"
+          :label="t('Searching…')"
+        />
         <span v-else class="summary" data-testid="search-summary">{{ summary }}</span>
         <button
           v-if="messagesStore.searchScope === 'account'"
           class="server-btn"
           data-testid="search-results-server"
           :disabled="messagesStore.serverSearchLoading"
+          :aria-busy="messagesStore.serverSearchLoading"
           @click="messagesStore.runServerSearch()"
         >
           {{ messagesStore.serverSearchLoading ? t("Searching server…") : t("Also search the server") }}
@@ -208,7 +221,7 @@ async function open(hit: LocalSearchHit) {
           type="button"
           class="hit"
           data-testid="search-server-hit"
-          @click="messagesStore.openServerHit(hit)"
+          @click="openServerHit(hit)"
         >
           <div class="hit-line">
             <span class="hit-from">{{ hit.from_name || hit.from_email || t("(unknown sender)") }}</span>
@@ -255,6 +268,10 @@ async function open(hit: LocalSearchHit) {
 .summary {
   font-size: 11px;
   color: var(--color-text-muted);
+}
+
+.summary-loading {
+  padding: 0;
 }
 
 .server-btn {

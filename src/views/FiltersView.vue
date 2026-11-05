@@ -137,19 +137,26 @@ function needsValue(action: FilterAction): boolean {
 // One filter write at a time: a double click must not save or delete
 // twice. Failures reach the global error toast (main.ts).
 const filterWriteInProgress = ref(false);
+// Which write is running, so only its button shows a spinner.
+const filterWriteKind = ref<"toggle" | "save" | "delete" | null>(null);
 
-async function runFilterWrite(write: () => Promise<void>) {
+async function runFilterWrite(
+  kind: "toggle" | "save" | "delete",
+  write: () => Promise<void>,
+) {
   if (filterWriteInProgress.value) return;
   filterWriteInProgress.value = true;
+  filterWriteKind.value = kind;
   try {
     await write();
   } finally {
     filterWriteInProgress.value = false;
+    filterWriteKind.value = null;
   }
 }
 
 function toggleEnabled(rule: FilterRule) {
-  return runFilterWrite(() =>
+  return runFilterWrite("toggle", () =>
     filtersStore.saveFilter({ ...rule, enabled: !rule.enabled }),
   );
 }
@@ -157,14 +164,14 @@ function toggleEnabled(rule: FilterRule) {
 function saveFilter() {
   const rule = editingRule.value;
   if (!rule) return;
-  return runFilterWrite(async () => {
+  return runFilterWrite("save", async () => {
     await filtersStore.saveFilter(rule);
     editingRule.value = null;
   });
 }
 
 function deleteFilter(id: string) {
-  return runFilterWrite(async () => {
+  return runFilterWrite("delete", async () => {
     await filtersStore.deleteFilter(id);
     if (editingRule.value?.id === id) {
       editingRule.value = null;
@@ -172,16 +179,22 @@ function deleteFilter(id: string) {
   });
 }
 
+const applyingFilters = ref(false);
+
 async function applyToFolder() {
   const accountId = accountsStore.activeAccountId;
   const folder = applyingFolder.value;
-  if (!accountId || !folder) return;
+  if (!accountId || !folder || applyingFilters.value) return;
+  applyingFilters.value = true;
+  applyResult.value = null;
   try {
     const count = await filtersStore.applyToFolder(accountId, folder);
     applyResult.value = t("Filters applied: {count} messages affected", { count });
     setTimeout(() => (applyResult.value = null), 5000);
   } catch (e) {
     applyResult.value = t("Error: {error}", { error: String(e) });
+  } finally {
+    applyingFilters.value = false;
   }
 }
 
@@ -286,8 +299,14 @@ const actionFolderOptions = computed(() => [
       <div class="apply-section">
         <label class="apply-label">{{ t('Apply filters to folder') }}</label>
         <Select v-model="applyingFolder" :options="folderOptions" class="apply-select" />
-        <button class="btn-apply" :disabled="!applyingFolder" data-testid="filter-apply-btn" @click="applyToFolder">
-          {{ t('Apply Filters to Folder') }}
+        <button
+          class="btn-apply"
+          :disabled="!applyingFolder || applyingFilters"
+          :aria-busy="applyingFilters"
+          data-testid="filter-apply-btn"
+          @click="applyToFolder"
+        >
+          {{ applyingFilters ? t('Applying filters…') : t('Apply Filters to Folder') }}
         </button>
         <span v-if="applyResult" class="apply-result">{{ applyResult }}</span>
       </div>
@@ -392,13 +411,13 @@ const actionFolderOptions = computed(() => [
 
         <!-- Footer -->
         <div class="editor-footer">
-          <button v-if="editingRule.id && filtersStore.filters.some(f => f.id === editingRule?.id)" class="btn-delete" data-testid="filter-delete-btn" :disabled="filterWriteInProgress" @click="deleteFilter(editingRule.id)">
+          <button v-if="editingRule.id && filtersStore.filters.some(f => f.id === editingRule?.id)" class="btn-delete" data-testid="filter-delete-btn" :disabled="filterWriteInProgress" :aria-busy="filterWriteKind === 'delete'" @click="deleteFilter(editingRule.id)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
             {{ t('Delete') }}
           </button>
           <div class="footer-right">
             <button class="btn-cancel" @click="editingRule = null">{{ t('Cancel') }}</button>
-            <button class="btn-save" data-testid="filter-save-btn" :disabled="filterWriteInProgress" @click="saveFilter">{{ t('Save Filter') }}</button>
+            <button class="btn-save" data-testid="filter-save-btn" :disabled="filterWriteInProgress" :aria-busy="filterWriteKind === 'save'" @click="saveFilter">{{ t('Save Filter') }}</button>
           </div>
         </div>
       </div>

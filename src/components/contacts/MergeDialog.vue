@@ -224,6 +224,7 @@ async function applyMerge() {
             class="btn-save"
             data-testid="merge-confirm-btn"
             :disabled="merging"
+            :aria-busy="merging"
             @click="applyMerge"
           >
             {{ merging ? t("Merging…") : t("Merge") }}

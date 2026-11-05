@@ -8,6 +8,7 @@ import { usePlatformStore } from "@/stores/platform";
 import type { CalendarViewMode } from "@/stores/calendar";
 import type { CalendarEvent } from "@/lib/types";
 import { showToast, dismissToast } from "@/lib/toast";
+import { withProgressToast } from "@/lib/loading";
 import {
   calendarMutationSupport, calendarScopedEditSupport,
 } from "@/lib/calendar-mutation-support";
@@ -32,6 +33,7 @@ import EventDetail from "@/components/calendar/EventDetail.vue";
 import EventForm from "@/components/calendar/EventForm.vue";
 import MobileAppBar from "@/components/mobile/MobileAppBar.vue";
 import MobileIconButton from "@/components/mobile/MobileIconButton.vue";
+import LoadingState from "@/components/common/LoadingState.vue";
 
 // Explicit name so <KeepAlive include="CalendarView"> in App.vue matches.
 defineOptions({ name: "CalendarView" });
@@ -312,7 +314,9 @@ async function promptAttendeeNotification(
     const target = await refreshTarget();
     if (selectionVersion !== version || tryParseAttendees(target.attendees_json).length === 0 ||
       !isOrganizer(target.account_id, target.organizer_email)) return;
-    await api.notifyCalendarEvent(eventId);
+    await withProgressToast(t("Sending update to attendees…"), () =>
+      api.notifyCalendarEvent(eventId),
+    );
     showToast(t("Update sent to attendees"), "success");
   } catch (e) {
     if (selectionVersion !== version) return;
@@ -332,7 +336,7 @@ async function onEventReschedule(payload: {
   const scopedSupport = calendarScopedEditSupport(event);
   if (!event || !scopedSupport.supported) return;
   const version = selectionVersion;
-  const toastId = showToast(t("Moving event..."), "info", 0);
+  const toastId = showToast(t("Moving event..."), "loading", 0);
   try {
     if (scopedSupport.scopes.includes("standalone")) {
       await calendarStore.updateEvent(payload.eventId, {
@@ -396,7 +400,7 @@ async function onCalendarDrop(payload: {
   if (!event || !scopedSupport.supported) return;
   const version = selectionVersion;
 
-  const toastId = showToast(t("Moving to calendar..."), "info", 0);
+  const toastId = showToast(t("Moving to calendar..."), "loading", 0);
   try {
     let newId: string;
     if (scopedSupport.scopes.includes("standalone")) {
@@ -519,9 +523,7 @@ onMounted(() => {
       </button>
     </div>
 
-    <div v-if="calendarStore.loading" class="calendar-load-status" role="status">
-      {{ loadingLabel() }}
-    </div>
+    <LoadingState v-if="calendarStore.loading" class="calendar-load-status" inline :label="loadingLabel()" />
     <div v-if="calendarStore.loadError" class="calendar-load-error" role="alert">
       {{ calendarStore.loadError }}
       <button @click="calendarStore.retryNavigation()">{{ t("Retry") }}</button>
@@ -540,7 +542,11 @@ onMounted(() => {
     </div>
     <div v-if="calendarStore.unresolvedOccurrences.length" class="calendar-incomplete" role="alert">
       {{ t("{count} recurring event(s) could not be placed. Some recurring dates may be incomplete until verified.", { count: calendarStore.unresolvedOccurrences.length }) }}
-      <button :disabled="calendarStore.repairingOccurrences || calendarStore.repairRetryAt !== null" @click="calendarStore.repairIncompleteOccurrences()">
+      <button
+        :disabled="calendarStore.repairingOccurrences || calendarStore.repairRetryAt !== null"
+        :aria-busy="calendarStore.repairingOccurrences"
+        @click="calendarStore.repairIncompleteOccurrences()"
+      >
         {{ calendarStore.repairingOccurrences ? t('Verifying…') : t('Verify with provider') }}
       </button>
       <span v-if="calendarStore.repairRetryAt !== null">
@@ -754,9 +760,7 @@ onMounted(() => {
       </div>
 
       <!-- Calendar grid -->
-      <div v-if="calendarStore.loading" class="calendar-load-status" role="status">
-        {{ loadingLabel() }}
-      </div>
+      <LoadingState v-if="calendarStore.loading" class="calendar-load-status" inline :label="loadingLabel()" />
       <div v-if="calendarStore.loadError" class="calendar-load-error" role="alert">
         {{ calendarStore.loadError }}
         <button @click="calendarStore.retryNavigation()">{{ t("Retry") }}</button>
@@ -777,7 +781,11 @@ onMounted(() => {
       <div v-if="calendarStore.unresolvedOccurrences.length" class="calendar-incomplete" role="alert">
         {{ calendarStore.unresolvedOccurrences.length }} recurring event(s) could not be placed.
         Some recurring dates may be incomplete until verified.
-        <button :disabled="calendarStore.repairingOccurrences || calendarStore.repairRetryAt !== null" @click="calendarStore.repairIncompleteOccurrences()">
+        <button
+          :disabled="calendarStore.repairingOccurrences || calendarStore.repairRetryAt !== null"
+          :aria-busy="calendarStore.repairingOccurrences"
+          @click="calendarStore.repairIncompleteOccurrences()"
+        >
           {{ calendarStore.repairingOccurrences ? t('Verifying…') : t('Verify with provider') }}
         </button>
         <span v-if="calendarStore.repairRetryAt !== null">

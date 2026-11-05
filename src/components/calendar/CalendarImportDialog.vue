@@ -3,6 +3,7 @@ import { dateLocale, t, tn } from "@/i18n";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import ModalShell from "@/components/common/ModalShell.vue";
 import Select from "@/components/common/Select.vue";
+import LoadingState from "@/components/common/LoadingState.vue";
 import { useAccountsStore } from "@/stores/accounts";
 import { useCalendarStore } from "@/stores/calendar";
 import { useUiStore } from "@/stores/ui";
@@ -206,7 +207,7 @@ watch(
   >
     <p class="filename">{{ attachment.filename || t("Calendar attachment") }}</p>
 
-    <div v-if="loading" class="state">{{ t("Reading calendar attachment…") }}</div>
+    <LoadingState v-if="loading" :label="t('Reading calendar attachment…')" />
     <div v-else-if="error && previews.length === 0" class="error">
       {{ error }}
     </div>
@@ -270,6 +271,7 @@ watch(
       <button
         class="btn primary"
         :disabled="loading || importing || !calendarId || selectedCount === 0"
+        :aria-busy="importing"
         data-testid="calendar-import-submit"
         @click="importEvents"
       >
@@ -289,12 +291,6 @@ watch(
   color: var(--color-text-secondary);
   font-size: 13px;
   overflow-wrap: anywhere;
-}
-
-.state {
-  padding: 24px 0;
-  color: var(--color-text-secondary);
-  text-align: center;
 }
 
 .event-list {

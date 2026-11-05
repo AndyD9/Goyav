@@ -16,6 +16,7 @@ import { formatInTimezone } from "@/lib/datetime";
 import { describeRRule } from "@/lib/rrule";
 import { acctColor } from "@/lib/account-colors";
 import EventDetail from "@/components/calendar/EventDetail.vue";
+import LoadingState from "@/components/common/LoadingState.vue";
 
 const invitesStore = useInvitesStore();
 const accountsStore = useAccountsStore();
@@ -38,6 +39,8 @@ const SORT_MODES = computed<{ value: InviteSortMode; label: string }[]>(() => [
 
 // Per-row action in-flight + error state, keyed by event id.
 const actingId = ref<string | null>(null);
+// Which button of the acting row is busy: a response or "managed".
+const actingAction = ref<string | null>(null);
 const errorById = ref<Record<string, string>>({});
 
 const detailOpen = ref(false);
@@ -117,6 +120,7 @@ function errorMessage(e: unknown): string {
 
 async function respond(invite: Invite, response: string) {
   actingId.value = invite.id;
+  actingAction.value = response;
   delete errorById.value[invite.id];
   try {
     await invitesStore.respond(invite, response);
@@ -124,11 +128,13 @@ async function respond(invite: Invite, response: string) {
     errorById.value = { ...errorById.value, [invite.id]: errorMessage(e) };
   } finally {
     actingId.value = null;
+    actingAction.value = null;
   }
 }
 
 async function markManaged(invite: Invite) {
   actingId.value = invite.id;
+  actingAction.value = "managed";
   delete errorById.value[invite.id];
   try {
     await invitesStore.markManaged(invite);
@@ -136,6 +142,7 @@ async function markManaged(invite: Invite) {
     errorById.value = { ...errorById.value, [invite.id]: errorMessage(e) };
   } finally {
     actingId.value = null;
+    actingAction.value = null;
   }
 }
 
@@ -194,9 +201,7 @@ onUnmounted(() => invitesStore.setViewActive(false));
     </header>
 
     <div class="invites-body">
-      <div v-if="invitesStore.loading && invites.length === 0" class="invites-empty">
-        {{ t("Loading invites…") }}
-      </div>
+      <LoadingState v-if="invitesStore.loading && invites.length === 0" :label="t('Loading invites…')" />
       <div v-else-if="invites.length === 0" class="invites-empty" data-testid="invites-empty">
         {{ t("No invites to show.") }}
       </div>
@@ -244,6 +249,7 @@ onUnmounted(() => invitesStore.setViewActive(false));
               class="btn-accept"
               :class="{ chosen: isCurrent(invite, 'accepted') }"
               :disabled="actingId === invite.id"
+              :aria-busy="actingId === invite.id && actingAction === 'accepted'"
               :data-testid="`invite-accept-${invite.id}`"
               @click="respond(invite, 'accepted')"
             >
@@ -253,6 +259,7 @@ onUnmounted(() => invitesStore.setViewActive(false));
               class="btn-maybe"
               :class="{ chosen: isCurrent(invite, 'tentative') }"
               :disabled="actingId === invite.id"
+              :aria-busy="actingId === invite.id && actingAction === 'tentative'"
               :data-testid="`invite-maybe-${invite.id}`"
               @click="respond(invite, 'tentative')"
             >
@@ -262,6 +269,7 @@ onUnmounted(() => invitesStore.setViewActive(false));
               class="btn-decline"
               :class="{ chosen: isCurrent(invite, 'declined') }"
               :disabled="actingId === invite.id"
+              :aria-busy="actingId === invite.id && actingAction === 'declined'"
               :data-testid="`invite-decline-${invite.id}`"
               @click="respond(invite, 'declined')"
             >
@@ -272,6 +280,7 @@ onUnmounted(() => invitesStore.setViewActive(false));
               type="button"
               class="btn-managed"
               :disabled="actingId === invite.id"
+              :aria-busy="actingId === invite.id && actingAction === 'managed'"
               :data-testid="`invite-mark-managed-${invite.id}`"
               :title="t('Mark as handled without sending a response')"
               @click="markManaged(invite)"

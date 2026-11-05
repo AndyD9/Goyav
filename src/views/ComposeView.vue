@@ -30,6 +30,7 @@ import ComposeMenuBar from "@/components/compose/ComposeMenuBar.vue";
 import SignaturePreview from "@/components/common/SignaturePreview.vue";
 import { isHtmlSignature, htmlSignatureBody, htmlSignatureToText } from "@/lib/signature";
 import { t, tn } from "@/i18n";
+import LoadingState from "@/components/common/LoadingState.vue";
 
 type RecipientField = "to" | "cc" | "bcc";
 type ComposeRecipients = Record<RecipientField, string[]>;
@@ -964,7 +965,14 @@ async function send() {
 
     <!-- Toolbar -->
     <div class="compose-toolbar">
-      <button class="toolbar-btn compose-send" :class="{ disabled: !canSend }" :disabled="!canSend" data-testid="compose-send" @click="send">
+      <button
+        class="toolbar-btn compose-send"
+        :class="{ disabled: !canSend }"
+        :disabled="!canSend"
+        :aria-busy="sending"
+        data-testid="compose-send"
+        @click="send"
+      >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
         </svg>
@@ -1019,7 +1027,13 @@ async function send() {
         {{ t("Spelling") }}
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
       </button>
-      <button class="toolbar-btn" :disabled="savingDraft" data-testid="compose-save-draft" @click="saveDraft">
+      <button
+        class="toolbar-btn"
+        :disabled="savingDraft"
+        :aria-busy="savingDraft"
+        data-testid="compose-save-draft"
+        @click="saveDraft"
+      >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" />
         </svg>
@@ -1048,7 +1062,7 @@ async function send() {
       class="compose-draft-banner"
       data-testid="draft-loading"
     >
-      {{ t("Loading draft…") }}
+      <LoadingState class="draft-loading-state" inline :label="t('Loading draft…')" />
     </div>
     <div
       v-else-if="draftDecryptError"
@@ -1351,6 +1365,15 @@ async function send() {
   color: var(--color-danger-text);
   font-size: 12px;
   flex-shrink: 0;
+}
+
+.draft-loading-state {
+  padding: 0;
+}
+
+/* While busy the spinner (main.css) replaces the button's icon. */
+.toolbar-btn[aria-busy="true"] svg {
+  display: none;
 }
 
 .compose-draft-banner {

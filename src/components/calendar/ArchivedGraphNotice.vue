@@ -20,7 +20,7 @@ defineEmits<{ retry: []; acknowledge: [] }>();
     <span v-if="acknowledgementError">{{ acknowledgementError }}</span>
     <div v-if="calendars.length">
       {{ t("{count} Graph calendar(s) no longer reported by the provider were archived. Their cached events and action history are preserved read-only, not shown in the live calendar.", { count: calendars.length }) }}
-      <button :disabled="acknowledging" @click="$emit('acknowledge')">
+      <button :disabled="acknowledging" :aria-busy="acknowledging" @click="$emit('acknowledge')">
         {{ acknowledging ? t('Acknowledging…') : t('Acknowledge') }}
       </button>
       <details>

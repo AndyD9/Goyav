@@ -53,6 +53,7 @@ const mutationReasonId = useId();
 
 const editing = ref(false);
 const saving = ref(false);
+const deleting = ref(false);
 const error = ref<string | null>(null);
 const editingEventId = ref<string | null>(null);
 const editScope = ref<CalendarEditScope>("standalone");
@@ -318,11 +319,14 @@ async function handleDelete() {
   const original = event.value;
   const version = selectionVersion;
   saving.value = true;
+  deleting.value = true;
   error.value = null;
   try {
     const fresh = await refreshMutationTarget(original.id, "deletion");
     if (!isCurrentSelection(original.id, version)) return;
     if (canNotify(fresh)) {
+      // Not busy while the confirmation is up.
+      deleting.value = false;
       const result = await tauriMessage(
         t("Delete this event with attendees? Chithi does not send manual cancellation notifications. Your calendar provider may notify attendees automatically."),
         {
@@ -333,6 +337,7 @@ async function handleDelete() {
       );
       if (result !== t("Delete") && result !== "Ok") return;
       if (!isCurrentSelection(original.id, version)) return;
+      deleting.value = true;
       await refreshMutationTarget(original.id, "deletion");
       if (!isCurrentSelection(original.id, version)) return;
     }
@@ -345,6 +350,7 @@ async function handleDelete() {
     if (isCurrentSelection(original.id, version)) error.value = String(cause);
   } finally {
     saving.value = false;
+    deleting.value = false;
   }
 }
 </script>
@@ -476,10 +482,26 @@ async function handleDelete() {
       <div class="detail-footer">
         <template v-if="!editing">
           <button class="btn-edit" :disabled="saving || !editSupport.supported" :aria-describedby="editSupport.reason ? mutationReasonId : undefined" @click="startEditing">{{ t("Edit") }}</button>
-          <button class="btn-danger" :disabled="saving || !mutationSupport.supported" :aria-describedby="mutationSupport.reason ? mutationReasonId : undefined" @click="handleDelete" data-testid="event-form-delete">{{ t("Delete") }}</button>
+          <button
+            class="btn-danger"
+            :disabled="saving || !mutationSupport.supported"
+            :aria-busy="deleting"
+            :aria-describedby="mutationSupport.reason ? mutationReasonId : undefined"
+            data-testid="event-form-delete"
+            @click="handleDelete"
+          >
+            {{ deleting ? t("Deleting…") : t("Delete") }}
+          </button>
         </template>
         <template v-else>
-          <button class="btn-save" :disabled="saving || !editSupport.supported" :aria-describedby="editSupport.reason ? mutationReasonId : undefined" @click="saveEdit" data-testid="event-form-save">
+          <button
+            class="btn-save"
+            :disabled="saving || !editSupport.supported"
+            :aria-busy="saving"
+            :aria-describedby="editSupport.reason ? mutationReasonId : undefined"
+            data-testid="event-form-save"
+            @click="saveEdit"
+          >
             {{ saving ? t("Saving...") : t("Save") }}
           </button>
           <button class="btn-cancel" @click="editing = false">{{ t("Cancel") }}</button>

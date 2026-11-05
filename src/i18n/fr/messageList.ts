@@ -40,4 +40,12 @@ export const messageList: Record<string, string> = {
   Body: "Corps",
   "Searching server…": "Recherche sur le serveur…",
   "Search server for “{text}”": "Rechercher « {text} » sur le serveur",
+
+  // Loading feedback
+  "Loading messages…": "Chargement des messages…",
+  "Copying {count} message(s)…": "Copie de {count} message(s)…",
+  "Saving message…": "Enregistrement du message…",
+  "Loading conversation…": "Chargement de la conversation…",
+  "Removing from conversation…": "Retrait de la conversation…",
+  "Opening message…": "Ouverture du message…",
 };

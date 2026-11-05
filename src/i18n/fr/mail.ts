@@ -149,4 +149,13 @@ export const mail: Record<string, string> = {
   'Folder name cannot contain "/"': "Le nom du dossier ne peut pas contenir « / »",
   "Expand {name}": "Développer {name}",
   "Collapse {name}": "Réduire {name}",
+
+  // Loading feedback
+  "Archiving message…": "Archivage du message…",
+  "Deleting message…": "Suppression du message…",
+  "Moving to spam…": "Déplacement vers les indésirables…",
+  "Action failed: {error}": "Échec de l'action : {error}",
+  "Marking folder as read…": "Marquage du dossier comme lu…",
+  "Marking all messages as read…": "Marquage de tous les messages comme lus…",
+  "Mark as read failed: {error}": "Échec du marquage comme lu : {error}",
 };

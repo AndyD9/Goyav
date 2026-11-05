@@ -4,6 +4,7 @@ import { useUiStore } from "@/stores/ui";
 import * as api from "@/lib/tauri";
 import { showToast } from "@/lib/toast";
 import { t } from "@/i18n";
+import LoadingState from "./LoadingState.vue";
 
 const uiStore = useUiStore();
 
@@ -101,7 +102,12 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
         <span class="link-popup-url clean" data-testid="link-popup-cleaned">{{ cleaned }}</span>
       </div>
       <div v-else-if="cleaning" class="link-popup-row hint">
-        <span class="link-popup-hint">{{ t("Checking for tracking parameters...") }}</span>
+        <LoadingState
+          class="link-popup-hint link-popup-loading"
+          inline
+          :size="12"
+          :label="t('Checking for tracking parameters...')"
+        />
       </div>
       <div v-else-if="cleanError" class="link-popup-row hint">
         <span class="link-popup-hint error" data-testid="link-popup-clean-error">
@@ -205,6 +211,10 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
 .link-popup-hint {
   font-size: 11px;
   color: var(--color-text-muted);
+}
+
+.link-popup-loading {
+  padding: 0;
 }
 
 .link-popup-hint.error {

@@ -104,4 +104,11 @@ export const pgp: Record<string, string> = {
   "Delete key?": "Supprimer la clé ?",
   "This removes the key from the shared keystore. If the secret key is only stored here (not on a smartcard or backed up), it will be lost.":
     "Cette action retire la clé du trousseau partagé. Si la clé privée n'est stockée qu'ici (ni sur une carte à puce, ni sauvegardée), elle sera perdue.",
+
+  // Loading feedback
+  "Loading keys…": "Chargement des clés…",
+  "Looking for smartcards…": "Recherche de cartes à puce…",
+  "Linking smartcards…": "Association des cartes à puce…",
+  "Exporting public key…": "Exportation de la clé publique…",
+  "Fetching…": "Récupération…",
 };

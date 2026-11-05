@@ -462,6 +462,49 @@ describe("FolderTree", () => {
     expect(api.markFolderRead).toHaveBeenCalledTimes(2);
     expect(row(w, "acc1", "Junk").exists()).toBe(true);
   });
+
+  it("shows progress while marking a folder read and surfaces failures as an error toast", async () => {
+    const w = mountTree();
+    await flushPromises();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      let finish: (count: number) => void = () => {};
+      vi.mocked(api.markFolderRead).mockImplementationOnce(
+        () => new Promise<number>((resolve) => { finish = resolve; }),
+      );
+      await openFolderMenu(w, "acc1", "Junk");
+      await clickInBody(bodyEl('[data-testid="ctx-mark-read"]'));
+      // The folder row spins and, once the work is slow enough, a
+      // non-blocking loading toast appears.
+      expect(row(w, "acc1", "Junk").find(".sync-spinner").exists()).toBe(true);
+      vi.advanceTimersByTime(300);
+      expect(useToasts().value.map((toast) => [toast.type, toast.message])).toEqual([
+        ["loading", "Marking folder as read…"],
+      ]);
+      // A second request while the first runs is ignored.
+      await openFolderMenu(w, "acc1", "Junk");
+      expect(bodyEl<HTMLButtonElement>('[data-testid="ctx-mark-read"]').disabled).toBe(true);
+      document.querySelector<HTMLElement>(".folder-menu-overlay")?.click();
+      await flushPromises();
+
+      finish(0);
+      await flushPromises();
+      expect(useToasts().value).toEqual([]);
+      expect(row(w, "acc1", "Junk").find(".sync-spinner").exists()).toBe(false);
+      expect(api.markFolderRead).toHaveBeenCalledTimes(1);
+
+      vi.mocked(api.markAccountRead).mockRejectedValueOnce(new Error("offline"));
+      await w.find('[data-testid="account-acc1"]').trigger("contextmenu", { clientX: 10, clientY: 10 });
+      await flushPromises();
+      await clickInBody(bodyEl('[data-testid="ctx-account-mark-read"]'));
+      const toasts = useToasts().value;
+      expect(toasts).toHaveLength(1);
+      expect(toasts[0].type).toBe("error");
+      expect(toasts[0].message).toBe("Mark as read failed: offline");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("FolderTree regressions", () => {

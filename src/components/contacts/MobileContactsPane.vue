@@ -8,6 +8,7 @@ import { acctColor } from "@/lib/account-colors";
 import { parseFirstEmail } from "@/lib/contact-json";
 import MobileAppBar from "@/components/mobile/MobileAppBar.vue";
 import MobileIconButton from "@/components/mobile/MobileIconButton.vue";
+import LoadingState from "@/components/common/LoadingState.vue";
 
 const props = defineProps<{ books: ContactBook[] }>();
 const emit = defineEmits<{ newContact: []; select: [contact: Contact] }>();
@@ -21,7 +22,20 @@ const mobileAccountFilter = ref("all");
 // Mobile combines every book into one account-filterable list.
 const allContactsFlat = ref<Array<Contact & { _accountId: string }>>([]);
 
+const loadingContacts = ref(false);
+let loadSeq = 0;
+
 async function loadAllContacts() {
+  const seq = ++loadSeq;
+  loadingContacts.value = true;
+  try {
+    await collectAllContacts();
+  } finally {
+    if (seq === loadSeq) loadingContacts.value = false;
+  }
+}
+
+async function collectAllContacts() {
   const collected: Array<Contact & { _accountId: string }> = [];
   for (const book of props.books) {
     try {
@@ -168,7 +182,11 @@ function mobileContactInitial(c: Contact): string {
             </svg>
           </button>
         </template>
-        <div v-if="filteredMobileContacts.length === 0" class="empty-text">
+        <LoadingState
+          v-if="loadingContacts && allContactsFlat.length === 0"
+          :label="t('Loading contacts…')"
+        />
+        <div v-else-if="filteredMobileContacts.length === 0" class="empty-text">
           {{ search ? t("No matches") : t("No contacts yet") }}
         </div>
       </div>

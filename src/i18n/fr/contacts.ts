@@ -128,4 +128,8 @@ export const contacts: Record<string, string> = {
   Actions: "Actions",
   "Add Action": "Ajouter une action",
   "Save Filter": "Enregistrer le filtre",
+
+  // Loading feedback
+  "Loading contacts…": "Chargement des contacts…",
+  "Applying filters…": "Application des filtres…",
 };

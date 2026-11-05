@@ -165,6 +165,7 @@ async function discoverMailServers() {
         class="btn-secondary"
         data-testid="mail-discover-btn"
         :disabled="discoveringMail || !form.email"
+        :aria-busy="discoveringMail"
         @click="discoverMailServers"
       >
         {{ discoveringMail ? t('Searching...') : t('Auto-discover IMAP / SMTP') }}

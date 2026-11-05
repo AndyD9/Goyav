@@ -4,6 +4,7 @@ import { t } from "@/i18n";
 import type { Contact, ContactBook } from "@/lib/types";
 import { acctColor } from "@/lib/account-colors";
 import { parseFirstEmail } from "@/lib/contact-json";
+import LoadingState from "@/components/common/LoadingState.vue";
 
 const props = defineProps<{
   contacts: Contact[];
@@ -11,6 +12,8 @@ const props = defineProps<{
   selectedContactId: string | null;
   selectedIds: string[];
   hasBook: boolean;
+  /** The selected book's contacts are being (re)loaded. */
+  loading?: boolean;
 }>();
 const emit = defineEmits<{
   select: [contact: Contact, event: MouseEvent];
@@ -94,6 +97,8 @@ function startMerge() {
       <button class="merge-toolbar-cancel" @click="emit('clearSelection')">{{ t('Clear') }}</button>
     </div>
     <div class="contact-list">
+      <LoadingState v-if="loading" :label="t('Loading contacts…')" />
+      <template v-else>
       <div
         v-for="contact in filteredContacts"
         :key="contact.id"
@@ -118,6 +123,7 @@ function startMerge() {
       <div v-if="filteredContacts.length === 0 && hasBook" class="empty-text">
         {{ search ? t("No matches") : t("No contacts") }}
       </div>
+      </template>
     </div>
   </div>
 </template>

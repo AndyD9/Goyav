@@ -11,6 +11,8 @@ import { showToast, dismissToast } from "@/lib/toast";
 import { acctColor } from "@/lib/account-colors";
 import Select from "@/components/common/Select.vue";
 import { t } from "@/i18n";
+import { withProgressToast } from "@/lib/loading";
+import Spinner from "@/components/common/Spinner.vue";
 
 const foldersStore = useFoldersStore();
 const accountsStore = useAccountsStore();
@@ -191,19 +193,30 @@ function openNewFolderFromAccount() {
   showNewFolderModal.value = true;
 }
 
+// "account:" or "account:folder" while a mark-read runs; guards re-entry
+// and puts a spinner on the folder row.
+const markingRead = ref<string | null>(null);
+
 async function markAccountRead() {
   const accountId = accountMenu.value?.accountId;
   if (!accountId) return;
   closeContextMenu();
+  if (markingRead.value !== null) return;
 
+  markingRead.value = `${accountId}:`;
   try {
-    await api.markAccountRead(accountId);
-    await foldersStore.fetchAllAccountFolders();
-    if (accountsStore.activeAccountId === accountId) {
-      await messagesStore.fetchMessages();
-    }
+    await withProgressToast(t("Marking all messages as read…"), async () => {
+      await api.markAccountRead(accountId);
+      await foldersStore.fetchAllAccountFolders();
+      if (accountsStore.activeAccountId === accountId) {
+        await messagesStore.fetchMessages();
+      }
+    });
   } catch (error) {
     console.error("Mark account read failed:", error);
+    showToast(t("Mark as read failed: {error}", { error: errorMessage(error) }), "error", 5000);
+  } finally {
+    markingRead.value = null;
   }
 }
 
@@ -278,7 +291,7 @@ async function createNewFolder() {
 
   newFolderSaving.value = true;
   newFolderError.value = null;
-  const createToastId = showToast(t("Creating folder..."), "info", 0);
+  const createToastId = showToast(t("Creating folder..."), "loading", 0);
   try {
     await api.createFolder(accountId, folderPath);
   } catch (error) {
@@ -349,7 +362,7 @@ async function onFolderMouseUp(accountId: string, folderPath: string) {
     isCrossAccount
       ? t("Moving (cross-account) {count} message(s)...", { count: messageIds.length })
       : t("Moving {count} message(s)...", { count: messageIds.length }),
-    "info",
+    "loading",
     0,
   );
   try {
@@ -378,17 +391,24 @@ async function markFolderRead() {
   if (!contextMenu.value) return;
   const { folder, accountId } = contextMenu.value;
   closeContextMenu();
+  if (markingRead.value !== null) return;
 
+  markingRead.value = `${accountId}:${folder.path}`;
   try {
     // The backend marks the whole folder, with no page limit, and updates
     // the folder counts; refresh the badges and the open list after it.
-    await api.markFolderRead(accountId, folder.path);
-    await foldersStore.fetchAllAccountFolders();
-    if (isActiveFolder(accountId, folder.path)) {
-      await messagesStore.fetchMessages();
-    }
+    await withProgressToast(t("Marking folder as read…"), async () => {
+      await api.markFolderRead(accountId, folder.path);
+      await foldersStore.fetchAllAccountFolders();
+      if (isActiveFolder(accountId, folder.path)) {
+        await messagesStore.fetchMessages();
+      }
+    });
   } catch (error) {
     console.error("Mark folder read failed:", error);
+    showToast(t("Mark as read failed: {error}", { error: errorMessage(error) }), "error", 5000);
+  } finally {
+    markingRead.value = null;
   }
 }
 
@@ -404,7 +424,7 @@ async function doDeleteFolder() {
   const { accountId, folder } = deletingFolder.value;
   deletingFolder.value = null;
 
-  const deleteToastId = showToast(t('Deleting "{name}"...', { name: folder.name }), "info", 0);
+  const deleteToastId = showToast(t('Deleting "{name}"...', { name: folder.name }), "loading", 0);
   try {
     await api.deleteFolder(accountId, folder.path);
     await foldersStore.fetchAllAccountFolders();
@@ -551,7 +571,11 @@ async function doDeleteFolder() {
             </svg>
 
             <span class="folder-name">{{ item.folder.name }}</span>
-            <span v-if="syncing === `${account.id}:${item.folder.path}`" class="sync-spinner"></span>
+            <Spinner
+              v-if="syncing === `${account.id}:${item.folder.path}` || markingRead === `${account.id}:${item.folder.path}`"
+              class="sync-spinner"
+              :size="12"
+            />
             <span v-else-if="item.folder.unread_count > 0" class="unread-badge">{{ item.folder.unread_count }}</span>
           </button>
         </div>
@@ -590,7 +614,12 @@ async function doDeleteFolder() {
       >
         <button class="ctx-item" data-testid="ctx-new-folder" @click="openNewFolderModal">{{ t("New Folder...") }}</button>
         <div class="ctx-separator"></div>
-        <button class="ctx-item" data-testid="ctx-mark-read" @click="markFolderRead">{{ t("Mark Folder Read") }}</button>
+        <button
+          class="ctx-item"
+          data-testid="ctx-mark-read"
+          :disabled="markingRead !== null"
+          @click="markFolderRead"
+        >{{ t("Mark Folder Read") }}</button>
         <div class="ctx-separator"></div>
         <button class="ctx-item danger" data-testid="ctx-delete-folder" @click="confirmDeleteFolder">{{ t("Delete Folder") }}</button>
         <div class="ctx-separator"></div>
@@ -607,7 +636,12 @@ async function doDeleteFolder() {
         class="folder-context-menu"
         :style="{ left: accountMenu.x + 'px', top: accountMenu.y + 'px' }"
       >
-        <button class="ctx-item" data-testid="ctx-account-mark-read" @click="markAccountRead">{{ t("Mark All Read") }}</button>
+        <button
+          class="ctx-item"
+          data-testid="ctx-account-mark-read"
+          :disabled="markingRead !== null"
+          @click="markAccountRead"
+        >{{ t("Mark All Read") }}</button>
         <button class="ctx-item" data-testid="ctx-account-new-folder" @click="openNewFolderFromAccount">{{ t("New Folder...") }}</button>
       </div>
     </Teleport>
@@ -638,7 +672,12 @@ async function doDeleteFolder() {
           </div>
           <div class="nf-footer">
             <button class="nf-btn-cancel" @click="showNewFolderModal = false">{{ t("Cancel") }}</button>
-            <button class="nf-btn-create" :disabled="newFolderSaving" @click="createNewFolder">
+            <button
+              class="nf-btn-create"
+              :disabled="newFolderSaving"
+              :aria-busy="newFolderSaving"
+              @click="createNewFolder"
+            >
               {{ newFolderSaving ? t("Creating...") : t("Create Folder") }}
             </button>
           </div>
@@ -834,17 +873,7 @@ async function doDeleteFolder() {
 }
 
 .sync-spinner {
-  width: 12px;
-  height: 12px;
-  border: 1.5px solid var(--color-border);
-  border-top-color: var(--color-accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  flex-shrink: 0;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+  color: var(--color-accent);
 }
 </style>
 

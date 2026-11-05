@@ -319,4 +319,8 @@ export const calendar: Record<string, string> = {
   "Not applied: the sender is not the organizer of a matching event in your calendar.":
     "Non appliqué : l'expéditeur n'est pas l'organisateur d'un événement correspondant de votre calendrier.",
   "Could not apply: {error}": "Impossible d'appliquer : {error}",
+
+  // Loading feedback
+  "Sending update to attendees…": "Envoi de la mise à jour aux participants…",
+  'Unsubscribing from "{name}"…': "Désabonnement de « {name} »…",
 };

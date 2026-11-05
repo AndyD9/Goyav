@@ -7,6 +7,8 @@ import type { Calendar } from "@/lib/types";
 import { dragCalendarEvent, isCalendarDragging, canDragCalendarEvent } from "@/lib/calendar-drag-state";
 import { showToast } from "@/lib/toast";
 import * as api from "@/lib/tauri";
+import { withProgressToast } from "@/lib/loading";
+import Spinner from "@/components/common/Spinner.vue";
 
 const emit = defineEmits<{
   calendarDrop: [payload: {
@@ -240,8 +242,10 @@ async function confirmRename() {
   }
 }
 
+const unsubscribing = ref<string | null>(null);
+
 async function unsubscribeThisCalendar() {
-  if (!contextMenu.value) return;
+  if (!contextMenu.value || unsubscribing.value !== null) return;
   const calendarId = contextMenu.value.calendarId;
   const cal = calendarStore.calendars.find((c) => c.id === calendarId);
   const calName = cal?.name || calendarId;
@@ -249,12 +253,17 @@ async function unsubscribeThisCalendar() {
 
   if (!confirm(t('Unsubscribe from "{name}"? Local events will be removed.', { name: calName }))) return;
 
+  unsubscribing.value = calendarId;
   try {
-    await calendarStore.unsubscribeCalendar(calendarId);
+    await withProgressToast(t('Unsubscribing from "{name}"…', { name: calName }), () =>
+      calendarStore.unsubscribeCalendar(calendarId),
+    );
     showToast(t('Unsubscribed from "{name}"', { name: calName }), "success");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     showToast(t("Failed to unsubscribe: {message}", { message }), "error", 5000);
+  } finally {
+    unsubscribing.value = null;
   }
 }
 </script>
@@ -298,7 +307,11 @@ async function unsubscribeThisCalendar() {
             <span class="calendar-name">{{ cal.name }}</span>
             <span class="calendar-account">{{ getAccountLabel(cal.account_id) }}</span>
           </span>
-          <span v-if="syncing === cal.id" class="sync-spinner"></span>
+          <Spinner
+            v-if="syncing === cal.id || unsubscribing === cal.id"
+            class="sync-spinner"
+            :size="12"
+          />
         </div>
       </div>
       <div v-if="calendarStore.calendars.length === 0" class="empty">
@@ -315,7 +328,12 @@ async function unsubscribeThisCalendar() {
         <button class="ctx-item" @click="syncThisCalendar" data-testid="calendar-sync">{{ t("Sync this calendar") }}</button>
         <button class="ctx-item" @click="startRename" data-testid="calendar-rename">{{ t("Rename…") }}</button>
         <button class="ctx-item" @click="startRecolor" data-testid="calendar-recolor">{{ t("Change color…") }}</button>
-        <button class="ctx-item" @click="unsubscribeThisCalendar" data-testid="calendar-unsubscribe">{{ t("Unsubscribe") }}</button>
+        <button
+          class="ctx-item"
+          :disabled="unsubscribing !== null"
+          data-testid="calendar-unsubscribe"
+          @click="unsubscribeThisCalendar"
+        >{{ t("Unsubscribe") }}</button>
       </div>
     </Teleport>
 
@@ -356,6 +374,7 @@ async function unsubscribeThisCalendar() {
             <button
               class="rename-btn-save"
               :disabled="renameSaving || !renaming.value.trim()"
+              :aria-busy="renameSaving"
               data-testid="calendar-rename-save"
               @click="confirmRename"
             >
@@ -419,6 +438,7 @@ async function unsubscribeThisCalendar() {
             <button
               class="rename-btn-save"
               :disabled="recolorSaving || !recoloring.value.trim()"
+              :aria-busy="recolorSaving"
               data-testid="calendar-recolor-save"
               @click="confirmRecolor"
             >
@@ -499,17 +519,7 @@ async function unsubscribeThisCalendar() {
 }
 
 .sync-spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--color-border);
-  border-top-color: var(--color-accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  flex-shrink: 0;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+  color: var(--color-accent);
 }
 
 .empty {

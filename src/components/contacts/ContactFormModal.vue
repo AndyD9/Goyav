@@ -208,7 +208,7 @@ async function saveContact() {
         </div>
         <div class="modal-footer">
           <button class="btn-cancel" @click="showForm = false">{{ t('Cancel') }}</button>
-          <button class="btn-save" :disabled="saving" data-testid="contact-save-btn" @click="saveContact">
+          <button class="btn-save" :disabled="saving" :aria-busy="saving" data-testid="contact-save-btn" @click="saveContact">
             {{ saving ? t("Saving...") : editingContact ? t("Save") : t("Add Contact") }}
           </button>
         </div>

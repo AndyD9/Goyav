@@ -6,6 +6,7 @@ import * as api from "@/lib/tauri";
 import type { OutboxRow } from "@/lib/types";
 import { showToast } from "@/lib/toast";
 import { t } from "@/i18n";
+import LoadingState from "@/components/common/LoadingState.vue";
 
 const accountsStore = useAccountsStore();
 const rows = ref<OutboxRow[]>([]);
@@ -13,6 +14,7 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const listenerError = ref<string | null>(null);
 const actingRowId = ref<number | null>(null);
+const actingKind = ref<"retry" | "discard" | null>(null);
 let reloadGeneration = 0;
 let disposed = false;
 
@@ -80,6 +82,7 @@ async function retry(row: OutboxRow) {
     return;
   }
   actingRowId.value = row.id;
+  actingKind.value = "retry";
   try {
     await api.retryOutboxOp(accountId, row.id);
     showToast(t('Queued "{subject}" for retry', { subject: row.subject ?? t("(no subject)") }), "info");
@@ -89,6 +92,7 @@ async function retry(row: OutboxRow) {
     await reload();
     if (!disposed && actingRowId.value === row.id) {
       actingRowId.value = null;
+      actingKind.value = null;
     }
   }
 }
@@ -105,6 +109,7 @@ async function discard(row: OutboxRow) {
     return;
   }
   actingRowId.value = row.id;
+  actingKind.value = "discard";
   try {
     await api.discardOutboxOp(accountId, row.id);
   } catch (e) {
@@ -113,6 +118,7 @@ async function discard(row: OutboxRow) {
     await reload();
     if (!disposed && actingRowId.value === row.id) {
       actingRowId.value = null;
+      actingKind.value = null;
     }
   }
 }
@@ -253,6 +259,7 @@ function statusLabel(row: OutboxRow): string {
         class="outbox-refresh"
         data-testid="outbox-refresh-btn"
         :disabled="loading || actingRowId !== null"
+        :aria-busy="loading"
         @click="reload"
       >
         {{ t("Refresh") }}
@@ -268,9 +275,7 @@ function statusLabel(row: OutboxRow): string {
       {{ listenerError }}
     </div>
 
-    <div v-if="loading && rows.length === 0" class="outbox-empty" role="status">
-      {{ t("Loading...") }}
-    </div>
+    <LoadingState v-if="loading && rows.length === 0" :label="t('Loading...')" />
     <div v-else-if="error" class="outbox-error" data-testid="outbox-error" role="alert">
       {{ error }}
     </div>
@@ -316,6 +321,7 @@ function statusLabel(row: OutboxRow): string {
               row.account_id !== accountsStore.activeAccountId ||
               row.status !== 'dead'
             "
+            :aria-busy="actingRowId === row.id && actingKind === 'retry'"
             @click="retry(row)"
           >
             {{ t("Retry") }}
@@ -331,6 +337,7 @@ function statusLabel(row: OutboxRow): string {
               row.account_id !== accountsStore.activeAccountId ||
               row.status === 'sending'
             "
+            :aria-busy="actingRowId === row.id && actingKind === 'discard'"
             @click="discard(row)"
           >
             {{ t("Discard") }}

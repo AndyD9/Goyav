@@ -29,6 +29,7 @@ import SyncBindingsSection from "@/components/settings/SyncBindingsSection.vue";
 import PgpAdvancedSection from "@/components/settings/PgpAdvancedSection.vue";
 import { acctColor } from "@/lib/account-colors";
 import { showToast } from "@/lib/toast";
+import { withLoading } from "@/lib/loading";
 import { t } from "@/i18n";
 import {
   accountTypeLabelLong,
@@ -108,6 +109,19 @@ const defaultImportCalendarId = ref<string | null>(null);
 // Cross-account list of contact books shown in the dropdowns.
 const availableBooks = ref<BookOption[]>([]);
 const availableImportCalendars = ref<BookOption[]>([]);
+// The two lists above are being fetched for the open form.
+const loadingBookOptions = ref(false);
+let bookOptionsSeq = 0;
+
+async function loadBookOptions() {
+  const seq = ++bookOptionsSeq;
+  loadingBookOptions.value = true;
+  try {
+    await Promise.all([loadAvailableBooks(), loadAvailableImportCalendars()]);
+  } finally {
+    if (seq === bookOptionsSeq) loadingBookOptions.value = false;
+  }
+}
 
 async function loadAvailableBooks() {
   // Fetch all accounts' books in parallel — sequential awaits made the
@@ -456,11 +470,18 @@ function openNew(type: AccountType) {
   // Pre-load the cross-account book list so the create-flow dropdowns
   // are populated for users who already have an account with synced
   // books and want to point a new account at one of them.
-  void Promise.all([loadAvailableBooks(), loadAvailableImportCalendars()]);
+  void loadBookOptions();
   showForm.value = true;
 }
 
-async function openEdit(id: string) {
+// Loading an account takes several backend round-trips (config,
+// signatures, bindings, books, tokens); block the window meanwhile so
+// the click visibly does something.
+function openEdit(id: string) {
+  return withLoading(t("Opening account settings…"), () => loadEditForm(id));
+}
+
+async function loadEditForm(id: string) {
   invalidateVisioLogin();
   editingAccountId.value = id;
   error.value = null;
@@ -489,7 +510,7 @@ async function openEdit(id: string) {
       defaultCalendarBookId.value = null;
       defaultImportCalendarId.value = null;
     }
-    await Promise.all([loadAvailableBooks(), loadAvailableImportCalendars()]);
+    await loadBookOptions();
     // The edit path deliberately never calls selectAccountType — the
     // per-type switch would clobber the loaded hosts/flags. It only
     // assigns accountType from what the loaded config looks like.
@@ -1226,6 +1247,7 @@ async function signInWithVisio() {
       :has-contacts-binding="hasContactsBinding"
       :available-books="availableBooks"
       :available-import-calendars="availableImportCalendars"
+      :loading-options="loadingBookOptions"
     />
 
     <!-- For standalone CalDAV/CardDAV the only relevant toggle is
@@ -1275,6 +1297,7 @@ async function signInWithVisio() {
         :class="{ compact: variant === 'page' }"
         data-testid="account-save"
         :disabled="saving || meetSigningIn"
+        :aria-busy="saving"
         @click="saveAccount"
       >
         {{ saving ? t("Saving...") : (editingAccountId ? t("Save") : t("Add Account")) }}

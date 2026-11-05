@@ -5,6 +5,8 @@ import * as api from "@/lib/tauri";
 import { usePgpStore } from "@/stores/pgp";
 import type { PgpCardDetails } from "@/lib/types";
 import { t, tn, dateLocale } from "@/i18n";
+import { withProgressToast } from "@/lib/loading";
+import LoadingState from "@/components/common/LoadingState.vue";
 
 const pgpStore = usePgpStore();
 const {
@@ -25,7 +27,12 @@ const showWkdModal = ref(false);
 const armoredInput = ref("");
 const wkdEmail = ref("");
 const importBusy = ref(false);
+// Which import button is running, so only it shows a spinner.
+const importSource = ref<"file" | "armored" | null>(null);
 const wkdBusy = ref(false);
+const syncingCards = ref(false);
+const exporting = ref(false);
+const deleting = ref(false);
 const importError = ref<string | null>(null);
 const wkdError = ref<string | null>(null);
 const lastSyncSummary = ref<string | null>(null);
@@ -167,6 +174,7 @@ function secretKeyStatus(key: {
 async function openFilePicker() {
   importError.value = null;
   importBusy.value = true;
+  importSource.value = "file";
   try {
     const result = await api.pgpPickAndImportKey();
     if (!result) return; // user cancelled
@@ -180,6 +188,7 @@ async function openFilePicker() {
     importError.value = e instanceof Error ? e.message : String(e);
   } finally {
     importBusy.value = false;
+    importSource.value = null;
   }
 }
 
@@ -191,6 +200,7 @@ async function importArmored() {
     return;
   }
   importBusy.value = true;
+  importSource.value = "armored";
   try {
     await pgpStore.importArmored(trimmed);
     showImportModal.value = false;
@@ -199,6 +209,7 @@ async function importArmored() {
     importError.value = e instanceof Error ? e.message : String(e);
   } finally {
     importBusy.value = false;
+    importSource.value = null;
   }
 }
 
@@ -222,9 +233,13 @@ async function fetchViaWkd() {
 }
 
 async function syncCards() {
+  if (syncingCards.value) return;
+  syncingCards.value = true;
   lastSyncSummary.value = null;
   try {
-    const detections = await pgpStore.autoLinkCards();
+    const detections = await withProgressToast(t("Linking smartcards…"), () =>
+      pgpStore.autoLinkCards(),
+    );
     if (detections.length === 0) {
       lastSyncSummary.value =
         t("No new links. Either no cards are connected or all on-card keys are already linked.");
@@ -239,30 +254,44 @@ async function syncCards() {
     }
   } catch (e) {
     lastSyncSummary.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    syncingCards.value = false;
   }
 }
 
 async function exportSelected() {
-  if (!selectedKey.value) return;
+  if (!selectedKey.value || exporting.value) return;
+  const fingerprint = selectedKey.value.fingerprint;
+  exporting.value = true;
   try {
-    const armored = await pgpStore.exportPublic(selectedKey.value.fingerprint);
-    await navigator.clipboard.writeText(armored);
+    await withProgressToast(t("Exporting public key…"), async () => {
+      const armored = await pgpStore.exportPublic(fingerprint);
+      await navigator.clipboard.writeText(armored);
+    });
     lastSyncSummary.value = t("Public key copied to clipboard.");
   } catch (e) {
     lastSyncSummary.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    exporting.value = false;
   }
 }
 
 const deleteConfirmFp = ref<string | null>(null);
 async function confirmDelete() {
-  if (!deleteConfirmFp.value) return;
+  if (!deleteConfirmFp.value || deleting.value) return;
+  deleting.value = true;
   try {
     await pgpStore.deleteKey(deleteConfirmFp.value);
   } catch (e) {
     lastSyncSummary.value = e instanceof Error ? e.message : String(e);
   } finally {
+    deleting.value = false;
     deleteConfirmFp.value = null;
   }
+}
+
+function cancelDelete() {
+  if (!deleting.value) deleteConfirmFp.value = null;
 }
 
 const keystoreEmptyHint = computed(() =>
@@ -289,7 +318,13 @@ const keystoreEmptyHint = computed(() =>
           <button class="btn" @click="showWkdModal = true" data-testid="pgp-wkd-btn">
             {{ t("Fetch via WKD") }}
           </button>
-          <button class="btn" @click="syncCards" data-testid="pgp-sync-cards-btn">
+          <button
+            class="btn"
+            :disabled="syncingCards"
+            :aria-busy="syncingCards"
+            data-testid="pgp-sync-cards-btn"
+            @click="syncCards"
+          >
             {{ t("Sync cards") }}
           </button>
         </div>
@@ -297,7 +332,12 @@ const keystoreEmptyHint = computed(() =>
         <p v-if="lastError" class="error">{{ lastError }}</p>
       </div>
 
-      <ul v-if="!keystoreEmptyHint" class="key-list" data-testid="pgp-key-list">
+      <LoadingState
+        v-if="loadingKeys && filteredKeys.length === 0"
+        :label="t('Loading keys…')"
+        data-testid="pgp-keys-loading"
+      />
+      <ul v-else-if="!keystoreEmptyHint" class="key-list" data-testid="pgp-key-list">
         <li
           v-for="key in filteredKeys"
           :key="key.fingerprint"
@@ -321,8 +361,14 @@ const keystoreEmptyHint = computed(() =>
         <p>{{ t("No keys yet. Use Import, Fetch via WKD, or generate one in tumpa-cli / tumpa desktop — they share this same keystore at {path}.", { path: "~/.tumpa/keys.db" }) }}</p>
       </div>
 
-      <section class="cards-section" v-if="!loadingCards">
-        <h3>{{ t("Smartcards") }} <span class="muted" v-if="cards.length === 0">{{ t("(none connected)") }}</span></h3>
+      <section class="cards-section">
+        <h3>{{ t("Smartcards") }} <span class="muted" v-if="!loadingCards && cards.length === 0">{{ t("(none connected)") }}</span></h3>
+        <LoadingState
+          v-if="loadingCards && cards.length === 0"
+          class="cards-loading"
+          inline
+          :label="t('Looking for smartcards…')"
+        />
         <ul v-if="cards.length" class="card-list" data-testid="pgp-card-list">
           <li
             v-for="c in cards"
@@ -370,7 +416,7 @@ const keystoreEmptyHint = computed(() =>
           <code class="fp-full">{{ selectedCardIdent }}</code>
         </header>
 
-        <p v-if="cardDetailsLoading" class="hint">{{ t("Reading card…") }}</p>
+        <LoadingState v-if="cardDetailsLoading" class="card-detail-loading" inline :label="t('Reading card…')" />
         <p v-if="cardDetailsError" class="error">{{ cardDetailsError }}</p>
 
         <template v-if="cardDetails && !cardDetailsError">
@@ -460,7 +506,13 @@ const keystoreEmptyHint = computed(() =>
         </header>
 
         <div class="detail-actions">
-          <button class="btn" @click="exportSelected" data-testid="pgp-export-btn">
+          <button
+            class="btn"
+            :disabled="exporting"
+            :aria-busy="exporting"
+            data-testid="pgp-export-btn"
+            @click="exportSelected"
+          >
             {{ t("Copy public key") }}
           </button>
           <button
@@ -537,7 +589,12 @@ const keystoreEmptyHint = computed(() =>
         ></textarea>
         <p v-if="importError" class="error">{{ importError }}</p>
         <div class="modal-actions">
-          <button class="btn" @click="openFilePicker" :disabled="importBusy">
+          <button
+            class="btn"
+            :disabled="importBusy"
+            :aria-busy="importSource === 'file'"
+            @click="openFilePicker"
+          >
             {{ t("Pick file…") }}
           </button>
           <span class="spacer"></span>
@@ -548,6 +605,7 @@ const keystoreEmptyHint = computed(() =>
             class="btn btn-primary"
             @click="importArmored"
             :disabled="importBusy"
+            :aria-busy="importSource === 'armored'"
             data-testid="pgp-import-submit"
           >
             {{ t("Import") }}
@@ -575,16 +633,17 @@ const keystoreEmptyHint = computed(() =>
             class="btn btn-primary"
             @click="fetchViaWkd"
             :disabled="wkdBusy"
+            :aria-busy="wkdBusy"
             data-testid="pgp-wkd-submit"
           >
-            {{ t("Fetch") }}
+            {{ wkdBusy ? t("Fetching…") : t("Fetch") }}
           </button>
         </div>
       </div>
     </div>
 
     <!-- Delete confirmation -->
-    <div v-if="deleteConfirmFp" class="modal-overlay" @click.self="deleteConfirmFp = null">
+    <div v-if="deleteConfirmFp" class="modal-overlay" @click.self="cancelDelete">
       <div class="modal" role="dialog" :aria-label="t('Confirm delete')">
         <h3>{{ t("Delete key?") }}</h3>
         <p>
@@ -593,9 +652,15 @@ const keystoreEmptyHint = computed(() =>
         <code>{{ deleteConfirmFp.toUpperCase() }}</code>
         <div class="modal-actions">
           <span class="spacer"></span>
-          <button class="btn" @click="deleteConfirmFp = null">{{ t("Cancel") }}</button>
-          <button class="btn btn-danger" @click="confirmDelete" data-testid="pgp-delete-confirm">
-            {{ t("Delete") }}
+          <button class="btn" :disabled="deleting" @click="cancelDelete">{{ t("Cancel") }}</button>
+          <button
+            class="btn btn-danger"
+            :disabled="deleting"
+            :aria-busy="deleting"
+            data-testid="pgp-delete-confirm"
+            @click="confirmDelete"
+          >
+            {{ deleting ? t("Deleting…") : t("Delete") }}
           </button>
         </div>
       </div>
@@ -688,6 +753,11 @@ const keystoreEmptyHint = computed(() =>
 .btn-danger:hover:not(:disabled) {
   background: var(--color-danger, #fb2c36);
   color: #fff;
+}
+
+.cards-loading,
+.card-detail-loading {
+  padding: 4px 0;
 }
 
 .hint {

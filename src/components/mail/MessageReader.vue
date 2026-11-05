@@ -18,6 +18,8 @@ import { openComposeWindow } from "@/lib/compose-window";
 import { parseMailto } from "@/lib/mailto";
 import * as api from "@/lib/tauri";
 import { t, tn, dateLocale } from "@/i18n";
+import { withProgressToast } from "@/lib/loading";
+import LoadingState from "@/components/common/LoadingState.vue";
 
 defineProps<{
   standalone?: boolean;
@@ -45,6 +47,7 @@ const inviteSourceAccountId = ref<string | null>(null);
 const itipReplies = ref<ParsedInvite[]>([]);
 const itipCancels = ref<ParsedInvite[]>([]);
 const itipBusy = ref(false);
+const itipBusyKind = ref<"reply" | "cancel" | null>(null);
 const itipOutcome = ref<string | null>(null);
 const calendarAttachment = ref<Attachment | null>(null);
 
@@ -68,6 +71,7 @@ watch(
     itipReplies.value = [];
     itipCancels.value = [];
     itipBusy.value = false;
+    itipBusyKind.value = null;
     itipOutcome.value = null;
     calendarAttachment.value = null;
     imagesHtml.value = null;
@@ -224,6 +228,7 @@ async function applyItip(kind: "reply" | "cancel") {
   const msgId = messagesStore.activeMessageId;
   if (!accountId || !msgId || itipBusy.value) return;
   itipBusy.value = true;
+  itipBusyKind.value = kind;
   itipOutcome.value = null;
   try {
     const changed = kind === "reply"
@@ -249,6 +254,7 @@ async function applyItip(kind: "reply" | "cancel") {
     }
   } finally {
     itipBusy.value = false;
+    itipBusyKind.value = null;
   }
 }
 
@@ -722,17 +728,36 @@ function forward() {
   });
 }
 
+// Archive / spam / delete from the action bar: one at a time, with a
+// spinner on the clicked button and a progress toast for slow servers.
+const readerActionBusy = ref<"archive" | "spam" | "delete" | null>(null);
+
+async function runReaderAction(
+  kind: "archive" | "spam" | "delete",
+  label: string,
+  work: () => Promise<void>,
+) {
+  if (readerActionBusy.value) return;
+  readerActionBusy.value = kind;
+  try {
+    await withProgressToast(label, work);
+    messagesStore.activeMessage = null;
+    messagesStore.activeMessageId = null;
+  } catch (e) {
+    console.error(`${kind} failed:`, e);
+    showToast(t("Action failed: {error}", { error: e instanceof Error ? e.message : String(e) }), "error", 6000);
+  } finally {
+    readerActionBusy.value = null;
+  }
+}
+
 async function deleteMessage() {
   const accountId = accountsStore.activeAccountId;
   const msgId = messagesStore.activeMessageId;
   if (!accountId || !msgId) return;
-  try {
-    await api.deleteMessages(accountId, [msgId]);
-    messagesStore.activeMessage = null;
-    messagesStore.activeMessageId = null;
-  } catch (e) {
-    console.error("Delete failed:", e);
-  }
+  await runReaderAction("delete", t("Deleting message…"), () =>
+    api.deleteMessages(accountId, [msgId]),
+  );
 }
 
 async function archiveMessage() {
@@ -744,13 +769,9 @@ async function archiveMessage() {
     showToast(t("No archive folder found"));
     return;
   }
-  try {
-    await api.moveMessages(accountId, [msgId], folder.path);
-    messagesStore.activeMessage = null;
-    messagesStore.activeMessageId = null;
-  } catch (e) {
-    console.error("Archive failed:", e);
-  }
+  await runReaderAction("archive", t("Archiving message…"), () =>
+    api.moveMessages(accountId, [msgId], folder.path),
+  );
 }
 
 async function markSpam() {
@@ -762,13 +783,9 @@ async function markSpam() {
     showToast(t("No spam folder found"));
     return;
   }
-  try {
-    await api.moveMessages(accountId, [msgId], folder.path);
-    messagesStore.activeMessage = null;
-    messagesStore.activeMessageId = null;
-  } catch (e) {
-    console.error("Spam move failed:", e);
-  }
+  await runReaderAction("spam", t("Moving to spam…"), () =>
+    api.moveMessages(accountId, [msgId], folder.path),
+  );
 }
 </script>
 
@@ -777,7 +794,7 @@ async function markSpam() {
     <div v-if="standalone" class="reader-toolbar">
       <button class="close-btn" :title="t('Close')" @click="emit('close')">&times;</button>
     </div>
-    <div v-if="messagesStore.loadingBody" class="loading">{{ t("Loading message...") }}</div>
+    <LoadingState v-if="messagesStore.loadingBody" :label="t('Loading message...')" />
     <div v-else-if="!messagesStore.activeMessage" class="empty">
       {{ t("Select a message to read") }}
     </div>
@@ -799,13 +816,31 @@ async function markSpam() {
           </button>
         </div>
         <div class="actions-right">
-          <button class="icon-action" :title="t('Archive')" @click="archiveMessage">
+          <button
+            class="icon-action"
+            :title="t('Archive')"
+            :disabled="readerActionBusy !== null"
+            :aria-busy="readerActionBusy === 'archive'"
+            @click="archiveMessage"
+          >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8" /><rect x="1" y="3" width="22" height="5" /><line x1="10" y1="12" x2="14" y2="12" /></svg>
           </button>
-          <button class="icon-action" :title="t('Report spam')" @click="markSpam">
+          <button
+            class="icon-action"
+            :title="t('Report spam')"
+            :disabled="readerActionBusy !== null"
+            :aria-busy="readerActionBusy === 'spam'"
+            @click="markSpam"
+          >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
           </button>
-          <button class="icon-action danger" :title="t('Delete')" @click="deleteMessage">
+          <button
+            class="icon-action danger"
+            :title="t('Delete')"
+            :disabled="readerActionBusy !== null"
+            :aria-busy="readerActionBusy === 'delete'"
+            @click="deleteMessage"
+          >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
           </button>
           <div v-if="hasHtml()" class="view-toggle">
@@ -895,6 +930,7 @@ async function markSpam() {
             class="pill-btn itip-btn"
             data-testid="itip-apply-reply"
             :disabled="itipBusy"
+            :aria-busy="itipBusyKind === 'reply'"
             @click="applyItip('reply')"
           >
             {{ t("Update calendar") }}
@@ -908,6 +944,7 @@ async function markSpam() {
             class="pill-btn itip-btn"
             data-testid="itip-apply-cancel"
             :disabled="itipBusy"
+            :aria-busy="itipBusyKind === 'cancel'"
             @click="applyItip('cancel')"
           >
             {{ t("Remove from calendar") }}
@@ -929,6 +966,7 @@ async function markSpam() {
             class="attachment-chip"
             :data-testid="`attachment-${att.index}`"
             :disabled="savingAttachment === att.index"
+            :aria-busy="savingAttachment === att.index"
             :title="isCalendarAttachment(att) ? t('Import calendar events') : t('Save attachment')"
             @click="openAttachment(att)"
           >
@@ -954,6 +992,7 @@ async function markSpam() {
             v-if="!decryptedOverlay"
             class="pgp-btn"
             :disabled="decryptBusy"
+            :aria-busy="decryptBusy"
             data-testid="reader-decrypt-btn"
             @click="decryptOpenPGP"
           >
@@ -984,7 +1023,7 @@ async function markSpam() {
         >
           <div v-if="hasRemoteImages && !imagesHtml" class="no-remote-notice">
             {{ t("Remote content blocked") }}
-            <button class="load-images-btn" data-testid="reader-load-images" :disabled="loadingImages" @click="loadRemoteImages">
+            <button class="load-images-btn" data-testid="reader-load-images" :disabled="loadingImages" :aria-busy="loadingImages" @click="loadRemoteImages">
               {{ loadingImages ? t('Loading...') : t('Load images') }}
             </button>
           </div>
@@ -1008,7 +1047,7 @@ async function markSpam() {
         >
           <div v-if="hasRemoteImages && !imagesHtml" class="no-remote-notice">
             {{ t("Remote content blocked") }}
-            <button class="load-images-btn" data-testid="reader-load-images" :disabled="loadingImages" @click="loadRemoteImages">
+            <button class="load-images-btn" data-testid="reader-load-images" :disabled="loadingImages" :aria-busy="loadingImages" @click="loadRemoteImages">
               {{ loadingImages ? t('Loading...') : t('Load images') }}
             </button>
           </div>
@@ -1101,7 +1140,6 @@ async function markSpam() {
   color: var(--color-text);
 }
 
-.loading,
 .empty {
   padding: 24px;
   text-align: center;
@@ -1185,6 +1223,16 @@ async function markSpam() {
 .icon-action.danger:hover {
   background: rgba(220, 53, 69, 0.08);
   color: var(--color-danger);
+}
+
+/* While busy the spinner (main.css) replaces the icon. */
+.attachment-chip[aria-busy="true"] svg,
+.icon-action[aria-busy="true"] svg {
+  display: none;
+}
+
+.icon-action[aria-busy="true"]::before {
+  margin-right: 0;
 }
 
 .view-toggle {

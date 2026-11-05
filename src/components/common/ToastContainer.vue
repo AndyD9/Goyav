@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useToasts } from "@/lib/toast";
+import Spinner from "./Spinner.vue";
 
 const toasts = useToasts();
 </script>
@@ -17,7 +18,8 @@ const toasts = useToasts();
           aria-atomic="true"
         >
           <span class="toast-icon" aria-hidden="true">
-            <svg v-if="toast.type === 'info'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <Spinner v-if="toast.type === 'loading'" :size="14" />
+            <svg v-else-if="toast.type === 'info'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
             </svg>
             <svg v-else-if="toast.type === 'success'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -63,7 +65,8 @@ const toasts = useToasts();
   overflow-wrap: anywhere;
 }
 
-.toast.info {
+.toast.info,
+.toast.loading {
   background: var(--color-bg);
   color: var(--color-text);
   border: 1px solid var(--color-border);
@@ -79,6 +82,10 @@ const toasts = useToasts();
   background: #7f1d1d;
   color: #fecaca;
   border: 1px solid #dc2626;
+}
+
+.toast.loading .toast-icon {
+  color: var(--color-accent);
 }
 
 .toast-icon {

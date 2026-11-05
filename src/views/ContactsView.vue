@@ -213,10 +213,22 @@ async function fetchBooks() {
   }
 }
 
+// Set while the selected book's contacts load, so the list shows a
+// placeholder instead of the previous book's rows. Only the latest load
+// clears it.
+const loadingContacts = ref(false);
+let loadContactsSeq = 0;
+
 async function loadContactsForSelectedBook() {
   const bookId = selectedBookId.value;
   if (!bookId) return;
-  contacts.value = await api.listContacts(bookId);
+  const seq = ++loadContactsSeq;
+  loadingContacts.value = true;
+  try {
+    contacts.value = await api.listContacts(bookId);
+  } finally {
+    if (seq === loadContactsSeq) loadingContacts.value = false;
+  }
   // Restore the previously selected contact from the store on remount,
   // if it still exists in the loaded list. Falls through to null when
   // the user just switched books or the contact is gone.
@@ -418,8 +430,8 @@ async function onMerged(surviving: Contact) {
           {{ t('New Contact') }}
         </button>
         <div class="toolbar-sep"></div>
-        <button class="btn-sync" :disabled="syncing" @click="syncAllContacts">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="{ spinning: syncing }"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" /></svg>
+        <button class="btn-sync" :disabled="syncing" :aria-busy="syncing" @click="syncAllContacts">
+          <svg v-if="!syncing" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" /></svg>
           {{ syncing ? t("Syncing...") : t("Sync") }}
         </button>
       </div>
@@ -435,6 +447,7 @@ async function onMerged(surviving: Contact) {
         :selected-contact-id="selectedContact?.id ?? null"
         :selected-ids="selectedContactIds"
         :has-book="!!selectedBookId"
+        :loading="loadingContacts"
         @select="selectContact"
         @merge="startMerge"
         @clear-selection="clearSelection"
@@ -535,8 +548,6 @@ async function onMerged(surviving: Contact) {
 }
 .btn-sync:hover { filter: brightness(0.92); }
 .btn-sync:disabled { opacity: 0.7; }
-.spinning { animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
 
 /* Body */
 .contacts-body {

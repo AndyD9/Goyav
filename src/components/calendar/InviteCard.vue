@@ -14,6 +14,8 @@ const props = defineProps<{
 
 const uiStore = useUiStore();
 const responding = ref(false);
+// The response being sent, so only the clicked button shows a spinner.
+const respondingWith = ref<string | null>(null);
 const responded = ref<string | null>(null);
 const error = ref<string | null>(null);
 
@@ -42,6 +44,7 @@ function formatDateTime(iso: string): string {
 
 async function respond(response: string) {
   responding.value = true;
+  respondingWith.value = response;
   error.value = null;
   try {
     await api.respondToInvite(
@@ -55,6 +58,7 @@ async function respond(response: string) {
     error.value = String(e);
   } finally {
     responding.value = false;
+    respondingWith.value = null;
   }
 }
 </script>
@@ -101,6 +105,7 @@ async function respond(response: string) {
         class="btn-accept"
         data-testid="invite-accept"
         :disabled="responding"
+        :aria-busy="respondingWith === 'accepted'"
         @click="respond('accepted')"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -112,6 +117,7 @@ async function respond(response: string) {
         class="btn-maybe"
         data-testid="invite-tentative"
         :disabled="responding"
+        :aria-busy="respondingWith === 'tentative'"
         @click="respond('tentative')"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -123,6 +129,7 @@ async function respond(response: string) {
         class="btn-decline"
         data-testid="invite-decline"
         :disabled="responding"
+        :aria-busy="respondingWith === 'declined'"
         @click="respond('declined')"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -217,6 +224,11 @@ async function respond(response: string) {
   font-size: 14px;
   font-weight: 500;
   padding-left: 52px;
+}
+
+/* While busy the spinner (main.css) replaces the button's icon. */
+.invite-actions button[aria-busy="true"] svg {
+  display: none;
 }
 
 .invite-actions {

@@ -103,9 +103,10 @@ function onTextInput() {
         class="server-btn"
         data-testid="search-server-trigger"
         :disabled="messagesStore.serverSearchLoading"
+        :aria-busy="messagesStore.serverSearchLoading"
         @click="messagesStore.runServerSearch()"
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <svg v-if="!messagesStore.serverSearchLoading" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <span v-if="messagesStore.serverSearchLoading" data-testid="search-server-loading">{{ t("Searching server…") }}</span>
         <span v-else>{{ t("Search server for “{text}”", { text: messagesStore.quickFilterText.trim() }) }}</span>
       </button>

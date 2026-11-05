@@ -14,6 +14,8 @@ const signatures = defineModel<AccountSignature[]>({ required: true });
 const selectedId = ref<string | null>(null);
 const importError = ref<string | null>(null);
 const importing = ref(false);
+// Which import button is running: a new signature or a replacement.
+const importMode = ref<"new" | "replace" | null>(null);
 
 const selected = computed(
   () => signatures.value.find((s) => s.id === selectedId.value) ?? null,
@@ -73,6 +75,7 @@ function remove(id: string) {
 async function importFile(target: AccountSignature | null) {
   importError.value = null;
   importing.value = true;
+  importMode.value = target ? "replace" : "new";
   try {
     const file = await api.pickSignatureFile();
     if (!file) return;
@@ -87,6 +90,7 @@ async function importFile(target: AccountSignature | null) {
     });
   } finally {
     importing.value = false;
+    importMode.value = null;
   }
 }
 </script>
@@ -103,9 +107,10 @@ async function importFile(target: AccountSignature | null) {
         class="sig-btn"
         data-testid="signature-import"
         :disabled="importing"
+        :aria-busy="importMode === 'new'"
         @click="importFile(null)"
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+        <svg v-if="importMode !== 'new'" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
         {{ t("Import an HTML file…") }}
       </button>
     </div>
@@ -188,6 +193,7 @@ async function importFile(target: AccountSignature | null) {
             type="button"
             class="sig-btn"
             :disabled="importing"
+            :aria-busy="importMode === 'replace'"
             data-testid="signature-replace"
             @click="importFile(selected)"
           >{{ t("Replace from file…") }}</button>

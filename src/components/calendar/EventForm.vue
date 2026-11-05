@@ -11,6 +11,7 @@ import AttendeeEditor from "./AttendeeEditor.vue";
 import TimeInput from "@/components/common/TimeInput.vue";
 import DateInput from "@/components/common/DateInput.vue";
 import Select from "@/components/common/Select.vue";
+import LoadingState from "@/components/common/LoadingState.vue";
 
 const props = defineProps<{
   initialStart?: string;
@@ -570,15 +571,24 @@ async function save() {
               {{ room.address }}
             </option>
           </datalist>
-          <span
+          <LoadingState
             v-if="loadingRoomSuggestions"
             class="room-suggestions-loading"
             data-testid="event-form-room-suggestions-loading"
-          >
-            {{ t("Loading rooms...") }}
-          </span>
+            inline
+            :size="12"
+            :label="t('Loading rooms...')"
+          />
+          <LoadingState
+            v-if="checkingRoomAvailability"
+            class="room-availability-loading"
+            data-testid="event-form-room-availability"
+            inline
+            :size="12"
+            :label="t('Checking room availability...')"
+          />
           <span
-            v-if="roomAvailabilityMessage"
+            v-else-if="roomAvailabilityMessage"
             class="room-availability"
             :class="roomAvailability ? `room-availability--${roomAvailability.state}` : undefined"
             data-testid="event-form-room-availability"
@@ -596,6 +606,7 @@ async function save() {
               type="button"
               class="meet-btn"
               :disabled="generatingMeetUrl || closing"
+              :aria-busy="generatingMeetUrl"
               :data-testid="`event-form-meet-${opt.value}`"
               @click="addVideoLink(opt.value)"
             >
@@ -627,6 +638,7 @@ async function save() {
             class="scheduling-toggle"
             data-testid="event-form-scheduling-open"
             :disabled="loadingSchedules"
+            :aria-busy="loadingSchedules"
             @click="loadSchedulingAssistant"
           >
             {{ loadingSchedules ? t("Checking availability…") : t("Find a time") }}
@@ -663,7 +675,13 @@ async function save() {
         <div></div>
         <div class="footer-actions">
           <button class="btn-cancel" :disabled="closing || saving" @click="closeForm">{{ t("Cancel") }}</button>
-          <button class="btn-create" :disabled="saving || closing || generatingMeetUrl" @click="save" data-testid="event-form-save">
+          <button
+            class="btn-create"
+            :disabled="saving || closing || generatingMeetUrl"
+            :aria-busy="saving"
+            data-testid="event-form-save"
+            @click="save"
+          >
             {{ saving ? t("Saving...") : t("Create") }}
           </button>
         </div>
@@ -720,6 +738,9 @@ async function save() {
   color: var(--color-text);
   cursor: pointer;
 }
+.meet-btn[aria-busy="true"] svg {
+  display: none;
+}
 .meet-btn:hover {
   background: var(--color-bg-hover);
 }
@@ -734,11 +755,10 @@ async function save() {
   color: var(--color-danger, #c0392b);
 }
 
-.room-suggestions-loading {
-  display: block;
-  margin-top: 8px;
-  font-size: 11px;
-  color: var(--color-text-secondary, #666);
+.room-suggestions-loading,
+.room-availability-loading {
+  margin-top: 4px;
+  padding: 0;
 }
 
 .room-availability {

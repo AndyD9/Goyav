@@ -207,4 +207,8 @@ export const account: Record<string, string> = {
   "Contact Pane": "Volet des contacts",
   "About Goyav…": "À propos de Goyav…",
   "Check for Updates…": "Rechercher des mises à jour…",
+
+  // Loading feedback
+  "Opening account settings…": "Ouverture des réglages du compte…",
+  "Loading address books and calendars…": "Chargement des carnets d'adresses et des calendriers…",
 };

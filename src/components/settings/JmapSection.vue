@@ -10,6 +10,7 @@
 /// its signed-in status, matching the pre-split inline handler.
 import type { AccountConfig } from "@/lib/types";
 import { t } from "@/i18n";
+import LoadingState from "@/components/common/LoadingState.vue";
 
 defineProps<{
   form: AccountConfig;
@@ -67,15 +68,16 @@ const emit = defineEmits<{ oidcSignIn: []; reauth: [] }>();
       <div v-else-if="oidcUserCode" class="oidc-device-code">
         <p class="device-code-label">{{ t("Enter this code in your browser:") }}</p>
         <p class="device-code-value">{{ oidcUserCode }}</p>
-        <p class="device-code-hint">{{ t("Waiting for authorization...") }}</p>
+        <LoadingState class="device-code-hint" inline :size="12" :label="t('Waiting for authorization...')" />
       </div>
       <button
         v-else
         class="btn-oauth"
         :disabled="oauthInProgress || !form.email"
+        :aria-busy="oauthInProgress"
         @click="emit('oidcSignIn')"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg v-if="!oauthInProgress" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
         </svg>
         {{ oauthInProgress ? t("Starting...") : t("Sign in with OIDC") }}
@@ -142,7 +144,7 @@ const emit = defineEmits<{ oidcSignIn: []; reauth: [] }>();
 }
 
 .device-code-hint {
-  font-size: 12px;
-  color: var(--color-text-muted);
+  justify-content: center;
+  padding: 0;
 }
 </style>

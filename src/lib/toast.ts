@@ -1,6 +1,7 @@
 import { ref } from "vue";
 
-type ToastType = "info" | "success" | "error";
+/** "loading" shows a spinner; pair it with durationMs 0 and dismissToast. */
+export type ToastType = "info" | "success" | "error" | "loading";
 
 interface Toast {
   id: number;

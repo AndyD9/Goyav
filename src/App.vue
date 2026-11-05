@@ -4,6 +4,7 @@ import { storeToRefs } from "pinia";
 import DesktopShell from "@/components/shell/DesktopShell.vue";
 import MobileShell from "@/components/shell/MobileShell.vue";
 import ToastContainer from "@/components/common/ToastContainer.vue";
+import LoadingOverlay from "@/components/common/LoadingOverlay.vue";
 import PassphraseDialog from "@/components/pgp/PassphraseDialog.vue";
 import PinDialog from "@/components/pgp/PinDialog.vue";
 import { useAccountsStore } from "@/stores/accounts";
@@ -77,6 +78,7 @@ onUnmounted(() => {
     <MobileShell v-else />
   </div>
   <ToastContainer />
+  <LoadingOverlay />
   <PassphraseDialog
     v-if="currentPrompt?.kind === 'passphrase'"
     :prompt="currentPrompt"

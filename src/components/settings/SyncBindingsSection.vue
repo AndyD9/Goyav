@@ -13,6 +13,7 @@ import { computed } from "vue";
 import { t } from "@/i18n";
 import type { AccountConfig } from "@/lib/types";
 import type { BookOption } from "@/lib/account-types";
+import LoadingState from "@/components/common/LoadingState.vue";
 
 const props = defineProps<{
   form: AccountConfig;
@@ -20,6 +21,8 @@ const props = defineProps<{
   hasContactsBinding: boolean;
   availableBooks: BookOption[];
   availableImportCalendars: BookOption[];
+  /** The book / calendar lists are still loading. */
+  loadingOptions?: boolean;
 }>();
 
 const mailBookId = defineModel<string | null>("mailBookId", { required: true });
@@ -128,11 +131,21 @@ const contactsIntervalMinutes = makeMinutesField("contacts_sync_interval_seconds
       {{ t("When a service is off, the corresponding data is not fetched from the server. Already-synced data remains available offline.") }}
     </p>
 
+    <LoadingState
+      v-if="loadingOptions && (form.mail_protocol || hasCalendarBinding)"
+      class="options-loading"
+      inline
+      :size="12"
+      :label="t('Loading address books and calendars…')"
+      data-testid="binding-options-loading"
+    />
+
     <div v-if="form.mail_protocol" class="form-group binding-row">
       <label>{{ t("Default calendar for imported events") }}</label>
       <select
         v-model="importCalendarId"
         class="form-control"
+        :disabled="loadingOptions"
         data-testid="default-import-calendar"
       >
         <option :value="null">{{ t("Auto (source account default when available)") }}</option>
@@ -154,6 +167,7 @@ const contactsIntervalMinutes = makeMinutesField("contacts_sync_interval_seconds
       <select
         v-model="mailBookId"
         class="form-control"
+        :disabled="loadingOptions"
         data-testid="default-contact-book-mail"
       >
         <option :value="null">{{ t("Auto (first synced book on this account)") }}</option>
@@ -167,6 +181,7 @@ const contactsIntervalMinutes = makeMinutesField("contacts_sync_interval_seconds
       <select
         v-model="calendarBookId"
         class="form-control"
+        :disabled="loadingOptions"
         data-testid="default-contact-book-calendar"
       >
         <option :value="null">{{ t("Auto (first synced book on this account)") }}</option>
@@ -182,6 +197,10 @@ const contactsIntervalMinutes = makeMinutesField("contacts_sync_interval_seconds
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.options-loading {
+  padding: 0;
 }
 
 .bindings-section-title {

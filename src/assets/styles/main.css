@@ -206,6 +206,47 @@ button {
   font: inherit;
 }
 
+/* === Loading indicators ===
+   One spinner for the whole app: <Spinner> / <LoadingState> use
+   .goyav-spinner, and any button marked aria-busy="true" draws the
+   same ring before its label, so a busy action needs no extra markup.
+   Buttons that already render their own spinner opt out. */
+@keyframes goyav-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.goyav-spinner,
+button[aria-busy="true"]:not(:has(.btn-spinner, .goyav-spinner))::before {
+  display: inline-block;
+  flex-shrink: 0;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: goyav-spin 0.7s linear infinite;
+}
+
+button[aria-busy="true"] {
+  cursor: progress;
+}
+
+button[aria-busy="true"]:not(:has(.btn-spinner, .goyav-spinner))::before {
+  content: "";
+  width: 0.9em;
+  height: 0.9em;
+  margin-right: 0.5em;
+  vertical-align: -0.125em;
+  opacity: 0.85;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goyav-spinner,
+  button[aria-busy="true"]:not(:has(.btn-spinner, .goyav-spinner))::before {
+    animation-duration: 1.6s;
+  }
+}
+
 body.dragging-messages,
 body.dragging-messages * {
   -webkit-user-select: none !important;
