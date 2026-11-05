@@ -5,9 +5,8 @@ use crate::db;
 use crate::db::messages::{MessageSummary, ThreadedPage};
 use crate::error::{Error, Result};
 use crate::event::tauri::{emit_folders_changed, emit_messages_changed};
-use crate::mail::imap::ImapConfig;
 use crate::mail::parser;
-use crate::message::{BackendMessageRef, BodyLocation, SearchHit, SearchQuery};
+use crate::message::{BodyLocation, SearchHit, SearchQuery};
 use crate::state::AppState;
 
 /// Check if an IP address is in a private/reserved range (SSRF protection).
@@ -116,18 +115,6 @@ fn remote_image_client() -> Result<reqwest::Client> {
         }))
         .build()
         .map_err(|e| Error::Other(format!("HTTP client error: {}", e)))
-}
-
-/// Split a folder path of the form `parentId/name` into its parent ID and
-/// leaf name. For JMAP the parent component is a mailbox ID; for Graph it is a
-/// mail folder ID. An empty or missing parent component means a top-level
-/// folder, returned as `None`.
-fn split_folder_path(folder_path: &str) -> (Option<&str>, &str) {
-    match folder_path.rsplit_once('/') {
-        Some((parent, name)) if !parent.is_empty() => (Some(parent), name),
-        Some((_, name)) => (None, name),
-        None => (None, folder_path),
-    }
 }
 
 #[tauri::command]
@@ -307,26 +294,18 @@ pub async fn import_search_hit(
         db::accounts::get_account_full(&conn, &account_id)?
     };
 
-    let (id, uid, maildir_path) = if account.mail_protocol_str() == "graph" {
-        // Format matches sync_cmd::sync_graph_account: `{account_id}_{graph_id}`,
-        // and `graph:{graph_id}` in maildir_path triggers the on-demand stream
-        // path in get_message_body.
-        let message_ref = BackendMessageRef::graph(&hit.backend_id);
-        let id = message_ref.to_db_id(&account_id);
-        let maildir = BodyLocation::GraphRemote(hit.backend_id.clone()).to_persisted();
-        (id, 0u32, maildir)
-    } else if account.mail_protocol_str() == "jmap" {
-        // Format matches jmap_sync: `{account_id}_{mailbox_id}_{email_id}`.
-        let id = BackendMessageRef::jmap(&hit.folder_path, &hit.backend_id).to_db_id(&account_id);
-        (id, 0u32, String::new())
-    } else {
-        // IMAP: `{account_id}_{folder_path}_{uid}`.
-        let uid = hit
-            .uid
-            .ok_or_else(|| Error::Other("IMAP search hit is missing UID".into()))?;
-        let id = BackendMessageRef::imap(&hit.folder_path, uid).to_db_id(&account_id);
-        (id, uid, String::new())
-    };
+    let mail_config = account.mail_config();
+    let backend = crate::backend::mail::for_account(&mail_config).ok_or_else(|| {
+        Error::Other(format!(
+            "Account {} has no enabled mail service to import search hits",
+            account_id
+        ))
+    })?;
+    let crate::backend::mail::SearchHitIdentity {
+        id,
+        uid,
+        body_location: maildir_path,
+    } = backend.search_hit_identity(&account_id, &hit)?;
 
     let date_str = if hit.date > 0 {
         chrono::DateTime::<chrono::Utc>::from_timestamp(hit.date, 0)
@@ -766,6 +745,34 @@ pub async fn unthread_message(state: State<'_, AppState>, message_id: String) ->
     Ok(())
 }
 
+/// The mail backend that owns folder operations for `account`, with the
+/// context it needs.
+fn folder_backend(
+    app: &AppHandle,
+    state: &AppState,
+    account: &db::accounts::AccountFull,
+    action: &str,
+) -> Result<(
+    &'static dyn crate::backend::mail::MailBackend,
+    crate::backend::mail::MailSyncCtx,
+    crate::account::MailAccountConfig,
+)> {
+    let mail_config = account.mail_config();
+    let backend = crate::backend::mail::for_account(&mail_config).ok_or_else(|| {
+        Error::Other(format!(
+            "Account {} has no enabled mail service to {}",
+            account.id, action
+        ))
+    })?;
+    let ctx = crate::backend::mail::MailSyncCtx {
+        events: crate::event::tauri::shared_sink(app.clone()),
+        db: state.db.clone(),
+        data_dir: state.data_dir.clone(),
+        providers: state.providers.clone(),
+    };
+    Ok((backend, ctx, mail_config))
+}
+
 /// Create a new folder on the mail server and register it locally.
 #[tauri::command]
 pub async fn create_folder(
@@ -784,69 +791,19 @@ pub async fn create_folder(
         let conn = state.db.reader();
         db::accounts::get_account_full(&conn, &account_id)?
     };
-
-    if account.mail_protocol_str() == "graph" {
-        // Microsoft Graph: POST /me/mailFolders (or .../childFolders).
-        // folder_path is "parentFolderId/name" (built by the frontend); the
-        // parent component is the parent's Graph folder ID.
-        let (parent_id, folder_name) = split_folder_path(&folder_path);
-        let client = state
-            .providers
-            .graph_client(&account_id, crate::provider::GraphTokenPurpose::Baseline)
-            .await?;
-        client
-            .create_mail_folder(folder_name, parent_id)
-            .await
-            .map_err(|e| {
-                log::error!(
-                    "Failed to create Graph folder '{}' for account {}: {}",
-                    folder_path,
-                    account_id,
-                    e
-                );
-                e
-            })?;
-    } else if account.mail_protocol_str() == "jmap" {
-        // JMAP: Mailbox/set create
-        let jmap_config = state.providers.credentials().jmap_config(&account).await?;
-        let conn_jmap = crate::mail::jmap::JmapConnection::connect_with_clients(
-            &jmap_config,
-            state.providers.transports.jmap_discovery_http.clone(),
-            state.providers.transports.jmap_api_http.clone(),
-            state.providers.transports.jmap_submission_http.clone(),
-        )
-        .await?;
-        // For JMAP, folder_path is "parentId/name" (built by the frontend).
-        // Split to get the parent mailbox ID and the new folder name.
-        let (parent_id, mailbox_name) = split_folder_path(&folder_path);
-        conn_jmap
-            .create_mailbox(&jmap_config, mailbox_name, parent_id)
-            .await?;
-    } else {
-        // IMAP: CREATE (O365 uses XOAUTH2)
-        let credentials = state
-            .providers
-            .credentials()
-            .mail_credentials(&account)
-            .await?;
-        let imap_config = ImapConfig {
-            host: account.imap_host,
-            port: account.imap_port,
-            username: account.username,
-            password: credentials.secret,
-            use_tls: account.use_tls,
-            use_xoauth2: credentials.use_xoauth2,
-        };
-        let folder_for_imap = folder_path.clone();
-        tokio::task::spawn_blocking(move || {
-            let mut conn = crate::mail::imap::ImapConnection::connect(&imap_config)?;
-            conn.create_folder(&folder_for_imap)?;
-            conn.logout();
-            Ok::<(), crate::error::Error>(())
-        })
+    let (backend, ctx, mail_config) = folder_backend(&app, &state, &account, "create folders")?;
+    backend
+        .create_folder(&ctx, &mail_config, &folder_path)
         .await
-        .map_err(|e| Error::Other(format!("Create folder panicked: {}", e)))??;
-    }
+        .map_err(|e| {
+            log::error!(
+                "Failed to create folder '{}' for account {}: {}",
+                folder_path,
+                account_id,
+                e
+            );
+            e
+        })?;
 
     // Don't insert into local DB here — the next sync will discover the folder
     // with the correct server-side path/ID and register it properly.
@@ -914,67 +871,19 @@ pub async fn delete_folder(
         db::accounts::get_account_full(&conn, &account_id)?
     };
 
-    if account.mail_protocol_str() == "graph" {
-        let client = state
-            .providers
-            .graph_client(&account_id, crate::provider::GraphTokenPurpose::Baseline)
-            .await?;
-        client.delete_mail_folder(&folder_path).await.map_err(|e| {
+    let (backend, ctx, mail_config) = folder_backend(&app, &state, &account, "delete folders")?;
+    backend
+        .delete_folder(&ctx, &mail_config, &folder_path)
+        .await
+        .map_err(|e| {
             log::error!(
-                "Failed to delete Graph folder '{}' for account {}: {}",
+                "Failed to delete folder '{}' for account {}: {}",
                 folder_path,
                 account_id,
                 e
             );
             e
         })?;
-    } else if account.mail_protocol_str() == "jmap" {
-        // JMAP: Mailbox/set destroy — folder_path is the mailbox ID
-        let jmap_config = state.providers.credentials().jmap_config(&account).await?;
-        let conn_jmap = crate::mail::jmap::JmapConnection::connect_with_clients(
-            &jmap_config,
-            state.providers.transports.jmap_discovery_http.clone(),
-            state.providers.transports.jmap_api_http.clone(),
-            state.providers.transports.jmap_submission_http.clone(),
-        )
-        .await?;
-        conn_jmap
-            .destroy_mailbox(&jmap_config, &folder_path, true)
-            .await
-            .map_err(|e| {
-                log::error!(
-                    "Failed to delete JMAP folder '{}' for account {}: {}",
-                    folder_path,
-                    account_id,
-                    e
-                );
-                e
-            })?;
-    } else {
-        // IMAP: DELETE
-        let credentials = state
-            .providers
-            .credentials()
-            .mail_credentials(&account)
-            .await?;
-        let imap_config = ImapConfig {
-            host: account.imap_host,
-            port: account.imap_port,
-            username: account.username,
-            password: credentials.secret,
-            use_tls: account.use_tls,
-            use_xoauth2: credentials.use_xoauth2,
-        };
-        let folder_for_imap = folder_path.clone();
-        tokio::task::spawn_blocking(move || {
-            let mut conn = crate::mail::imap::ImapConnection::connect(&imap_config)?;
-            conn.delete_folder(&folder_for_imap)?;
-            conn.logout();
-            Ok::<(), crate::error::Error>(())
-        })
-        .await
-        .map_err(|e| Error::Other(format!("Delete folder panicked: {}", e)))??;
-    }
 
     // Remove from local DB
     {
@@ -1354,7 +1263,7 @@ mod remote_image_safety_tests {
 
 #[cfg(test)]
 mod tests {
-    use super::{finish_with_imap_idle_resume, spawn_with_imap_idle_resume, split_folder_path};
+    use super::{finish_with_imap_idle_resume, spawn_with_imap_idle_resume};
     use crate::error::Error;
     use std::sync::{
         atomic::{AtomicBool, Ordering},
@@ -1530,39 +1439,5 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("server search task failed"));
-    }
-
-    // A bare name with no slash is a top-level folder.
-    #[test]
-    fn split_folder_path_top_level() {
-        assert_eq!(split_folder_path("Projects"), (None, "Projects"));
-    }
-
-    // "parentId/name" yields the parent ID and the leaf name. The parent is a
-    // server-side ID (JMAP mailbox ID / Graph folder ID), so it must not be
-    // confused with the leaf — a regression here once routed Graph/JMAP folder
-    // creation down the IMAP path.
-    #[test]
-    fn split_folder_path_nested() {
-        assert_eq!(
-            split_folder_path("AAMkAGI2parentid/Reports"),
-            (Some("AAMkAGI2parentid"), "Reports")
-        );
-    }
-
-    // A leading slash means an empty parent component — treat as top-level.
-    #[test]
-    fn split_folder_path_empty_parent() {
-        assert_eq!(split_folder_path("/Reports"), (None, "Reports"));
-    }
-
-    // Only the last slash separates parent from leaf; earlier slashes (e.g. in
-    // a Graph base64 ID) stay with the parent component.
-    #[test]
-    fn split_folder_path_splits_on_last_slash() {
-        assert_eq!(
-            split_folder_path("grand/parent/Child"),
-            (Some("grand/parent"), "Child")
-        );
     }
 }

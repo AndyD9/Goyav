@@ -446,8 +446,60 @@ impl MailBackend for ImapMailBackend {
         .map_err(|e| Error::Other(format!("IMAP search task panicked: {}", e)))?
     }
 
+    fn search_hit_identity(
+        &self,
+        account_id: &str,
+        hit: &crate::message::SearchHit,
+    ) -> Result<super::SearchHitIdentity> {
+        // `{account_id}_{folder_path}_{uid}`, as IMAP sync writes it.
+        let uid = hit
+            .uid
+            .ok_or_else(|| Error::Other("IMAP search hit is missing UID".into()))?;
+        Ok(super::SearchHitIdentity {
+            id: crate::message::BackendMessageRef::imap(&hit.folder_path, uid).to_db_id(account_id),
+            uid,
+            body_location: String::new(),
+        })
+    }
+
     fn draft_storage_format(&self) -> DraftStorageFormat {
         DraftStorageFormat::RawMime
+    }
+
+    async fn create_folder(
+        &self,
+        ctx: &MailSyncCtx,
+        account: &MailAccountConfig,
+        folder_path: &str,
+    ) -> Result<()> {
+        let imap_config = build_imap_config(ctx, account).await?;
+        let folder_path = folder_path.to_string();
+        tokio::task::spawn_blocking(move || {
+            let mut conn = crate::mail::imap::ImapConnection::connect(&imap_config)?;
+            conn.create_folder(&folder_path)?;
+            conn.logout();
+            Ok(())
+        })
+        .await
+        .map_err(|e| Error::Other(format!("Create folder panicked: {}", e)))?
+    }
+
+    async fn delete_folder(
+        &self,
+        ctx: &MailSyncCtx,
+        account: &MailAccountConfig,
+        folder_path: &str,
+    ) -> Result<()> {
+        let imap_config = build_imap_config(ctx, account).await?;
+        let folder_path = folder_path.to_string();
+        tokio::task::spawn_blocking(move || {
+            let mut conn = crate::mail::imap::ImapConnection::connect(&imap_config)?;
+            conn.delete_folder(&folder_path)?;
+            conn.logout();
+            Ok(())
+        })
+        .await
+        .map_err(|e| Error::Other(format!("Delete folder panicked: {}", e)))?
     }
 
     async fn save_draft(

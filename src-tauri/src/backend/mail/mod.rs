@@ -244,6 +244,15 @@ pub trait MailBackend: Send + Sync {
         query: &SearchQuery,
     ) -> Result<Vec<SearchHit>>;
 
+    /// The local message row a server-search hit from this provider maps
+    /// to, matching the ids its sync writes so the next sync reconciles the
+    /// row instead of duplicating it.
+    fn search_hit_identity(
+        &self,
+        account_id: &str,
+        hit: &crate::message::SearchHit,
+    ) -> Result<SearchHitIdentity>;
+
     /// Describe the draft representation this provider can persist.
     fn draft_storage_format(&self) -> DraftStorageFormat;
 
@@ -253,6 +262,27 @@ pub trait MailBackend: Send + Sync {
         ctx: &MailSyncCtx,
         account: &MailAccountConfig,
         request: &DraftSaveRequest,
+    ) -> Result<()>;
+
+    /// Create a folder on the server. `folder_path` is the path the
+    /// frontend builds as "parent/name": the full folder path for IMAP, the
+    /// parent's server id plus the new name for JMAP and Graph (see
+    /// [`split_folder_path`]). The folder appears locally on the next sync.
+    async fn create_folder(
+        &self,
+        ctx: &MailSyncCtx,
+        account: &MailAccountConfig,
+        folder_path: &str,
+    ) -> Result<()>;
+
+    /// Delete a folder on the server. `folder_path` is the stored folder
+    /// path: the IMAP path, or the JMAP mailbox / Graph folder id. The
+    /// caller checks it is not a system folder and removes the local row.
+    async fn delete_folder(
+        &self,
+        ctx: &MailSyncCtx,
+        account: &MailAccountConfig,
+        folder_path: &str,
     ) -> Result<()>;
 
     /// Create the per-account executor the ops worker drives queued
@@ -302,6 +332,28 @@ pub fn registry() -> &'static [&'static dyn MailBackend] {
 /// pre-trait dispatch chains all ended in an IMAP else-branch, and
 /// pre-binding accounts rely on it. Empty (no enabled mail binding)
 /// returns `None`; callers skip those accounts.
+/// Local identity of a server-search hit: the message row id, its IMAP UID
+/// (0 elsewhere) and the persisted body location (empty when the body is
+/// fetched the usual way).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchHitIdentity {
+    pub id: String,
+    pub uid: u32,
+    pub body_location: String,
+}
+
+/// Split a "parent/name" folder path built by the frontend for JMAP and
+/// Graph, where the parent is a server-side id. Only the last slash
+/// separates the two, since ids may contain slashes; an empty or missing
+/// parent means a top-level folder.
+pub(crate) fn split_folder_path(folder_path: &str) -> (Option<&str>, &str) {
+    match folder_path.rsplit_once('/') {
+        Some((parent, name)) if !parent.is_empty() => (Some(parent), name),
+        Some((_, name)) => (None, name),
+        None => (None, folder_path),
+    }
+}
+
 pub fn for_account(account: &MailAccountConfig) -> Option<&'static dyn MailBackend> {
     let proto = account.protocol.as_str();
     if proto.is_empty() {
@@ -314,6 +366,103 @@ pub fn for_account(account: &MailAccountConfig) -> Option<&'static dyn MailBacke
             .find(|b| b.protocol() == proto)
             .unwrap_or(&imap::ImapMailBackend),
     )
+}
+
+#[cfg(test)]
+mod folder_and_search_identity_tests {
+    use super::*;
+
+    fn hit(folder_path: &str, uid: Option<u32>, backend_id: &str) -> SearchHit {
+        SearchHit {
+            account_id: "acct".into(),
+            folder_path: folder_path.into(),
+            uid,
+            message_id: None,
+            backend_id: backend_id.into(),
+            subject: String::new(),
+            from_name: None,
+            from_email: None,
+            date: 0,
+            snippet: None,
+        }
+    }
+
+    // These ids must match what each provider's sync writes, or an imported
+    // hit would be duplicated by the next sync.
+    #[test]
+    fn imap_hit_uses_folder_and_uid() {
+        let identity = imap::ImapMailBackend
+            .search_hit_identity("acct", &hit("INBOX", Some(42), "ignored"))
+            .unwrap();
+        assert_eq!(
+            identity,
+            SearchHitIdentity {
+                id: "acct_INBOX_42".into(),
+                uid: 42,
+                body_location: String::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn imap_hit_without_uid_is_rejected() {
+        assert!(imap::ImapMailBackend
+            .search_hit_identity("acct", &hit("INBOX", None, "x"))
+            .is_err());
+    }
+
+    #[test]
+    fn jmap_hit_uses_mailbox_and_email_id() {
+        let identity = jmap::JmapMailBackend
+            .search_hit_identity("acct", &hit("mbox1", None, "email9"))
+            .unwrap();
+        assert_eq!(
+            identity.id,
+            BackendMessageRef::jmap("mbox1", "email9").to_db_id("acct")
+        );
+        assert_eq!((identity.uid, identity.body_location.as_str()), (0, ""));
+    }
+
+    #[test]
+    fn graph_hit_streams_its_body_on_demand() {
+        let identity = graph::GraphMailBackend
+            .search_hit_identity("acct", &hit("folder", None, "AAMk-id"))
+            .unwrap();
+        assert_eq!(
+            identity.id,
+            BackendMessageRef::graph("AAMk-id").to_db_id("acct")
+        );
+        assert_eq!(
+            identity.body_location,
+            BodyLocation::GraphRemote("AAMk-id".into()).to_persisted()
+        );
+    }
+
+    #[test]
+    fn split_folder_path_top_level() {
+        assert_eq!(split_folder_path("Projects"), (None, "Projects"));
+    }
+
+    #[test]
+    fn split_folder_path_nested() {
+        assert_eq!(
+            split_folder_path("AAMkAGI2parentid/Reports"),
+            (Some("AAMkAGI2parentid"), "Reports")
+        );
+    }
+
+    #[test]
+    fn split_folder_path_empty_parent() {
+        assert_eq!(split_folder_path("/Reports"), (None, "Reports"));
+    }
+
+    #[test]
+    fn split_folder_path_splits_on_last_slash() {
+        assert_eq!(
+            split_folder_path("grand/parent/Child"),
+            (Some("grand/parent"), "Child")
+        );
+    }
 }
 
 #[cfg(test)]

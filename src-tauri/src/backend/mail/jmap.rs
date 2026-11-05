@@ -126,6 +126,20 @@ impl MailBackend for JmapMailBackend {
         DraftStorageFormat::RawMime
     }
 
+    fn search_hit_identity(
+        &self,
+        account_id: &str,
+        hit: &crate::message::SearchHit,
+    ) -> Result<super::SearchHitIdentity> {
+        // `{account_id}_{mailbox_id}_{email_id}`, as jmap_sync writes it.
+        Ok(super::SearchHitIdentity {
+            id: crate::message::BackendMessageRef::jmap(&hit.folder_path, &hit.backend_id)
+                .to_db_id(account_id),
+            uid: 0,
+            body_location: String::new(),
+        })
+    }
+
     async fn save_draft(
         &self,
         ctx: &MailSyncCtx,
@@ -134,6 +148,35 @@ impl MailBackend for JmapMailBackend {
     ) -> Result<()> {
         let (config, connection) = connect(ctx, account).await?;
         connection.save_draft(&config, &request.raw_message).await
+    }
+
+    async fn create_folder(
+        &self,
+        ctx: &MailSyncCtx,
+        account: &MailAccountConfig,
+        folder_path: &str,
+    ) -> Result<()> {
+        // "parentMailboxId/name": Mailbox/set create.
+        let (parent_id, mailbox_name) = super::split_folder_path(folder_path);
+        let (config, connection) = connect(ctx, account).await?;
+        connection
+            .create_mailbox(&config, mailbox_name, parent_id)
+            .await?;
+        Ok(())
+    }
+
+    async fn delete_folder(
+        &self,
+        ctx: &MailSyncCtx,
+        account: &MailAccountConfig,
+        folder_path: &str,
+    ) -> Result<()> {
+        // The stored path is the mailbox id: Mailbox/set destroy.
+        let (config, connection) = connect(ctx, account).await?;
+        connection
+            .destroy_mailbox(&config, folder_path, true)
+            .await?;
+        Ok(())
     }
 
     fn op_executor(&self) -> Box<dyn MailOpExecutor> {

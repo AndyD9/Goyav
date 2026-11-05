@@ -674,6 +674,22 @@ impl MailBackend for GraphMailBackend {
         super::DraftStorageFormat::StructuredText
     }
 
+    fn search_hit_identity(
+        &self,
+        account_id: &str,
+        hit: &crate::message::SearchHit,
+    ) -> Result<super::SearchHitIdentity> {
+        // `{account_id}_{graph_id}`, as Graph sync writes it; the
+        // `graph:{id}` body location makes get_message_body stream the body
+        // on demand.
+        Ok(super::SearchHitIdentity {
+            id: crate::message::BackendMessageRef::graph(&hit.backend_id).to_db_id(account_id),
+            uid: 0,
+            body_location: crate::message::BodyLocation::GraphRemote(hit.backend_id.clone())
+                .to_persisted(),
+        })
+    }
+
     async fn save_draft(
         &self,
         ctx: &MailSyncCtx,
@@ -693,6 +709,37 @@ impl MailBackend for GraphMailBackend {
                 body_text: request.body_text.clone(),
             })
             .await
+    }
+
+    async fn create_folder(
+        &self,
+        ctx: &MailSyncCtx,
+        account: &MailAccountConfig,
+        folder_path: &str,
+    ) -> Result<()> {
+        // "parentFolderId/name": POST /me/mailFolders (or .../childFolders).
+        let (parent_id, folder_name) = super::split_folder_path(folder_path);
+        let client = ctx
+            .providers
+            .graph_client(&account.id, crate::provider::GraphTokenPurpose::Baseline)
+            .await?;
+        client.create_mail_folder(folder_name, parent_id).await?;
+        Ok(())
+    }
+
+    async fn delete_folder(
+        &self,
+        ctx: &MailSyncCtx,
+        account: &MailAccountConfig,
+        folder_path: &str,
+    ) -> Result<()> {
+        // The stored path is the Graph folder id.
+        let client = ctx
+            .providers
+            .graph_client(&account.id, crate::provider::GraphTokenPurpose::Baseline)
+            .await?;
+        client.delete_mail_folder(folder_path).await?;
+        Ok(())
     }
 
     fn op_executor(&self) -> Box<dyn MailOpExecutor> {
