@@ -19,6 +19,7 @@ import { parseMailto } from "@/lib/mailto";
 import * as api from "@/lib/tauri";
 import { t, tn, dateLocale } from "@/i18n";
 import { withProgressToast } from "@/lib/loading";
+import { showToast as showAppToast } from "@/lib/toast";
 import LoadingState from "@/components/common/LoadingState.vue";
 
 defineProps<{
@@ -745,7 +746,7 @@ async function runReaderAction(
     messagesStore.activeMessageId = null;
   } catch (e) {
     console.error(`${kind} failed:`, e);
-    showToast(t("Action failed: {error}", { error: e instanceof Error ? e.message : String(e) }), "error", 6000);
+    showAppToast(t("Action failed: {error}", { error: e instanceof Error ? e.message : String(e) }), "error", 6000);
   } finally {
     readerActionBusy.value = null;
   }
