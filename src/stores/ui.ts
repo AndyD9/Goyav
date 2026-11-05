@@ -93,6 +93,12 @@ export const useUiStore = defineStore("ui", () => {
     notificationPreview.value = enabled;
     localStorage.setItem("goyav-notification-preview", String(enabled));
   }
+  // Unread inbox count shown as a badge on the app icon (Dock, taskbar).
+  const unreadBadge = ref(localStorage.getItem("goyav-unread-badge") !== "false");
+  function setUnreadBadge(enabled: boolean) {
+    unreadBadge.value = enabled;
+    localStorage.setItem("goyav-unread-badge", String(enabled));
+  }
 
   // 0 = Sunday, 1 = Monday, 6 = Saturday.
   const weekStartDay = ref<number>(
@@ -324,5 +330,7 @@ export const useUiStore = defineStore("ui", () => {
     setMailNotifications,
     notificationPreview,
     setNotificationPreview,
+    unreadBadge,
+    setUnreadBadge,
   };
 });

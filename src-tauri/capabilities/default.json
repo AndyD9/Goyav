@@ -10,6 +10,7 @@
     "core:window:allow-destroy",
     "core:window:allow-set-focus",
     "core:window:allow-set-decorations",
+    "core:window:allow-set-badge-count",
     "notification:default",
     "opener:allow-open-url",
     "opener:allow-default-urls",

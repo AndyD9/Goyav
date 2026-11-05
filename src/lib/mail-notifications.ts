@@ -78,7 +78,7 @@ export function buildMailNotification(
   return { title, body: latest ? `${from}\n${clip(latest, SNIPPET_LENGTH)}` : from };
 }
 
-function findInbox(folders: Folder[]): Folder | undefined {
+export function findInbox(folders: Folder[]): Folder | undefined {
   for (const folder of folders) {
     if (folder.folder_type === "inbox") return folder;
     const nested = findInbox(folder.children);

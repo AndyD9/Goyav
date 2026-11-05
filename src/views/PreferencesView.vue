@@ -204,6 +204,18 @@ function scrollHighlightedIntoView() {
               />
             </div>
           </div>
+          <div class="prefs-row">
+            <label class="prefs-label" for="prefs-unread-badge">{{ t('Show the unread count on the app icon') }}</label>
+            <div class="prefs-toggle">
+              <input
+                id="prefs-unread-badge"
+                type="checkbox"
+                :checked="uiStore.unreadBadge"
+                data-testid="prefs-unread-badge"
+                @change="(e) => uiStore.setUnreadBadge((e.target as HTMLInputElement).checked)"
+              />
+            </div>
+          </div>
         </section>
 
         <!-- Date and Time -->

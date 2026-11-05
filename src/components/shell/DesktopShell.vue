@@ -8,6 +8,7 @@ import OperationsPanel from "@/components/common/OperationsPanel.vue";
 import LinkPopup from "@/components/common/LinkPopup.vue";
 import WhatsNewDialog from "@/components/changelog/WhatsNewDialog.vue";
 import MailNotifier from "@/components/common/MailNotifier.vue";
+import UnreadBadge from "@/components/common/UnreadBadge.vue";
 import UpdateNotice from "@/components/common/UpdateNotice.vue";
 import { useUpdatesStore } from "@/stores/updates";
 
@@ -62,6 +63,7 @@ onMounted(() => {
     <LinkPopup />
     <WhatsNewDialog />
     <MailNotifier />
+    <UnreadBadge />
     <UpdateNotice />
   </div>
 </template>

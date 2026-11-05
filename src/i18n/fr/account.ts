@@ -193,6 +193,8 @@ export const account: Record<string, string> = {
   "New mail notifications": "Notifications des nouveaux mails",
   "Show sender, subject and text in notifications":
     "Afficher l'expéditeur, l'objet et le texte dans les notifications",
+  "Show the unread count on the app icon":
+    "Afficher le nombre de non-lus sur l'icône de l'app",
 
   // Main menu
   "Preferences…": "Préférences…",
