@@ -774,6 +774,69 @@ impl MailOpExecutor for ImapOpExecutor {
             return Ok(());
         }
 
+        // Flag STOREs are idempotent, so a failed attempt can be replayed in
+        // place on a fresh connection. Gmail in particular answers
+        // `NO System Error (Failure)` transiently (typically while other
+        // connections of the same account are busy); without this the op
+        // waits in the outbox until the next sync drain (minutes later).
+        if let MailOp::SetFlags { mutations } = &op {
+            let mutations = mutations.clone();
+            let mut attempt = 1;
+            loop {
+                let op = MailOp::SetFlags {
+                    mutations: mutations.clone(),
+                };
+                match self.execute_on_connection(ctx, account_id, op).await {
+                    Err(error)
+                        if attempt < SET_FLAGS_MAX_ATTEMPTS && matches!(error, Error::Imap(_)) =>
+                    {
+                        log::warn!(
+                            "IMAP set_flags attempt {}/{} failed for account {}: {}; retrying on a fresh connection",
+                            attempt,
+                            SET_FLAGS_MAX_ATTEMPTS,
+                            account_id,
+                            error
+                        );
+                        attempt += 1;
+                    }
+                    result => return result,
+                }
+            }
+        }
+
+        self.execute_on_connection(ctx, account_id, op).await
+    }
+
+    async fn execute_replayed_send(
+        &mut self,
+        ctx: &MailSyncCtx,
+        account_id: &str,
+        op: MailOp,
+    ) -> Result<super::SendPostprocess> {
+        self.deliver_smtp_send(ctx, account_id, op).await
+    }
+
+    async fn shutdown(&mut self) {
+        if let Some(state) = self.imap_state.take() {
+            state.conn.logout();
+        }
+    }
+}
+
+/// Total attempts (first try included) for an IMAP flag update before it is
+/// handed to the offline outbox. Each retry reconnects, and the reconnect
+/// path applies its own exponential backoff (1s, 2s, ...).
+const SET_FLAGS_MAX_ATTEMPTS: u32 = 3;
+
+impl ImapOpExecutor {
+    /// Run one IMAP op on the persistent connection, dropping the connection
+    /// on failure so the next call reconnects.
+    async fn execute_on_connection(
+        &mut self,
+        ctx: &MailSyncCtx,
+        account_id: &str,
+        op: MailOp,
+    ) -> Result<()> {
         // Ensure we have a live connection
         self.ensure_imap_connection(ctx, account_id).await?;
 
@@ -799,21 +862,6 @@ impl MailOpExecutor for ImapOpExecutor {
         }
 
         result
-    }
-
-    async fn execute_replayed_send(
-        &mut self,
-        ctx: &MailSyncCtx,
-        account_id: &str,
-        op: MailOp,
-    ) -> Result<super::SendPostprocess> {
-        self.deliver_smtp_send(ctx, account_id, op).await
-    }
-
-    async fn shutdown(&mut self) {
-        if let Some(state) = self.imap_state.take() {
-            state.conn.logout();
-        }
     }
 }
 
