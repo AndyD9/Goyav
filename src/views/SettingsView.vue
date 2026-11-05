@@ -15,6 +15,7 @@ import AccountFormModal from "@/components/settings/AccountFormModal.vue";
 import ArchivedGraphSummary from "@/components/calendar/ArchivedGraphSummary.vue";
 import logoUrl from "@/assets/goyav-logo.png";
 import ChangelogList from "@/components/changelog/ChangelogList.vue";
+import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import { t, locale, setLocale, LOCALES } from "@/i18n";
 import {
   accountSecondaryLabel,
@@ -46,6 +47,7 @@ function setBlockRemoteImages(v: boolean) {
   blockRemoteImages.value = v;
   localStorage.setItem("chithi-block-remote-images", String(v));
 }
+
 
 const themeLabel = computed(() =>
   uiStore.theme === "dark" ? t("Dark") : t("Light"),
@@ -631,93 +633,58 @@ watch([
 
 
     <!-- Delete Confirmation Modal -->
-    <Teleport to="body">
-      <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="closeDeleteConfirm">
-        <div class="modal modal-sm">
-          <div class="modal-body">
-            <h3 class="confirm-title">{{ t("Delete Account") }}</h3>
-            <p class="confirm-text">{{ t("Are you sure you want to delete this account? This action cannot be undone.") }}</p>
-            <div
-              v-if="deletingZoomAccount"
-              class="zoom-abandon-warning"
-              data-testid="zoom-abandon-warning"
-            >
-              <strong>{{ t("Remote Zoom meetings may remain.") }}</strong>
-              <p>
-                {{ t("If normal deletion cannot clean up Zoom, you can remove only the local account. Meetings already created in Zoom may remain active and must be removed from Zoom separately.") }}
-              </p>
-              <label class="zoom-abandon-acknowledgement">
-                <input
-                  v-model="abandonZoomAcknowledged"
-                  type="checkbox"
-                  :disabled="deleteInProgress"
-                  data-testid="zoom-abandon-checkbox"
-                />
-                {{ t("I understand that remote Zoom meetings may remain") }}
-              </label>
-            </div>
-            <div
-              v-if="deleteProviderLookupFailed"
-              class="zoom-abandon-warning"
-              data-testid="delete-provider-lookup-warning"
-            >
-              <strong>{{ t("Remote resource status could not be checked.") }}</strong>
-              <p>
-                {{ t("The account configuration could not be loaded. Deleting the local account may leave remote meetings or rooms behind.") }}
-              </p>
-            </div>
-            <div
-              v-if="deletingVisioAccount"
-              class="zoom-abandon-warning"
-              data-testid="visio-delete-warning"
-            >
-              <strong>{{ t("Remote Visio rooms will remain.") }}</strong>
-              <p>
-                {{ t("Deleting this local account does not delete rooms already created in La Suite Visio. Goyav will forget its associations with those rooms, so remove them from Visio separately if they should no longer be available.") }}
-              </p>
-            </div>
-            <p
-              v-if="deleteError"
-              class="delete-error"
-              role="alert"
-              data-testid="delete-account-error"
-            >
-              {{ t("Could not delete the account: {error}", { error: deleteError }) }}
-            </p>
-          </div>
-          <div class="modal-footer">
-            <button
-              class="btn-secondary"
-              :disabled="deleteInProgress"
-              @click="closeDeleteConfirm"
-            >
-              {{ t("Cancel") }}
-            </button>
-            <button
-              class="btn-danger"
-              data-testid="delete-account-confirm"
-              :disabled="deleteProviderLoading || deleteInProgress"
-              :aria-busy="deleteInProgress"
-              @click="doDelete"
-            >
-              <svg
-                v-if="deleteInProgress"
-                class="btn-spinner"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-                stroke-linecap="round"
-                aria-hidden="true"
-              >
-                <path d="M21 12a9 9 0 1 1-6.22-8.56" />
-              </svg>
-              {{ deleteInProgress ? t("Deleting…") : deleteProviderLoading ? t("Checking…") : deletingZoomAccount && abandonZoomAcknowledged ? t("Delete locally") : t("Delete") }}
-            </button>
-          </div>
-        </div>
+    <ConfirmDialog
+      :open="showDeleteConfirm"
+      :title="t('Delete Account')"
+      :message="t('Are you sure you want to delete this account? This action cannot be undone.')"
+      :confirm-label="deleteProviderLoading ? t('Checking…') : deletingZoomAccount && abandonZoomAcknowledged ? t('Delete locally') : t('Delete')"
+      :busy="deleteInProgress"
+      :confirm-disabled="deleteProviderLoading"
+      :error="deleteError ? t('Could not delete the account: {error}', { error: deleteError }) : null"
+      test-id="delete-account"
+      @confirm="doDelete"
+      @cancel="closeDeleteConfirm"
+    >
+      <div
+        v-if="deletingZoomAccount"
+        class="zoom-abandon-warning"
+        data-testid="zoom-abandon-warning"
+      >
+        <strong>{{ t("Remote Zoom meetings may remain.") }}</strong>
+        <p>
+          {{ t("If normal deletion cannot clean up Zoom, you can remove only the local account. Meetings already created in Zoom may remain active and must be removed from Zoom separately.") }}
+        </p>
+        <label class="zoom-abandon-acknowledgement">
+          <input
+            v-model="abandonZoomAcknowledged"
+            type="checkbox"
+            :disabled="deleteInProgress"
+            data-testid="zoom-abandon-checkbox"
+          />
+          {{ t("I understand that remote Zoom meetings may remain") }}
+        </label>
       </div>
-    </Teleport>
+      <div
+        v-if="deleteProviderLookupFailed"
+        class="zoom-abandon-warning"
+        data-testid="delete-provider-lookup-warning"
+      >
+        <strong>{{ t("Remote resource status could not be checked.") }}</strong>
+        <p>
+          {{ t("The account configuration could not be loaded. Deleting the local account may leave remote meetings or rooms behind.") }}
+        </p>
+      </div>
+      <div
+        v-if="deletingVisioAccount"
+        class="zoom-abandon-warning"
+        data-testid="visio-delete-warning"
+      >
+        <strong>{{ t("Remote Visio rooms will remain.") }}</strong>
+        <p>
+          {{ t("Deleting this local account does not delete rooms already created in La Suite Visio. Goyav will forget its associations with those rooms, so remove them from Visio separately if they should no longer be available.") }}
+        </p>
+      </div>
+    </ConfirmDialog>
 </template>
 
 <style scoped>
@@ -1082,140 +1049,6 @@ watch([
   line-height: 1.6;
 }
 
-/* Modal */
-.modal-overlay {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  width: 480px;
-  max-height: 85vh;
-  overflow-y: auto;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-}
-
-.modal-sm {
-  width: 400px;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.modal-header h3 {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.modal-close {
-  font-size: 20px;
-  color: var(--color-text-muted);
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.modal-close:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text);
-}
-
-.modal-body {
-  padding: 20px;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--color-border);
-}
-
-.btn-secondary {
-  height: 40px;
-  padding: 0 20px;
-  background: var(--color-bg-tertiary);
-  border-radius: 4px;
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--color-text);
-  transition: background 0.12s;
-}
-
-.btn-secondary:hover {
-  background: var(--color-border);
-}
-
-.btn-danger {
-  height: 40px;
-  padding: 0 20px;
-  background: var(--color-danger);
-  color: white;
-  border-radius: 4px;
-  font-weight: 500;
-  font-size: 16px;
-}
-
-.confirm-title {
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-.confirm-text {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  line-height: 1.5;
-}
-
-.btn-danger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.btn-danger:disabled,
-.btn-secondary:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.btn-spinner {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  animation: delete-spin 0.8s linear infinite;
-}
-
-@keyframes delete-spin {
-  to { transform: rotate(360deg); }
-}
-
-.delete-error {
-  margin-top: 16px;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--color-danger-text, var(--color-danger));
-}
-
 .zoom-abandon-warning {
   margin-top: 16px;
   padding: 12px;
@@ -1445,6 +1278,7 @@ watch([
   cursor: pointer;
 }
 
+
 .mobile-setting-label {
   flex: 1;
   min-width: 0;
@@ -1490,65 +1324,5 @@ watch([
 
 .toggle-pill.on .toggle-thumb {
   transform: translateX(18px);
-}
-
-/* ============================================================
-   Edit-account modal: sheet presentation on mobile (§13)
-   ============================================================ */
-@media (max-width: 720px) {
-  .modal-overlay {
-    align-items: flex-end;
-    background: rgba(20, 14, 6, 0.4);
-  }
-
-  .modal {
-    width: 100%;
-    max-width: 100%;
-    height: calc(100vh - 48px);
-    max-height: calc(100vh - 48px);
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-    border-top-left-radius: var(--radius-sheet, 16px);
-    border-top-right-radius: var(--radius-sheet, 16px);
-    box-shadow: var(--shadow-sheet, 0 -12px 30px rgba(30, 20, 10, 0.18));
-    position: relative;
-  }
-
-  /* Grabber at the top of the sheet. */
-  .modal::before {
-    content: "";
-    display: block;
-    width: 40px;
-    height: 4px;
-    border-radius: 100px;
-    background: var(--color-border);
-    margin: 8px auto 4px;
-    flex-shrink: 0;
-  }
-
-  .modal-header {
-    justify-content: center;
-    padding: 4px 16px 12px;
-  }
-
-  .modal-header h3 {
-    font-size: 15px;
-    font-weight: 600;
-    flex: 1;
-    text-align: center;
-  }
-
-  .modal-close {
-    position: absolute;
-    top: 16px;
-    right: 12px;
-  }
-
-  /* Dedicated "Remove account" action mobile pattern (§13 footer). */
-  .btn-danger {
-    background: var(--color-bg);
-    color: var(--color-danger-text);
-    border: 1px solid var(--color-danger);
-  }
 }
 </style>

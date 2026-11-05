@@ -15,6 +15,7 @@ import BooksSidebar from "@/components/contacts/BooksSidebar.vue";
 import ContactListPanel from "@/components/contacts/ContactListPanel.vue";
 import ContactDetailPanel from "@/components/contacts/ContactDetailPanel.vue";
 import MergeDialog from "@/components/contacts/MergeDialog.vue";
+import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import MobileContactsPane from "@/components/contacts/MobileContactsPane.vue";
 
 const accountsStore = useAccountsStore();
@@ -451,48 +452,16 @@ async function onMerged(surviving: Contact) {
     </div>
 
     <!-- Delete Confirm -->
-    <Teleport to="body">
-      <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="closeDeleteConfirm">
-        <div class="modal modal-sm">
-          <div class="modal-body">
-            <h3 class="confirm-title">{{ t('Delete Contact') }}</h3>
-            <p class="confirm-text">{{ t('Are you sure? This cannot be undone.') }}</p>
-            <p
-              v-if="deleteError"
-              class="delete-error"
-              role="alert"
-              data-testid="delete-contact-error"
-            >
-              {{ t('Error: {error}', { error: deleteError }) }}
-            </p>
-          </div>
-          <div class="modal-footer">
-            <button class="btn-cancel" :disabled="deleteInProgress" @click="closeDeleteConfirm">{{ t('Cancel') }}</button>
-            <button
-              class="btn-delete"
-              data-testid="delete-contact-confirm"
-              :disabled="deleteInProgress"
-              :aria-busy="deleteInProgress"
-              @click="doDelete"
-            >
-              <svg
-                v-if="deleteInProgress"
-                class="btn-spinner spinning"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-                stroke-linecap="round"
-                aria-hidden="true"
-              >
-                <path d="M21 12a9 9 0 1 1-6.22-8.56" />
-              </svg>
-              {{ deleteInProgress ? t('Deleting…') : t('Delete') }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <ConfirmDialog
+      :open="showDeleteConfirm"
+      :title="t('Delete Contact')"
+      :message="t('Are you sure? This cannot be undone.')"
+      :busy="deleteInProgress"
+      :error="deleteError ? t('Error: {error}', { error: deleteError }) : null"
+      test-id="delete-contact"
+      @confirm="doDelete"
+      @cancel="closeDeleteConfirm"
+    />
 
     <!-- Merge: field-by-field picker dialog (#129) -->
     <MergeDialog :pair="mergePair" @merged="onMerged" @cancel="mergePair = null" />
@@ -643,51 +612,4 @@ async function onMerged(surviving: Contact) {
   flex: 1;
   min-height: 0;
 }
-
-
-/* Modal */
-.modal-overlay {
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 1000;
-}
-
-.modal {
-  background: var(--color-bg-secondary);
-  border-radius: 12px;
-  width: 540px;
-  max-height: 85vh;
-  overflow-y: auto;
-  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
-}
-.modal-sm { width: 400px; }
-
-.modal-body { padding: 20px; }
-
-.modal-footer {
-  display: flex; justify-content: flex-end; gap: 8px;
-  padding: 12px 20px;
-  border-top: 0.8px solid var(--color-border);
-}
-
-.btn-cancel {
-  height: 32px; padding: 0 20px; background: var(--color-bg-tertiary);
-  border-radius: 4px; font-size: 16px; font-weight: 500; color: var(--color-text);
-}
-.btn-delete {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  height: 32px; padding: 0 20px; background: var(--color-danger);
-  border-radius: 4px; font-size: 16px; font-weight: 500; color: white;
-}
-.btn-cancel:disabled,
-.btn-delete:disabled { opacity: 0.6; cursor: default; }
-.btn-spinner { width: 16px; height: 16px; flex-shrink: 0; }
-.delete-error {
-  margin-top: 12px; font-size: 13px; line-height: 1.45;
-  color: var(--color-danger-text, var(--color-danger));
-}
-
-.confirm-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
-.confirm-text { font-size: 13px; color: var(--color-text-secondary); line-height: 1.5; }
 </style>

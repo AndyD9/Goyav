@@ -1,16 +1,41 @@
 <script setup lang="ts">
+import { ref, toRef } from "vue";
+import { t } from "@/i18n";
+import { dialogTitleId, useDialogFocus } from "@/lib/dialog-focus";
+
 defineOptions({ inheritAttrs: false });
-defineProps<{ open: boolean; title: string; modalClass?: string }>();
+const props = defineProps<{ open: boolean; title: string; modalClass?: string }>();
 const emit = defineEmits<{ close: [] }>();
+
+const dialog = ref<HTMLElement | null>(null);
+const titleId = dialogTitleId();
+const { onKeydown } = useDialogFocus(toRef(props, "open"), dialog, () => emit("close"));
 </script>
 
 <template>
   <Teleport to="body">
     <div v-if="open" class="modal-overlay" @click.self="emit('close')">
-      <div class="modal" :class="modalClass" v-bind="$attrs">
+      <div
+        ref="dialog"
+        class="modal"
+        :class="modalClass"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="titleId"
+        tabindex="-1"
+        v-bind="$attrs"
+        @keydown="onKeydown"
+      >
         <div class="modal-header">
-          <h3>{{ title }}</h3>
-          <button class="modal-close" @click="emit('close')">&times;</button>
+          <h3 :id="titleId">{{ title }}</h3>
+          <button
+            type="button"
+            class="modal-close"
+            :aria-label="t('Close')"
+            @click="emit('close')"
+          >
+            <span aria-hidden="true">&times;</span>
+          </button>
         </div>
         <div class="modal-body">
           <slot />
@@ -65,6 +90,10 @@ const emit = defineEmits<{ close: [] }>();
   border-radius: 8px;
   display: grid;
   place-items: center;
+}
+
+.modal:focus {
+  outline: none;
 }
 
 .modal-close:hover {
