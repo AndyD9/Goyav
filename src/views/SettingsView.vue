@@ -41,13 +41,6 @@ watch(() => accountsStore.accounts.map((account) => account.id), (ids) => {
     console.error("Settings: archived calendar read failed:", error));
 }, { immediate: true });
 
-// Mobile toggles — persist to localStorage so they survive reloads.
-const blockRemoteImages = ref(localStorage.getItem("chithi-block-remote-images") !== "false");
-function setBlockRemoteImages(v: boolean) {
-  blockRemoteImages.value = v;
-  localStorage.setItem("chithi-block-remote-images", String(v));
-}
-
 
 const themeLabel = computed(() =>
   uiStore.theme === "dark" ? t("Dark") : t("Light"),
@@ -365,29 +358,6 @@ watch([
             <p>{{ t("Cached events and action history are retained read-only.") }}</p>
             <ArchivedGraphSummary :calendars="calendarStore.archivedGraphCalendars" />
           </template>
-        </div>
-      </div>
-
-      <!-- Privacy & storage -->
-      <div class="section">
-        <div class="section-label">{{ t("Privacy & storage") }}</div>
-        <div class="section-card">
-          <label class="mobile-setting-row toggle">
-            <span class="mobile-setting-label">{{ t("Block remote images") }}</span>
-            <input
-              type="checkbox"
-              class="toggle-input"
-              :checked="blockRemoteImages"
-              @change="setBlockRemoteImages(($event.target as HTMLInputElement).checked)"
-            />
-            <span class="toggle-pill" :class="{ on: blockRemoteImages }">
-              <span class="toggle-thumb"></span>
-            </span>
-          </label>
-          <div class="mobile-setting-row static">
-            <span class="mobile-setting-label">{{ t("Cache size") }}</span>
-            <span class="mobile-setting-value">—</span>
-          </div>
         </div>
       </div>
 
@@ -1273,11 +1243,6 @@ watch([
   cursor: default;
 }
 
-.mobile-setting-row.toggle {
-  position: relative;
-  cursor: pointer;
-}
-
 
 .mobile-setting-label {
   flex: 1;
@@ -1288,41 +1253,5 @@ watch([
   flex-shrink: 0;
   color: var(--color-text-muted);
   font-size: 13px;
-}
-
-.toggle-input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.toggle-pill {
-  position: relative;
-  width: 48px;
-  height: 28px;
-  border-radius: 999px;
-  background: var(--color-border);
-  transition: background 0.18s;
-  flex-shrink: 0;
-}
-
-.toggle-pill.on {
-  background: var(--color-accent);
-}
-
-.toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  transition: transform 0.18s cubic-bezier(.2,.8,.2,1);
-}
-
-.toggle-pill.on .toggle-thumb {
-  transform: translateX(18px);
 }
 </style>

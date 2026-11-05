@@ -11,6 +11,7 @@ import { usePlatformStore } from "@/stores/platform";
 import * as api from "@/lib/tauri";
 import { openReaderWindow } from "@/lib/reader-window";
 import { openComposeWindow } from "@/lib/compose-window";
+import { MOBILE_COMPOSE_AVAILABLE } from "@/lib/mobile-features";
 import Toolbar from "@/components/mail/Toolbar.vue";
 import FolderTree from "@/components/mail/FolderTree.vue";
 import MessageList from "@/components/mail/MessageList.vue";
@@ -350,6 +351,7 @@ onUnmounted(() => {
       <MessageList mode="mobile" @open-message="onMobileOpenMessage" />
     </div>
     <button
+      v-if="MOBILE_COMPOSE_AVAILABLE"
       class="compose-fab"
       :aria-label="t('Compose new message')"
       @click="uiStore.openCompose()"

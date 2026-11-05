@@ -11,6 +11,7 @@ import MobileIconButton from "@/components/mobile/MobileIconButton.vue";
 import { acctColor } from "@/lib/account-colors";
 import * as api from "@/lib/tauri";
 import { t, dateLocale } from "@/i18n";
+import { MOBILE_COMPOSE_AVAILABLE } from "@/lib/mobile-features";
 
 const route = useRoute();
 const router = useRouter();
@@ -186,8 +187,8 @@ function doForward() {
       <MessageReader :standalone="false" @close="onClose" />
     </div>
 
-    <!-- Sticky reply dock -->
-    <div class="reply-dock">
+    <!-- Sticky reply dock (hidden until mobile compose can send) -->
+    <div v-if="MOBILE_COMPOSE_AVAILABLE" class="reply-dock">
       <button class="dock-btn" @click="doReply">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="9 17 4 12 9 7" />
