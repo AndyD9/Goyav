@@ -1,12 +1,29 @@
 <script setup lang="ts">
 // Renders changelog releases: version, date, and tagged changes.
-import { CHANGELOG, changeText, type ChangeKind, type ChangelogRelease } from "@/lib/changelog";
+import { computed } from "vue";
+import {
+  CHANGELOG,
+  changeText,
+  compareVersions,
+  type ChangeKind,
+  type ChangelogRelease,
+} from "@/lib/changelog";
 import { t, dateLocale } from "@/i18n";
 
 const props = withDefaults(
   defineProps<{ releases?: readonly ChangelogRelease[]; current?: string }>(),
   { releases: () => CHANGELOG, current: undefined },
 );
+
+// Builds are numbered major.minor.<run>, so the installed build belongs to
+// the newest entry at or below it (0.3.57 → the "0.3.0" entry).
+const installedVersion = computed(() => {
+  if (!props.current) return undefined;
+  const current = props.current;
+  return [...CHANGELOG]
+    .filter((release) => compareVersions(release.version, current) <= 0)
+    .sort((a, b) => compareVersions(b.version, a.version))[0]?.version;
+});
 
 const KIND_LABELS: Record<ChangeKind, string> = {
   new: "New",
@@ -31,7 +48,7 @@ function formatDate(iso: string): string {
     >
       <header class="release-head">
         <h3 class="release-version">{{ t("Version {version}", { version: release.version }) }}</h3>
-        <span v-if="release.version === props.current" class="release-current">{{ t("Installed") }}</span>
+        <span v-if="release.version === installedVersion" class="release-current">{{ t("Installed") }}</span>
         <time class="release-date" :datetime="release.date">{{ formatDate(release.date) }}</time>
       </header>
       <ul class="changes">

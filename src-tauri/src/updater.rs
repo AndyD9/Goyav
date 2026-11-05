@@ -2,14 +2,74 @@
 //! the update-signing public key live in `tauri.conf.json`; the release
 //! workflow (`.github/workflows/release.yml`) publishes signed builds.
 //!
-//! Release builds check once at startup and stay quiet unless an update
-//! exists; Help > Check for Updates also reports "up to date" and errors.
+//! Release builds check at startup and then every few hours. A found update
+//! is kept here and announced to the frontend with an `update-available`
+//! event; the frontend shows its own notice and calls `install_update`,
+//! which reports download progress with `update-progress` events.
 
-use tauri::AppHandle;
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-use tauri_plugin_updater::UpdaterExt;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_updater::{Update, UpdaterExt};
 
 use crate::error::{Error, Result};
+
+const RECHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+const PROGRESS_EVENT_INTERVAL: Duration = Duration::from_millis(100);
+
+/// The update found by the last check, waiting for the user to install it.
+#[derive(Default)]
+pub struct UpdaterState {
+    pending: Mutex<Option<Update>>,
+    installing: AtomicBool,
+}
+
+impl UpdaterState {
+    fn pending(&self) -> std::sync::MutexGuard<'_, Option<Update>> {
+        self.pending.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateInfo {
+    version: String,
+    current_version: String,
+    /// Release notes (Markdown) published with the release.
+    notes: Option<String>,
+    /// Publication time, Unix seconds.
+    published_at: Option<i64>,
+}
+
+impl From<&Update> for UpdateInfo {
+    fn from(update: &Update) -> Self {
+        Self {
+            version: update.version.clone(),
+            current_version: update.current_version.clone(),
+            notes: update.body.clone().filter(|body| !body.trim().is_empty()),
+            published_at: update.date.map(|date| date.unix_timestamp()),
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum UpdateCheck {
+    UpToDate { version: String },
+    Available(UpdateInfo),
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateProgress {
+    downloaded: u64,
+    total: Option<u64>,
+    /// The download finished and the bundle is being replaced.
+    installing: bool,
+}
 
 pub fn check_on_startup(app: &AppHandle) {
     if cfg!(debug_assertions) {
@@ -17,41 +77,48 @@ pub fn check_on_startup(app: &AppHandle) {
     }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = check(&app, false).await {
-            log::warn!("Update check failed: {e}");
+        loop {
+            let installing = app
+                .state::<UpdaterState>()
+                .installing
+                .load(Ordering::SeqCst);
+            if !installing {
+                if let Err(e) = check(&app).await {
+                    log::warn!("Update check failed: {e}");
+                }
+            }
+            tokio::time::sleep(RECHECK_INTERVAL).await;
         }
     });
 }
 
+/// Help > Check for Updates. The frontend reports the result.
 #[tauri::command]
-pub async fn check_for_updates(app: AppHandle) -> Result<()> {
-    if let Err(e) = check(&app, true).await {
-        log::warn!("Update check failed: {e}");
-        notify(
-            &app,
-            MessageDialogKind::Error,
-            format!("Could not check for updates.\n\n{e}"),
-        );
-    }
-    Ok(())
+pub async fn check_for_updates(app: AppHandle) -> Result<UpdateCheck> {
+    check(&app)
+        .await
+        .inspect_err(|e| log::warn!("Update check failed: {e}"))
 }
 
-async fn check(app: &AppHandle, manual: bool) -> Result<()> {
+/// The update found by an earlier check, if any. Lets the frontend catch up
+/// with a startup check that finished before it listened for events.
+#[tauri::command]
+pub fn get_pending_update(state: tauri::State<'_, UpdaterState>) -> Option<UpdateInfo> {
+    state.pending().as_ref().map(UpdateInfo::from)
+}
+
+async fn check(app: &AppHandle) -> Result<UpdateCheck> {
     let updater = app.updater().map_err(|e| Error::Other(e.to_string()))?;
-    let Some(update) = updater
+    let found = updater
         .check()
         .await
-        .map_err(|e| Error::Other(e.to_string()))?
-    else {
-        if manual {
-            let version = app.package_info().version.to_string();
-            notify(
-                app,
-                MessageDialogKind::Info,
-                format!("Goyav {version} is up to date."),
-            );
-        }
-        return Ok(());
+        .map_err(|e| Error::Other(e.to_string()))?;
+    let state = app.state::<UpdaterState>();
+    let Some(update) = found else {
+        *state.pending() = None;
+        return Ok(UpdateCheck::UpToDate {
+            version: app.package_info().version.to_string(),
+        });
     };
 
     log::info!(
@@ -59,18 +126,27 @@ async fn check(app: &AppHandle, manual: bool) -> Result<()> {
         update.current_version,
         update.version
     );
-    let message = format!(
-        "Goyav {} is available (you have {}).\n\nInstall it now? Goyav will restart.",
-        update.version, update.current_version
-    );
-    if !ask(app, message).await {
-        return Ok(());
+    let info = UpdateInfo::from(&update);
+    *state.pending() = Some(update);
+    if let Err(e) = app.emit("update-available", &info) {
+        log::warn!("Could not announce the update: {e}");
     }
+    Ok(UpdateCheck::Available(info))
+}
 
-    update
-        .download_and_install(|_, _| {}, || log::info!("Update downloaded, installing"))
-        .await
-        .map_err(|e| Error::Other(e.to_string()))?;
+/// Download, verify and install the pending update, then restart.
+#[tauri::command]
+pub async fn install_update(app: AppHandle) -> Result<()> {
+    let state = app.state::<UpdaterState>();
+    if state.installing.swap(true, Ordering::SeqCst) {
+        return Err(Error::Other("An update is already being installed".into()));
+    }
+    let result = download_and_install(&app).await;
+    if result.is_err() {
+        state.installing.store(false, Ordering::SeqCst);
+    }
+    result?;
+
     log::info!("Update installed, restarting");
     // On macOS, relaunch only once this process is gone; otherwise the new
     // instance shows up as a second Dock icon next to the pinned one.
@@ -83,6 +159,50 @@ async fn check(app: &AppHandle, manual: bool) -> Result<()> {
     // workers stop cleanly before the new version starts.
     app.request_restart();
     Ok(())
+}
+
+async fn download_and_install(app: &AppHandle) -> Result<()> {
+    let update = app
+        .state::<UpdaterState>()
+        .pending()
+        .clone()
+        .ok_or_else(|| Error::Other("No update is available".into()))?;
+
+    let progress_app = app.clone();
+    let finished_app = app.clone();
+    let mut downloaded: u64 = 0;
+    let mut last_event: Option<Instant> = None;
+    update
+        .download_and_install(
+            move |chunk, total| {
+                downloaded += chunk as u64;
+                let done = total.is_some_and(|total| downloaded >= total);
+                if done || last_event.is_none_or(|at| at.elapsed() >= PROGRESS_EVENT_INTERVAL) {
+                    last_event = Some(Instant::now());
+                    let _ = progress_app.emit(
+                        "update-progress",
+                        UpdateProgress {
+                            downloaded,
+                            total,
+                            installing: false,
+                        },
+                    );
+                }
+            },
+            move || {
+                log::info!("Update downloaded, installing");
+                let _ = finished_app.emit(
+                    "update-progress",
+                    UpdateProgress {
+                        downloaded: 0,
+                        total: None,
+                        installing: true,
+                    },
+                );
+            },
+        )
+        .await
+        .map_err(|e| Error::Other(e.to_string()))
 }
 
 /// Start a detached helper that waits for this process to exit, then opens
@@ -125,28 +245,4 @@ fn relaunch_after_exit() -> bool {
             false
         }
     }
-}
-
-async fn ask(app: &AppHandle, message: String) -> bool {
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    app.dialog()
-        .message(message)
-        .title("Update Goyav")
-        .buttons(MessageDialogButtons::OkCancelCustom(
-            "Install and Restart".into(),
-            "Later".into(),
-        ))
-        .show(move |install| {
-            let _ = tx.send(install);
-        });
-    rx.await.unwrap_or(false)
-}
-
-fn notify(app: &AppHandle, kind: MessageDialogKind, message: String) {
-    app.dialog()
-        .message(message)
-        .title("Goyav Updates")
-        .kind(kind)
-        .buttons(MessageDialogButtons::Ok)
-        .show(|_| {});
 }

@@ -3,12 +3,11 @@ import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { createMemoryHistory, createRouter } from "vue-router";
 import MenuBar from "@/components/common/MenuBar.vue";
-import pkg from "../../package.json";
+import tauriConf from "../../src-tauri/tauri.conf.json";
 
-// `__APP_VERSION__` is injected by Vite's `define` from package.json (see
-// vite.config.ts). Asserting against package.json keeps the test in sync
-// with whatever the build pipeline actually inlines.
-const APP_VERSION = pkg.version as string;
+// `__APP_VERSION__` is injected by Vite's `define` from tauri.conf.json
+// (see vite.config.ts), where the release workflow stamps the real version.
+const APP_VERSION = tauriConf.version as string;
 
 const { invokeMock, setDecorationsMock, openUrlMock } = vi.hoisted(() => ({
   invokeMock: vi.fn(),

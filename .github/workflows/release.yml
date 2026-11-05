@@ -68,6 +68,10 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history and tags: the release notes list the commits
+          # since the previous release tag.
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -103,6 +107,32 @@ jobs:
             console.log(`Building Goyav ${conf.version}`);
           '
 
+      # Feature, performance and fix commits since the previous release,
+      # grouped under the headings src/lib/release-notes.ts reads. They are
+      # the GitHub release body (shown in the in-app update notice) and are
+      # baked into the build through GOYAV_RELEASE_NOTES (shown in About).
+      - name: Release notes
+        run: |
+          prev=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+          range=HEAD
+          if [ -n "$prev" ]; then range="$prev..HEAD"; fi
+          section() {
+            lines=$(git log --no-merges --format='%s' "$range" \
+              | grep -E "^($2)(\([^)]*\))?!?: " \
+              | sed -E "s/^($2)(\([^)]*\))?!?: //" \
+              | awk '{ print "- " toupper(substr($0, 1, 1)) substr($0, 2) }' || true)
+            if [ -n "$lines" ]; then printf '### %s\n%s\n\n' "$1" "$lines"; fi
+          }
+          notes=$(section New feat; section Improved perf; section Fixed fix)
+          if [ -z "$notes" ]; then notes="Maintenance release."; fi
+          delimiter="NOTES_$(openssl rand -hex 16)"
+          {
+            echo "GOYAV_RELEASE_NOTES<<$delimiter"
+            printf '%s\n' "$notes"
+            echo "$delimiter"
+          } >> "$GITHUB_ENV"
+          printf '%s\n' "$notes"
+
       - name: Build and release
         # Pinned to a commit like every other action: this step holds the
         # update-signing key and a contents:write token.
@@ -122,7 +152,10 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: Goyav v__VERSION__
-          releaseBody: Built from ${{ github.sha }}.
+          releaseBody: |
+            ${{ env.GOYAV_RELEASE_NOTES }}
+
+            Built from ${{ github.sha }}.
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true

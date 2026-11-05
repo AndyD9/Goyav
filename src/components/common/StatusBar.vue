@@ -8,6 +8,7 @@ import { useUiStore } from "@/stores/ui";
 import { useAccountsStore } from "@/stores/accounts";
 import { useFoldersStore } from "@/stores/folders";
 import { useCalendarStore } from "@/stores/calendar";
+import { useUpdatesStore } from "@/stores/updates";
 import * as api from "@/lib/tauri";
 import { t, tn } from "@/i18n";
 
@@ -18,6 +19,7 @@ const uiStore = useUiStore();
 const accountsStore = useAccountsStore();
 const foldersStore = useFoldersStore();
 const calendarStore = useCalendarStore();
+const updatesStore = useUpdatesStore();
 const lastSyncTime = ref<Date | null>(null);
 const connectionStatus = ref<"connected" | "disconnected">("connected");
 const syncError = ref<string | null>(null);
@@ -126,6 +128,18 @@ async function syncAll() {
       <span v-else class="account-info">{{ tn(accountsStore.accounts.length, '{count} account connected', '{count} accounts connected') }}</span>
     </div>
     <div class="status-right">
+      <button
+        v-if="updatesStore.available && !updatesStore.noticeVisible && updatesStore.phase === 'idle'"
+        class="update-pill"
+        data-testid="status-update"
+        :title="t('Show the update')"
+        @click="updatesStore.reopen()"
+      >
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+        {{ t("Update {version}", { version: updatesStore.available.version }) }}
+      </button>
       <span v-if="lastSyncLabel" class="last-sync">{{ lastSyncLabel }}</span>
       <button
         class="ops-toggle-btn"
@@ -154,6 +168,24 @@ async function syncAll() {
   font-size: 11px;
   color: var(--color-text-muted);
   flex-shrink: 0;
+}
+
+.update-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 12px;
+  background: var(--color-accent-light);
+  color: var(--color-accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.update-pill:hover {
+  background: var(--color-accent);
+  color: white;
 }
 
 .status-left,

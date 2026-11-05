@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import Sidebar from "@/components/common/Sidebar.vue";
 import MenuBar from "@/components/common/MenuBar.vue";
@@ -8,8 +8,11 @@ import OperationsPanel from "@/components/common/OperationsPanel.vue";
 import LinkPopup from "@/components/common/LinkPopup.vue";
 import WhatsNewDialog from "@/components/changelog/WhatsNewDialog.vue";
 import MailNotifier from "@/components/common/MailNotifier.vue";
+import UpdateNotice from "@/components/common/UpdateNotice.vue";
+import { useUpdatesStore } from "@/stores/updates";
 
 const route = useRoute();
+const updatesStore = useUpdatesStore();
 
 // Compose and reader windows are standalone — hide the main app chrome
 const isStandaloneWindow = computed(
@@ -24,6 +27,11 @@ const viewHasOwnPanels = computed(
     route.name === "calendar" ||
     route.name === "settings",
 );
+
+onMounted(() => {
+  // Standalone compose/reader windows leave updates to the main window.
+  if (!isStandaloneWindow.value) void updatesStore.init();
+});
 </script>
 
 <template>
@@ -54,6 +62,7 @@ const viewHasOwnPanels = computed(
     <LinkPopup />
     <WhatsNewDialog />
     <MailNotifier />
+    <UpdateNotice />
   </div>
 </template>
 

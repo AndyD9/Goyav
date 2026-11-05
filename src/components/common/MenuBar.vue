@@ -15,11 +15,13 @@ import {
   type ShortcutDef,
 } from "@/lib/shortcuts";
 import AboutDialog from "@/components/common/AboutDialog.vue";
+import { useUpdatesStore } from "@/stores/updates";
 import { t } from "@/i18n";
 
 const router = useRouter();
 const route = useRoute();
 const uiStore = useUiStore();
+const updatesStore = useUpdatesStore();
 const openMenu = ref<string | null>(null);
 
 type ViewMenuContext = "mail" | "contacts" | null;
@@ -77,10 +79,10 @@ function openWhatsNew() {
   router.push({ path: "/settings", query: { section: "whatsnew" } });
 }
 
-// The backend shows its own dialogs (update found, up to date, error).
+// The updates store reports the result (notice, toast or error).
 function checkForUpdates() {
   closeMenus();
-  invoke("check_for_updates").catch((e) => console.error("Update check failed:", e));
+  void updatesStore.check();
 }
 
 const shortcuts = {
@@ -239,7 +241,12 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
       </div>
     </div>
 
-    <AboutDialog :open="aboutOpen" @close="aboutOpen = false" />
+    <AboutDialog
+      :open="aboutOpen"
+      show-whats-new-link
+      @close="aboutOpen = false"
+      @whats-new="aboutOpen = false; openWhatsNew()"
+    />
   </div>
 </template>
 

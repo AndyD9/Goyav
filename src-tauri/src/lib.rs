@@ -53,6 +53,7 @@ pub fn run() {
 
             let app_state = AppState::new(data_dir)?;
             app.manage(app_state);
+            app.manage(updater::UpdaterState::default());
             let lifecycle_ids = {
                 let state = app.state::<AppState>();
                 commands::meet::pending_lifecycle_ids(&state)
@@ -67,6 +68,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             updater::check_for_updates,
+            updater::get_pending_update,
+            updater::install_update,
             commands::app::quit_app,
             commands::app::get_last_view,
             commands::app::save_last_view,

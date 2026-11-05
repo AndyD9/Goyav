@@ -1,17 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
 
 const { openUrlMock } = vi.hoisted(() => ({ openUrlMock: vi.fn() }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: openUrlMock }));
 
 import ComposeMenuBar from "@/components/compose/ComposeMenuBar.vue";
-import pkg from "../../package.json";
+import tauriConf from "../../src-tauri/tauri.conf.json";
 
-// `__APP_VERSION__` is injected by Vite's `define` from package.json
-// (see vite.config.ts); the test asserts against the same source.
-const APP_VERSION = pkg.version as string;
+// `__APP_VERSION__` is injected by Vite's `define` from tauri.conf.json
+// (see vite.config.ts), where the release workflow stamps the real version.
+const APP_VERSION = tauriConf.version as string;
 
 beforeEach(() => {
+  setActivePinia(createPinia());
   vi.spyOn(navigator, "platform", "get").mockReturnValue("Linux");
   openUrlMock.mockReset();
   // Clean up any teleported nodes from previous tests so dialog assertions
