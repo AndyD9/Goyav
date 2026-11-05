@@ -10,6 +10,13 @@
 #   TAURI_SIGNING_PRIVATE_KEY     contents of ~/.tauri/goyav.key
 #   CHITHI_GOOGLE_CLIENT_ID       same values as src-tauri/.cargo/config.toml,
 #   CHITHI_GOOGLE_CLIENT_SECRET   or Google sign-in breaks in released builds
+#
+# Optional repository variables (Settings > Variables); unset keeps the
+# upstream Chithi OAuth apps:
+#   CHITHI_MICROSOFT_CLIENT_ID    your Entra ID public client
+#   CHITHI_ZOOM_CLIENT_ID         your Zoom Marketplace app
+#   CHITHI_ZOOM_REDIRECT_URI      its redirect (a bounce page you host);
+#                                 the default goes through chithi.org
 
 name: Release
 
@@ -106,6 +113,12 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           CHITHI_GOOGLE_CLIENT_ID: ${{ secrets.CHITHI_GOOGLE_CLIENT_ID }}
           CHITHI_GOOGLE_CLIENT_SECRET: ${{ secrets.CHITHI_GOOGLE_CLIENT_SECRET }}
+          # Optional repository variables (public client ids, not secrets).
+          # Unset expands to "", which oauth.rs treats as "use the upstream
+          # Chithi registration".
+          CHITHI_MICROSOFT_CLIENT_ID: ${{ vars.CHITHI_MICROSOFT_CLIENT_ID }}
+          CHITHI_ZOOM_CLIENT_ID: ${{ vars.CHITHI_ZOOM_CLIENT_ID }}
+          CHITHI_ZOOM_REDIRECT_URI: ${{ vars.CHITHI_ZOOM_REDIRECT_URI }}
         with:
           tagName: v__VERSION__
           releaseName: Goyav v__VERSION__

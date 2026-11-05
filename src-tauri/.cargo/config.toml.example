@@ -5,3 +5,10 @@
 [env]
 CHITHI_GOOGLE_CLIENT_ID = "xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
 CHITHI_GOOGLE_CLIENT_SECRET = "GOCSPX-xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# Optional: your own Microsoft (Entra ID public client) and Zoom apps.
+# Without them the upstream Chithi registrations are used, and Zoom
+# sign-in goes through the bounce page on chithi.org.
+# CHITHI_MICROSOFT_CLIENT_ID = "00000000-0000-0000-0000-000000000000"
+# CHITHI_ZOOM_CLIENT_ID = "your-zoom-client-id"
+# CHITHI_ZOOM_REDIRECT_URI = "https://example.org/oauth/zoom"

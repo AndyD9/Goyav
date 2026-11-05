@@ -96,7 +96,15 @@ pub const GOOGLE: OAuthProvider = OAuthProvider {
 
 pub const MICROSOFT: OAuthProvider = OAuthProvider {
     name: "microsoft",
-    client_id: "b5941cd4-0385-40f1-953a-2c3b36f2a331",
+    // Build-time override via `CHITHI_MICROSOFT_CLIENT_ID` (a public
+    // client registered in Entra ID with the `http://localhost` redirect).
+    // The baked-in default is the upstream Chithi registration. An empty
+    // value, which is what CI passes when the variable is unset, keeps the
+    // default.
+    client_id: match option_env!("CHITHI_MICROSOFT_CLIENT_ID") {
+        Some(s) if !s.is_empty() => s,
+        _ => "b5941cd4-0385-40f1-953a-2c3b36f2a331",
+    },
     client_secret: "", // Public client — no secret
     auth_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     token_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
@@ -187,9 +195,10 @@ pub const ZOOM: OAuthProvider = OAuthProvider {
     // without an env var. Forks shipping under their own Zoom
     // organisation register their own app and pass that through
     // the env at build time.
+    // An empty value (CI with the variable unset) keeps the default.
     client_id: match option_env!("CHITHI_ZOOM_CLIENT_ID") {
-        Some(s) => s,
-        None => "VOqJx9G3Q1mM80wIAmlFNw",
+        Some(s) if !s.is_empty() => s,
+        _ => "VOqJx9G3Q1mM80wIAmlFNw",
     },
     client_secret: "", // Public client — PKCE only
     auth_url: "https://zoom.us/oauth/authorize",
@@ -219,12 +228,11 @@ pub const ZOOM: OAuthProvider = OAuthProvider {
     // Build-time override `CHITHI_ZOOM_REDIRECT_URI` lets forks
     // point at their own bounce (or a `http://127.0.0.1:47832`
     // dev-mode app registered directly on Marketplace, sidestepping
-    // the bounce). Note: const matching on `&str` isn't stable, so
-    // there's no "set this to empty to disable the override" path —
-    // pass an explicit URL.
+    // the bounce). An empty value keeps the chithi.org bounce, so there is
+    // no way to disable the override: pass an explicit URL.
     redirect_url_override: Some(match option_env!("CHITHI_ZOOM_REDIRECT_URI") {
-        Some(s) => s,
-        None => "https://chithi.org/oauth/zoom",
+        Some(s) if !s.is_empty() => s,
+        _ => "https://chithi.org/oauth/zoom",
     }),
 };
 
@@ -1945,6 +1953,28 @@ mod tests {
         }
         if let Some(secret) = option_env!("CHITHI_GOOGLE_CLIENT_SECRET") {
             assert_eq!(GOOGLE.client_secret, secret);
+        }
+    }
+
+    #[test]
+    fn test_microsoft_and_zoom_follow_build_env_or_keep_defaults() {
+        // CI passes unset repository variables as "", which must not
+        // produce an empty client id or redirect.
+        assert!(!MICROSOFT.client_id.is_empty());
+        assert!(!ZOOM.client_id.is_empty());
+        assert!(!ZOOM.redirect_url_override.unwrap().is_empty());
+        match option_env!("CHITHI_MICROSOFT_CLIENT_ID") {
+            Some(id) if !id.is_empty() => assert_eq!(MICROSOFT.client_id, id),
+            _ => assert_eq!(MICROSOFT.client_id, "b5941cd4-0385-40f1-953a-2c3b36f2a331"),
+        }
+        match option_env!("CHITHI_ZOOM_REDIRECT_URI") {
+            Some(uri) if !uri.is_empty() => {
+                assert_eq!(ZOOM.redirect_url_override, Some(uri))
+            }
+            _ => assert_eq!(
+                ZOOM.redirect_url_override,
+                Some("https://chithi.org/oauth/zoom")
+            ),
         }
     }
 
