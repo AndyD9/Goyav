@@ -50,6 +50,80 @@ impl OAuthTokenStore for SystemOAuthTokenStore {
     }
 }
 
+/// In-memory cache in front of the OS keychain.
+///
+/// Every provider request asks for a token, and each keychain read is a
+/// blocking call (D-Bus on Linux, Security framework on macOS) made from
+/// async code. All token writes go through this store, so the cache only
+/// has to follow its own `store`/`delete` calls. Absent entries and errors
+/// are never cached.
+pub struct CachedOAuthTokenStore<S> {
+    inner: S,
+    cache: std::sync::Mutex<TokenCache>,
+}
+
+#[derive(Default)]
+struct TokenCache {
+    entries: std::collections::HashMap<String, OAuthTokens>,
+    /// Bumped by every write, so a read that raced a write does not put
+    /// the older tokens back into the cache.
+    generation: u64,
+}
+
+impl<S> CachedOAuthTokenStore<S> {
+    pub fn new(inner: S) -> Self {
+        Self {
+            inner,
+            cache: std::sync::Mutex::new(TokenCache::default()),
+        }
+    }
+
+    fn invalidate(&self, account_id: &str) {
+        let mut cache = self.cache.lock_unpoisoned();
+        cache.entries.remove(account_id);
+        cache.generation += 1;
+    }
+}
+
+impl<S: OAuthTokenStore> OAuthTokenStore for CachedOAuthTokenStore<S> {
+    fn load(&self, account_id: &str) -> Result<Option<OAuthTokens>> {
+        let generation = {
+            let cache = self.cache.lock_unpoisoned();
+            if let Some(tokens) = cache.entries.get(account_id) {
+                return Ok(Some(tokens.clone()));
+            }
+            cache.generation
+        };
+        let loaded = self.inner.load(account_id)?;
+        if let Some(tokens) = &loaded {
+            let mut cache = self.cache.lock_unpoisoned();
+            if cache.generation == generation {
+                cache.entries.insert(account_id.to_string(), tokens.clone());
+            }
+        }
+        Ok(loaded)
+    }
+
+    fn store(&self, account_id: &str, tokens: &OAuthTokens) -> Result<()> {
+        // Drop the old entry first: if the write fails the keychain state is
+        // unknown, and the next load must read it again.
+        self.invalidate(account_id);
+        self.inner.store(account_id, tokens)?;
+        let mut cache = self.cache.lock_unpoisoned();
+        cache.generation += 1;
+        cache.entries.insert(account_id.to_string(), tokens.clone());
+        Ok(())
+    }
+
+    fn delete(&self, account_id: &str) -> Result<()> {
+        self.invalidate(account_id);
+        let result = self.inner.delete(account_id);
+        // Whatever happened, the keychain is the source of truth again.
+        self.invalidate(account_id);
+        result
+    }
+}
+
 /// HTTP boundary for authorization-code exchange and token refresh requests.
 #[async_trait]
 pub trait TokenEndpointClient: Send + Sync {
@@ -529,7 +603,8 @@ impl ProviderServices {
     pub fn production() -> Result<Self> {
         let token_endpoint: Arc<dyn TokenEndpointClient> =
             Arc::new(ReqwestTokenEndpointClient::production()?);
-        let token_store: Arc<dyn OAuthTokenStore> = Arc::new(SystemOAuthTokenStore);
+        let token_store: Arc<dyn OAuthTokenStore> =
+            Arc::new(CachedOAuthTokenStore::new(SystemOAuthTokenStore));
         let credentials = Arc::new(ProviderCredentialService::new(
             token_store.clone(),
             token_endpoint.clone(),
@@ -922,6 +997,148 @@ mod tests {
             self.tokens.lock().unwrap().remove(account_id);
             Ok(())
         }
+    }
+
+    /// Counts keychain reads and can be told to fail writes.
+    #[derive(Default)]
+    struct CountingTokenStore {
+        inner: MemoryTokenStore,
+        loads: AtomicUsize,
+        fail_writes: AtomicBool,
+    }
+
+    impl OAuthTokenStore for CountingTokenStore {
+        fn load(&self, account_id: &str) -> Result<Option<OAuthTokens>> {
+            self.loads.fetch_add(1, Ordering::SeqCst);
+            self.inner.load(account_id)
+        }
+
+        fn store(&self, account_id: &str, tokens: &OAuthTokens) -> Result<()> {
+            if self.fail_writes.load(Ordering::SeqCst) {
+                return Err(Error::Keyring("write refused".into()));
+            }
+            self.inner.store(account_id, tokens)
+        }
+
+        fn delete(&self, account_id: &str) -> Result<()> {
+            if self.fail_writes.load(Ordering::SeqCst) {
+                return Err(Error::Keyring("delete refused".into()));
+            }
+            self.inner.delete(account_id)
+        }
+    }
+
+    fn cache_tokens(access: &str) -> OAuthTokens {
+        OAuthTokens {
+            access_token: access.into(),
+            refresh_token: Some(format!("{access}-refresh")),
+            expires_at: None,
+        }
+    }
+
+    #[test]
+    fn cached_store_reads_the_keychain_once() {
+        let inner = CountingTokenStore::default();
+        inner.inner.store("acct", &cache_tokens("a")).unwrap();
+        let store = CachedOAuthTokenStore::new(inner);
+
+        for _ in 0..3 {
+            assert_eq!(store.load("acct").unwrap().unwrap().access_token, "a");
+        }
+        assert_eq!(store.inner.loads.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn cached_store_does_not_cache_missing_tokens() {
+        let store = CachedOAuthTokenStore::new(CountingTokenStore::default());
+        assert!(store.load("acct").unwrap().is_none());
+        assert!(store.load("acct").unwrap().is_none());
+        assert_eq!(store.inner.loads.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn cached_store_follows_writes_and_deletes() {
+        let store = CachedOAuthTokenStore::new(CountingTokenStore::default());
+        store.store("acct", &cache_tokens("a")).unwrap();
+        assert_eq!(store.load("acct").unwrap().unwrap().access_token, "a");
+        store.store("acct", &cache_tokens("b")).unwrap();
+        assert_eq!(store.load("acct").unwrap().unwrap().access_token, "b");
+        assert_eq!(store.inner.loads.load(Ordering::SeqCst), 0);
+
+        store.delete("acct").unwrap();
+        assert!(store.load("acct").unwrap().is_none());
+    }
+
+    #[test]
+    fn cached_store_rereads_after_a_failed_write() {
+        let store = CachedOAuthTokenStore::new(CountingTokenStore::default());
+        store.store("acct", &cache_tokens("a")).unwrap();
+        store.inner.fail_writes.store(true, Ordering::SeqCst);
+
+        assert!(store.store("acct", &cache_tokens("b")).is_err());
+        assert_eq!(store.load("acct").unwrap().unwrap().access_token, "a");
+        assert_eq!(store.inner.loads.load(Ordering::SeqCst), 1);
+
+        assert!(store.delete("acct").is_err());
+        assert_eq!(store.load("acct").unwrap().unwrap().access_token, "a");
+        assert_eq!(store.inner.loads.load(Ordering::SeqCst), 2);
+    }
+
+    /// Its first load reads the keychain, then waits for the test to let it
+    /// return, so a write can land in between.
+    struct PausingTokenStore {
+        inner: MemoryTokenStore,
+        paused_once: AtomicBool,
+        read_done: Mutex<Option<std::sync::mpsc::Sender<()>>>,
+        resume: Mutex<Option<std::sync::mpsc::Receiver<()>>>,
+    }
+
+    impl OAuthTokenStore for PausingTokenStore {
+        fn load(&self, account_id: &str) -> Result<Option<OAuthTokens>> {
+            let loaded = self.inner.load(account_id);
+            if !self.paused_once.swap(true, Ordering::SeqCst) {
+                let read_done = self.read_done.lock().unwrap().take().unwrap();
+                let resume = self.resume.lock().unwrap().take().unwrap();
+                read_done.send(()).unwrap();
+                resume.recv().unwrap();
+            }
+            loaded
+        }
+
+        fn store(&self, account_id: &str, tokens: &OAuthTokens) -> Result<()> {
+            self.inner.store(account_id, tokens)
+        }
+
+        fn delete(&self, account_id: &str) -> Result<()> {
+            self.inner.delete(account_id)
+        }
+    }
+
+    #[test]
+    fn cached_store_drops_a_read_that_raced_a_write() {
+        let (read_done_tx, read_done_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        let inner = PausingTokenStore {
+            inner: MemoryTokenStore::default(),
+            paused_once: AtomicBool::new(false),
+            read_done: Mutex::new(Some(read_done_tx)),
+            resume: Mutex::new(Some(resume_rx)),
+        };
+        inner.inner.store("acct", &cache_tokens("old")).unwrap();
+        let store = Arc::new(CachedOAuthTokenStore::new(inner));
+
+        let reader = {
+            let store = Arc::clone(&store);
+            std::thread::spawn(move || store.load("acct").unwrap().unwrap())
+        };
+        // The reader has "old" in hand; a refresh stores "new" before it
+        // gets to fill the cache.
+        read_done_rx.recv().unwrap();
+        store.store("acct", &cache_tokens("new")).unwrap();
+        resume_tx.send(()).unwrap();
+        assert_eq!(reader.join().unwrap().access_token, "old");
+
+        assert_eq!(store.load("acct").unwrap().unwrap().access_token, "new");
     }
 
     #[derive(Default)]
