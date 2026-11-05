@@ -2,7 +2,22 @@ use rusqlite::Connection;
 
 use crate::error::Result;
 
+/// Schema version stored in `PRAGMA user_version` once initialization has
+/// fully succeeded. Bump it whenever a migration changes the schema, so an
+/// older build refuses a database it does not understand instead of
+/// writing to it. Migrations themselves stay idempotent and run on every
+/// start; the version is not used to skip them.
+pub const SCHEMA_VERSION: i64 = 1;
+
 pub fn initialize(conn: &Connection) -> Result<()> {
+    let found: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    if found > SCHEMA_VERSION {
+        return Err(crate::error::Error::Other(format!(
+            "This database was created by a newer version of Goyav (schema {found}, \
+             this build supports {SCHEMA_VERSION}). Install the latest version."
+        )));
+    }
+
     conn.execute_batch(
         "
         PRAGMA journal_mode=WAL;
@@ -444,6 +459,9 @@ pub fn initialize(conn: &Connection) -> Result<()> {
     super::calendar_sync::initialize(conn)?;
     super::calendar_writes::initialize(conn)?;
 
+    if found < SCHEMA_VERSION {
+        conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
+    }
     Ok(())
 }
 
@@ -595,11 +613,9 @@ fn run_migrations(conn: &Connection) -> Result<()> {
     //    Set the marker proactively so we skip the legacy add+drop dance
     //    AND avoid relying on `ALTER TABLE ... DROP COLUMN` support on
     //    fresh installs.
-    let mut phase3_done = has_migration(conn, "service_bindings_drop_legacy_columns");
+    let mut phase3_done = has_migration(conn, "service_bindings_drop_legacy_columns")?;
     if !phase3_done {
-        let legacy_provider_present = conn
-            .prepare("SELECT provider FROM accounts LIMIT 0")
-            .is_ok();
+        let legacy_provider_present = column_exists(conn, "accounts", "provider")?;
         if !legacy_provider_present {
             log::info!(
                 "Migration: detected Phase-3 schema (no `provider` column); marking drop-legacy migration done"
@@ -611,9 +627,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
 
     if !phase3_done {
         // Add jmap_url column if it doesn't exist (added in JMAP support)
-        let has_jmap_url: bool = conn
-            .prepare("SELECT jmap_url FROM accounts LIMIT 0")
-            .is_ok();
+        let has_jmap_url: bool = column_exists(conn, "accounts", "jmap_url")?;
         if !has_jmap_url {
             log::info!("Migration: adding jmap_url column to accounts table");
             conn.execute_batch(
@@ -622,9 +636,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
         }
 
         // Add caldav_url column if it doesn't exist (added in CalDAV support)
-        let has_caldav_url: bool = conn
-            .prepare("SELECT caldav_url FROM accounts LIMIT 0")
-            .is_ok();
+        let has_caldav_url: bool = column_exists(conn, "accounts", "caldav_url")?;
         if !has_caldav_url {
             log::info!("Migration: adding caldav_url column to accounts table");
             conn.execute_batch(
@@ -634,9 +646,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
     }
 
     // Add signature column if it doesn't exist (still part of accounts post-Phase-3).
-    let has_signature: bool = conn
-        .prepare("SELECT signature FROM accounts LIMIT 0")
-        .is_ok();
+    let has_signature: bool = column_exists(conn, "accounts", "signature")?;
     if !has_signature {
         log::info!("Migration: adding signature column to accounts table");
         conn.execute_batch("ALTER TABLE accounts ADD COLUMN signature TEXT NOT NULL DEFAULT '';")?;
@@ -644,9 +654,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
 
     // The local account label is not necessarily the user's name. Keep a
     // separate identity for outbound From headers and calendar messages.
-    let has_sender_name = conn
-        .prepare("SELECT sender_name FROM accounts LIMIT 0")
-        .is_ok();
+    let has_sender_name = column_exists(conn, "accounts", "sender_name")?;
     if !has_sender_name {
         log::info!("Migration: adding sender_name column to accounts table");
         conn.execute_batch(
@@ -656,9 +664,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
 
     if !phase3_done {
         // Add jmap_auth_method column if it doesn't exist
-        let has_jmap_auth_method: bool = conn
-            .prepare("SELECT jmap_auth_method FROM accounts LIMIT 0")
-            .is_ok();
+        let has_jmap_auth_method: bool = column_exists(conn, "accounts", "jmap_auth_method")?;
         if !has_jmap_auth_method {
             log::info!("Migration: adding jmap_auth_method column to accounts table");
             conn.execute_batch(
@@ -668,9 +674,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
     }
 
     // Add oidc_token_endpoint column if it doesn't exist (kept post-Phase-3).
-    let has_oidc_token_endpoint: bool = conn
-        .prepare("SELECT oidc_token_endpoint FROM accounts LIMIT 0")
-        .is_ok();
+    let has_oidc_token_endpoint: bool = column_exists(conn, "accounts", "oidc_token_endpoint")?;
     if !has_oidc_token_endpoint {
         log::info!("Migration: adding oidc_token_endpoint column to accounts table");
         conn.execute_batch(
@@ -679,9 +683,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
     }
 
     // Add oidc_client_id column if it doesn't exist (kept post-Phase-3).
-    let has_oidc_client_id: bool = conn
-        .prepare("SELECT oidc_client_id FROM accounts LIMIT 0")
-        .is_ok();
+    let has_oidc_client_id: bool = column_exists(conn, "accounts", "oidc_client_id")?;
     if !has_oidc_client_id {
         log::info!("Migration: adding oidc_client_id column to accounts table");
         conn.execute_batch(
@@ -690,27 +692,22 @@ fn run_migrations(conn: &Connection) -> Result<()> {
     }
 
     // Add is_subscribed column to calendars if it doesn't exist
-    let has_is_subscribed: bool = conn
-        .prepare("SELECT is_subscribed FROM calendars LIMIT 0")
-        .is_ok();
+    let has_is_subscribed: bool = column_exists(conn, "calendars", "is_subscribed")?;
     if !has_is_subscribed {
         log::info!("Migration: adding is_subscribed column to calendars table");
         conn.execute_batch(
             "ALTER TABLE calendars ADD COLUMN is_subscribed INTEGER NOT NULL DEFAULT 1;",
         )?;
     }
-    let has_is_archived = conn
-        .prepare("SELECT is_archived FROM calendars LIMIT 0")
-        .is_ok();
+    let has_is_archived = column_exists(conn, "calendars", "is_archived")?;
     if !has_is_archived {
         log::info!("Migration: adding is_archived to calendars");
         conn.execute_batch(
             "ALTER TABLE calendars ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
-    let has_archived_acknowledged_at = conn
-        .prepare("SELECT archived_acknowledged_at FROM calendars LIMIT 0")
-        .is_ok();
+    let has_archived_acknowledged_at =
+        column_exists(conn, "calendars", "archived_acknowledged_at")?;
     if !has_archived_acknowledged_at {
         log::info!("Migration: adding archived_acknowledged_at to calendars");
         conn.execute_batch("ALTER TABLE calendars ADD COLUMN archived_acknowledged_at TEXT;")?;
@@ -718,9 +715,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
 
     // Manual invite acknowledgement is local workflow state, separate from
     // the provider-controlled iCalendar RSVP in `my_status`.
-    let has_manually_managed_at = conn
-        .prepare("SELECT manually_managed_at FROM calendar_events LIMIT 0")
-        .is_ok();
+    let has_manually_managed_at = column_exists(conn, "calendar_events", "manually_managed_at")?;
     if !has_manually_managed_at {
         log::info!("Migration: adding manually_managed_at to calendar_events");
         conn.execute_batch("ALTER TABLE calendar_events ADD COLUMN manually_managed_at TEXT;")?;
@@ -728,9 +723,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
 
     // A locally sent response remains authoritative until provider sync
     // echoes the same status, preventing stale answered states from winning.
-    let has_pending_rsvp_status = conn
-        .prepare("SELECT pending_rsvp_status FROM calendar_events LIMIT 0")
-        .is_ok();
+    let has_pending_rsvp_status = column_exists(conn, "calendar_events", "pending_rsvp_status")?;
     if !has_pending_rsvp_status {
         log::info!("Migration: adding pending_rsvp_status to calendar_events");
         conn.execute_batch("ALTER TABLE calendar_events ADD COLUMN pending_rsvp_status TEXT;")?;
@@ -738,9 +731,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
 
     // Legacy rows do not distinguish standalone events from occurrences.
     // Add the conservative default before recovering local ICS evidence.
-    let has_recurrence_kind = conn
-        .prepare("SELECT recurrence_kind FROM calendar_events LIMIT 0")
-        .is_ok();
+    let has_recurrence_kind = column_exists(conn, "calendar_events", "recurrence_kind")?;
     if !has_recurrence_kind {
         log::info!("Migration: adding recurrence_kind to calendar_events");
         conn.execute_batch(
@@ -750,9 +741,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
     }
     recover_local_event_recurrence(conn)?;
 
-    let has_cleanup_requested = conn
-        .prepare("SELECT cleanup_requested FROM meet_pending_meetings LIMIT 0")
-        .is_ok();
+    let has_cleanup_requested = column_exists(conn, "meet_pending_meetings", "cleanup_requested")?;
     if !has_cleanup_requested {
         log::info!("Migration: adding cleanup_requested to pending meetings");
         conn.execute_batch(
@@ -762,7 +751,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
     }
 
     // Add uid_next column to folders for IMAP preflight sync optimization
-    let has_uid_next: bool = conn.prepare("SELECT uid_next FROM folders LIMIT 0").is_ok();
+    let has_uid_next: bool = column_exists(conn, "folders", "uid_next")?;
     if !has_uid_next {
         log::info!("Migration: adding uid_next column to folders table");
         conn.execute_batch("ALTER TABLE folders ADD COLUMN uid_next INTEGER DEFAULT 0;")?;
@@ -770,9 +759,8 @@ fn run_migrations(conn: &Connection) -> Result<()> {
 
     if !phase3_done {
         // Add calendar_sync_enabled column for per-account calendar-sync toggle
-        let has_calendar_sync_enabled: bool = conn
-            .prepare("SELECT calendar_sync_enabled FROM accounts LIMIT 0")
-            .is_ok();
+        let has_calendar_sync_enabled: bool =
+            column_exists(conn, "accounts", "calendar_sync_enabled")?;
         if !has_calendar_sync_enabled {
             log::info!("Migration: adding calendar_sync_enabled column to accounts table");
             conn.execute_batch(
@@ -786,16 +774,14 @@ fn run_migrations(conn: &Connection) -> Result<()> {
     // the CREATE TABLE in initialize() was never updated to match. Without
     // this column the first JMAP folder upsert fails with "no column named
     // parent_id".
-    let has_folder_parent_id: bool = conn
-        .prepare("SELECT parent_id FROM folders LIMIT 0")
-        .is_ok();
+    let has_folder_parent_id: bool = column_exists(conn, "folders", "parent_id")?;
     if !has_folder_parent_id {
         log::info!("Migration: adding parent_id column to folders table");
         conn.execute_batch("ALTER TABLE folders ADD COLUMN parent_id TEXT;")?;
     }
 
     // Populate FTS index for existing messages (one-time migration)
-    if !has_migration(conn, "fts5_initial_populate") {
+    if !has_migration(conn, "fts5_initial_populate")? {
         log::info!("Migration: populating FTS5 index for existing messages");
         conn.execute_batch(
             "INSERT OR IGNORE INTO messages_fts(rowid, subject, from_name, from_email, to_addresses, cc_addresses, snippet)
@@ -809,9 +795,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
     // refactor: stored alongside the legacy `provider` column so dispatch
     // code keeps working. Phase 2 starts reading auth_method instead;
     // Phase 3 drops `provider`.
-    let has_auth_method: bool = conn
-        .prepare("SELECT auth_method FROM accounts LIMIT 0")
-        .is_ok();
+    let has_auth_method: bool = column_exists(conn, "accounts", "auth_method")?;
     if !has_auth_method {
         log::info!("Migration: adding auth_method column to accounts table");
         conn.execute_batch(
@@ -823,7 +807,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
     // (covers both fresh-from-migration rows above and any older rows that
     // were created before this migration ran). Idempotent. Reads legacy
     // columns, so skip if Phase 3 already dropped them.
-    if !has_migration(conn, "auth_method_backfill_v1") {
+    if !has_migration(conn, "auth_method_backfill_v1")? {
         if !phase3_done {
             log::info!("Migration: backfilling auth_method from provider/jmap_auth_method");
             backfill_auth_method(conn)?;
@@ -834,7 +818,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
     // One-time populate of service_bindings from legacy account columns.
     // Re-runnable (it deletes existing rows for an account before inserting),
     // but gated by a marker so the common-case startup is a single SELECT.
-    if !has_migration(conn, "service_bindings_initial_populate") {
+    if !has_migration(conn, "service_bindings_initial_populate")? {
         if !phase3_done {
             log::info!("Migration: deriving service_bindings from existing accounts");
             populate_service_bindings(conn)?;
@@ -849,7 +833,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
     // ALTER TABLE DROP COLUMN since 3.35 (March 2021). Run as a single
     // batch in a transaction so a partial failure doesn't leave the
     // schema half-dropped.
-    if !has_migration(conn, "service_bindings_drop_legacy_columns") {
+    if !has_migration(conn, "service_bindings_drop_legacy_columns")? {
         log::info!("Migration: dropping legacy per-protocol columns from accounts");
         drop_legacy_account_columns(conn)?;
         set_migration(conn, "service_bindings_drop_legacy_columns")?;
@@ -865,7 +849,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
     // landed in their own one-message threads. Trim+wrap once, then
     // recompute thread_id for every message so existing mail heals
     // without waiting for a fresh full sync.
-    if !has_migration(conn, "messageid_normalize_v1") {
+    if !has_migration(conn, "messageid_normalize_v1")? {
         log::info!("Migration: normalizing message_id / in_reply_to and rethreading");
         normalize_message_ids_and_rethread(conn)?;
         set_migration(conn, "messageid_normalize_v1")?;
@@ -883,9 +867,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
         "pgp_encrypt_subject",
         "pgp_encrypt_drafts",
     ] {
-        let has_col: bool = conn
-            .prepare(&format!("SELECT {col} FROM accounts LIMIT 0"))
-            .is_ok();
+        let has_col: bool = column_exists(conn, "accounts", col)?;
         if !has_col {
             log::info!("Migration: adding {col} column to accounts table");
             conn.execute_batch(&format!(
@@ -897,9 +879,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
     // Microsoft Graph incremental sync: per-folder delta/next link, the
     // Graph analogue of `jmap_state`. NULL means "no delta state yet" and
     // triggers a full initial enumeration of the folder.
-    let has_graph_delta_link: bool = conn
-        .prepare("SELECT graph_delta_link FROM folders LIMIT 0")
-        .is_ok();
+    let has_graph_delta_link: bool = column_exists(conn, "folders", "graph_delta_link")?;
     if !has_graph_delta_link {
         log::info!("Migration: adding graph_delta_link column to folders table");
         conn.execute_batch("ALTER TABLE folders ADD COLUMN graph_delta_link TEXT;")?;
@@ -916,9 +896,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
     //   cleared after the filter pass; a crash between insert and filter
     //   run is retried on the next cycle instead of silently skipped.
     for col in ["graph_prune_pending", "graph_filters_pending"] {
-        let has_col: bool = conn
-            .prepare(&format!("SELECT {col} FROM messages LIMIT 0"))
-            .is_ok();
+        let has_col: bool = column_exists(conn, "messages", col)?;
         if !has_col {
             log::info!("Migration: adding {col} column to messages table");
             conn.execute_batch(&format!(
@@ -1102,9 +1080,7 @@ fn drop_legacy_account_columns(conn: &Connection) -> Result<()> {
 
     let tx = conn.unchecked_transaction()?;
     for col in LEGACY_COLUMNS {
-        let exists = tx
-            .prepare(&format!("SELECT {col} FROM accounts LIMIT 0"))
-            .is_ok();
+        let exists = column_exists(&tx, "accounts", col)?;
         if exists {
             tx.execute_batch(&format!("ALTER TABLE accounts DROP COLUMN {col};"))?;
         }
@@ -1140,10 +1116,7 @@ fn populate_service_bindings(conn: &Connection) -> Result<()> {
     // a fresh-install DB created with the Phase 3 schema). The migration
     // marker logic below normally prevents this branch from running, but
     // an out-of-order replay shouldn't error out the app.
-    if conn
-        .prepare("SELECT mail_protocol FROM accounts LIMIT 0")
-        .is_err()
-    {
+    if !column_exists(conn, "accounts", "mail_protocol")? {
         log::info!("populate_service_bindings: legacy columns absent, skipping (Phase 3+ schema)");
         return Ok(());
     }
@@ -1236,14 +1209,30 @@ fn populate_service_bindings(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Check if a one-time migration has been completed.
-pub fn has_migration(conn: &Connection, key: &str) -> bool {
-    conn.query_row(
-        "SELECT 1 FROM app_metadata WHERE key = ?1",
-        rusqlite::params![key],
-        |_| Ok(()),
-    )
-    .is_ok()
+/// Check if a one-time migration has been completed. A database error is
+/// returned rather than read as "not done", which would rerun a migration
+/// that may not be repeatable.
+pub fn has_migration(conn: &Connection, key: &str) -> Result<bool> {
+    use rusqlite::OptionalExtension;
+    Ok(conn
+        .query_row(
+            "SELECT 1 FROM app_metadata WHERE key = ?1",
+            rusqlite::params![key],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some())
+}
+
+/// Whether `table` has `column`. Unlike probing with a `SELECT`, a database
+/// error is returned instead of being taken to mean "column missing".
+fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name = ?2",
+        rusqlite::params![table, column],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
 }
 
 /// Mark a one-time migration as completed.
@@ -1258,6 +1247,54 @@ pub fn set_migration(conn: &Connection, key: &str) -> crate::error::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn user_version(conn: &Connection) -> i64 {
+        conn.query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap()
+    }
+
+    #[test]
+    fn initialize_records_the_schema_version_and_is_repeatable() {
+        let conn = Connection::open_in_memory().unwrap();
+        assert_eq!(user_version(&conn), 0);
+        initialize(&conn).unwrap();
+        assert_eq!(user_version(&conn), SCHEMA_VERSION);
+        initialize(&conn).unwrap();
+        assert_eq!(user_version(&conn), SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn initialize_refuses_a_database_from_a_newer_build() {
+        let conn = Connection::open_in_memory().unwrap();
+        initialize(&conn).unwrap();
+        conn.execute_batch(&format!("PRAGMA user_version = {};", SCHEMA_VERSION + 1))
+            .unwrap();
+        let error = initialize(&conn).unwrap_err().to_string();
+        assert!(error.contains("newer version of Goyav"), "{error}");
+        // Nothing was written: the version is untouched.
+        assert_eq!(user_version(&conn), SCHEMA_VERSION + 1);
+    }
+
+    #[test]
+    fn has_migration_reports_database_errors() {
+        let conn = Connection::open_in_memory().unwrap();
+        // No app_metadata table yet: an error, not "migration not done".
+        assert!(has_migration(&conn, "anything").is_err());
+        initialize(&conn).unwrap();
+        assert!(!has_migration(&conn, "anything").unwrap());
+        set_migration(&conn, "anything").unwrap();
+        assert!(has_migration(&conn, "anything").unwrap());
+    }
+
+    #[test]
+    fn column_exists_reads_the_table_definition() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE sample (present TEXT);")
+            .unwrap();
+        assert!(column_exists(&conn, "sample", "present").unwrap());
+        assert!(!column_exists(&conn, "sample", "absent").unwrap());
+        assert!(!column_exists(&conn, "missing_table", "present").unwrap());
+    }
 
     #[test]
     fn archived_calendar_acknowledgment_migrates_existing_archives() {
