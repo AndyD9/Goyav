@@ -1,10 +1,13 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 use std::net::TcpListener;
 
 use crate::error::{Error, Result};
+
+mod callback_page;
+use callback_page::{write_callback_page, CallbackPage, PageLang};
 
 // ---------------------------------------------------------------------------
 // Provider configurations
@@ -398,50 +401,6 @@ pub struct CallbackResult {
     pub state: Option<String>,
 }
 
-enum CallbackPage {
-    Success,
-    AccessDenied,
-    Failure,
-}
-
-fn write_callback_page(stream: &mut impl Write, page: CallbackPage) {
-    let (status, title, message) = match page {
-        CallbackPage::Success => (
-            "200 OK",
-            "Authorization successful!",
-            "You can close this window and return to Goyav.",
-        ),
-        CallbackPage::AccessDenied => (
-            "400 Bad Request",
-            "Authorization not completed",
-            "Access was not granted. Return to Goyav and try again.",
-        ),
-        CallbackPage::Failure => (
-            "400 Bad Request",
-            "Authorization failed",
-            "The provider did not complete authorization. Return to Goyav and try again.",
-        ),
-    };
-    let body = format!(
-        "<!doctype html><html><head><meta charset='utf-8'><title>{title}</title></head>\
-         <body><main><h2>{title}</h2><p>{message}</p></main></body></html>"
-    );
-    let response = format!(
-        "HTTP/1.1 {status}\r\n\
-         Content-Type: text/html; charset=utf-8\r\n\
-         Content-Length: {}\r\n\
-         Cache-Control: no-store\r\n\
-         Content-Security-Policy: default-src 'none'\r\n\
-         X-Content-Type-Options: nosniff\r\n\
-         Connection: close\r\n\r\n\
-         {body}",
-        body.len(),
-    );
-    // The browser may already have closed the tab. Callback processing must
-    // not fail merely because the informational response cannot be written.
-    stream.write_all(response.as_bytes()).ok();
-}
-
 /// Listen on the given listener for the OAuth2 redirect callback.
 /// Times out after 5 minutes to prevent indefinite resource holding.
 /// Validates the state parameter before reporting browser success and returns
@@ -478,6 +437,13 @@ pub fn wait_for_callback(listener: TcpListener, expected_state: &str) -> Result<
         }
     };
 
+    // An accepted socket can inherit the listener's non-blocking mode (BSD,
+    // macOS); read the request in blocking mode with a bounded wait instead.
+    stream
+        .set_nonblocking(false)
+        .and_then(|()| stream.set_read_timeout(Some(Duration::from_secs(10))))
+        .map_err(|e| Error::Other(format!("Failed to configure callback stream: {}", e)))?;
+
     let mut reader = BufReader::new(
         stream
             .try_clone()
@@ -488,6 +454,26 @@ pub fn wait_for_callback(listener: TcpListener, expected_state: &str) -> Result<
     reader
         .read_line(&mut request_line)
         .map_err(|e| Error::Other(format!("Failed to read request: {}", e)))?;
+
+    // Only Accept-Language matters: it picks the language of the page.
+    let mut accept_language: Option<String> = None;
+    for _ in 0..100 {
+        let mut line = String::new();
+        match reader.read_line(&mut line) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        let line = line.trim_end();
+        if line.is_empty() {
+            break;
+        }
+        if let Some((name, value)) = line.split_once(':') {
+            if name.trim().eq_ignore_ascii_case("accept-language") {
+                accept_language = Some(value.trim().to_string());
+            }
+        }
+    }
+    let lang = PageLang::from_accept_language(accept_language.as_deref());
 
     // Parse query parameters from: GET /?code=xxx&state=yyy HTTP/1.1
     let query_params: HashMap<String, String> = request_line
@@ -526,11 +512,11 @@ pub fn wait_for_callback(listener: TcpListener, expected_state: &str) -> Result<
     match state.as_deref() {
         Some(returned_state) if returned_state == expected_state => {}
         Some(_) => {
-            write_callback_page(&mut stream, CallbackPage::Failure);
+            write_callback_page(&mut stream, CallbackPage::Failure, lang);
             return Err(Error::OAuthStateMismatch);
         }
         None => {
-            write_callback_page(&mut stream, CallbackPage::Failure);
+            write_callback_page(&mut stream, CallbackPage::Failure, lang);
             return Err(Error::OAuthStateMissing);
         }
     }
@@ -544,6 +530,7 @@ pub fn wait_for_callback(listener: TcpListener, expected_state: &str) -> Result<
             } else {
                 CallbackPage::Failure
             },
+            lang,
         );
         let message = if access_denied {
             "OAuth2 authorization was denied or cancelled"
@@ -556,14 +543,14 @@ pub fn wait_for_callback(listener: TcpListener, expected_state: &str) -> Result<
     let code = match query_params.get("code").filter(|code| !code.is_empty()) {
         Some(code) => code.clone(),
         None => {
-            write_callback_page(&mut stream, CallbackPage::Failure);
+            write_callback_page(&mut stream, CallbackPage::Failure, lang);
             return Err(Error::Other(
                 "OAuth2 callback did not contain an authorization code".into(),
             ));
         }
     };
 
-    write_callback_page(&mut stream, CallbackPage::Success);
+    write_callback_page(&mut stream, CallbackPage::Success, lang);
     Ok(CallbackResult { code, state })
 }
 
@@ -1595,7 +1582,7 @@ pub fn delete_tokens(account_id: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Read;
+    use std::io::{Read, Write};
     use std::thread::JoinHandle;
 
     struct TokenRequest {
@@ -1674,7 +1661,8 @@ mod tests {
         assert!(headers.starts_with(&format!("HTTP/1.1 {status}\r\n")));
         assert!(headers.contains("Content-Type: text/html; charset=utf-8\r\n"));
         assert!(headers.contains("Cache-Control: no-store\r\n"));
-        assert!(headers.contains("Content-Security-Policy: default-src 'none'\r\n"));
+        assert!(headers.contains("Content-Security-Policy: default-src 'none'; style-src 'sha256-"));
+        assert!(!headers.contains("unsafe-inline"));
         assert!(headers.contains("X-Content-Type-Options: nosniff\r\n"));
         assert!(headers.lines().any(|line| line == "Connection: close"));
         let content_length = headers
