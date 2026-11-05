@@ -686,6 +686,35 @@ pub async fn mark_account_read(
     account_id: String,
 ) -> Result<u64> {
     log::info!("Marking all messages as read for account {}", account_id);
+    mark_read_scoped(&app, &state, &account_id, None).await
+}
+
+/// Mark every message of one folder as read, the same way: locally at once,
+/// then on the server through the account worker. For IMAP the server-side
+/// STORE covers the whole folder, including messages not synced yet.
+#[tauri::command]
+pub async fn mark_folder_read(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    account_id: String,
+    folder_path: String,
+) -> Result<u64> {
+    log::info!(
+        "Marking all messages as read in '{}' for account {}",
+        folder_path,
+        account_id
+    );
+    mark_read_scoped(&app, &state, &account_id, Some(&folder_path)).await
+}
+
+/// Shared body of the two commands above; `folder_path` limits the scope.
+async fn mark_read_scoped(
+    app: &tauri::AppHandle,
+    state: &State<'_, AppState>,
+    account_id: &str,
+    folder_path: Option<&str>,
+) -> Result<u64> {
+    let account_id = account_id.to_string();
 
     let account = {
         let conn = state.db.reader();
@@ -697,18 +726,21 @@ pub async fn mark_account_read(
             AccountReadScope::KnownUnreadMessages => {
                 let conn = state.db.reader();
                 (
-                    db::messages::get_unread_message_uids(&conn, &account_id)?,
+                    db::messages::get_unread_message_uids_in(&conn, &account_id, folder_path)?,
                     Vec::new(),
                 )
             }
-            AccountReadScope::AllKnownFolders => {
-                let conn = state.db.reader();
-                let folders = db::folders::list_folders(&conn, &account_id)?
-                    .into_iter()
-                    .map(|folder| folder.path)
-                    .collect();
-                (Vec::new(), folders)
-            }
+            AccountReadScope::AllKnownFolders => match folder_path {
+                Some(folder_path) => (Vec::new(), vec![folder_path.to_string()]),
+                None => {
+                    let conn = state.db.reader();
+                    let folders = db::folders::list_folders(&conn, &account_id)?
+                        .into_iter()
+                        .map(|folder| folder.path)
+                        .collect();
+                    (Vec::new(), folders)
+                }
+            },
         };
     let unread_refs = unread_rows
         .into_iter()
@@ -736,23 +768,23 @@ pub async fn mark_account_read(
     let updated = {
         let conn = state.db.writer().await;
         let transaction = conn.unchecked_transaction().map_err(Error::Database)?;
-        let count = db::messages::mark_account_read(&transaction, &account_id)?;
+        let count = db::messages::mark_read_in(&transaction, &account_id, folder_path)?;
         db::folders::recalculate_folder_counts(&transaction, &account_id)?;
         transaction.commit().map_err(Error::Database)?;
         count
     };
 
     log::info!(
-        "mark_account_read: updated {} messages for account {}",
+        "mark read: updated {} messages for account {}",
         updated,
         account_id,
     );
 
-    emit_messages_changed(&app, &account_id);
-    emit_folders_changed(&app, &account_id);
+    emit_messages_changed(app, &account_id);
+    emit_folders_changed(app, &account_id);
 
     if !target.is_empty() {
-        let sender = state.get_op_sender(&account_id, &app).await;
+        let sender = state.get_op_sender(&account_id, app).await;
         if let Err(e) = sender
             .send(OpEntry {
                 op: MailOp::SetFlags {

@@ -257,6 +257,12 @@ export function markAccountRead(accountId: string): Promise<number> {
   return invoke("mark_account_read", { accountId });
 }
 
+/// Mark every message of one folder read, locally and on the server.
+/// Returns how many local messages changed.
+export function markFolderRead(accountId: string, folderPath: string): Promise<number> {
+  return invoke("mark_folder_read", { accountId, folderPath });
+}
+
 export function getThreadedMessages(
   accountId: string,
   folderPath: string,

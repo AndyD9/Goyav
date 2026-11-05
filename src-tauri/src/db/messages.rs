@@ -646,41 +646,50 @@ pub fn get_message_uids(
     Ok(rows)
 }
 
-/// Return locally known unread messages as `(id, folder_path, uid)` rows.
-/// Flag membership is checked as JSON rather than by substring.
-pub fn get_unread_message_uids(
+/// Return locally known unread messages as `(id, folder_path, uid)` rows,
+/// limited to one folder when `folder_path` is given. Flag membership is
+/// checked as JSON rather than by substring.
+pub fn get_unread_message_uids_in(
     conn: &Connection,
     account_id: &str,
+    folder_path: Option<&str>,
 ) -> Result<Vec<(String, String, u32)>> {
     let mut stmt = conn.prepare(
         "SELECT id, folder_path, uid
          FROM messages
          WHERE account_id = ?1
+           AND (?2 IS NULL OR folder_path = ?2)
            AND NOT EXISTS (
                SELECT 1 FROM json_each(messages.flags)
                WHERE json_each.value = 'seen'
            )",
     )?;
     let rows = stmt
-        .query_map(params![account_id], |row| {
+        .query_map(params![account_id, folder_path], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?))
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(rows)
 }
 
-/// Optimistically mark every locally known message in an account as read.
-/// Returns the number of rows that changed and preserves all other flags.
-pub fn mark_account_read(conn: &Connection, account_id: &str) -> Result<usize> {
+/// Optimistically mark every locally known message in an account as read,
+/// or only those of `folder_path`. Returns the number of rows that changed
+/// and preserves all other flags.
+pub fn mark_read_in(
+    conn: &Connection,
+    account_id: &str,
+    folder_path: Option<&str>,
+) -> Result<usize> {
     let changed = conn.execute(
         "UPDATE messages
          SET flags = json_insert(flags, '$[#]', 'seen')
          WHERE account_id = ?1
+           AND (?2 IS NULL OR folder_path = ?2)
            AND NOT EXISTS (
                SELECT 1 FROM json_each(messages.flags)
                WHERE json_each.value = 'seen'
            )",
-        params![account_id],
+        params![account_id, folder_path],
     )?;
     Ok(changed)
 }
@@ -1480,13 +1489,30 @@ mod tests {
             .unwrap();
         }
 
-        let unread = get_unread_message_uids(&conn, "acc1").unwrap();
+        let unread = get_unread_message_uids_in(&conn, "acc1", None).unwrap();
         assert_eq!(unread.len(), 2);
         assert!(unread.iter().any(|row| row.0 == "unread"));
         assert!(unread.iter().any(|row| row.0 == "keyword"));
 
-        assert_eq!(mark_account_read(&conn, "acc1").unwrap(), 2);
-        assert_eq!(mark_account_read(&conn, "acc1").unwrap(), 0);
+        assert_eq!(mark_read_in(&conn, "acc1", None).unwrap(), 2);
+        assert_eq!(mark_read_in(&conn, "acc1", None).unwrap(), 0);
+
+        // A folder scope leaves other folders alone.
+        conn.execute(
+            "INSERT INTO messages
+             (id, account_id, folder_path, uid, date, flags, maildir_path)
+             VALUES ('in-archive', 'acc1', 'Archive', 9, '2026-08-08', '[]', ''),
+                    ('in-inbox', 'acc1', 'INBOX', 10, '2026-08-08', '[]', '')",
+            [],
+        )
+        .unwrap();
+        let archive = get_unread_message_uids_in(&conn, "acc1", Some("Archive")).unwrap();
+        assert_eq!(archive.len(), 1);
+        assert_eq!(archive[0].0, "in-archive");
+        assert_eq!(mark_read_in(&conn, "acc1", Some("Archive")).unwrap(), 1);
+        let remaining = get_unread_message_uids_in(&conn, "acc1", None).unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].0, "in-inbox");
 
         let flags: String = conn
             .query_row(
