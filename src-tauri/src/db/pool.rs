@@ -1,11 +1,11 @@
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
 use rusqlite::Connection;
 
 use crate::error::{Error, Result};
+use crate::sync_ext::KeyedLocks;
 
 /// A guard that holds a read-only database connection from the pool.
 /// The connection is returned to the pool when the guard is dropped.
@@ -31,10 +31,8 @@ pub struct DbPool {
     writer: tokio::sync::Mutex<Connection>,
     readers: Vec<std::sync::Mutex<Connection>>,
     next_reader: AtomicUsize,
-    imap_folder_sync_locks: std::sync::Mutex<FolderSyncLockMap>,
+    imap_folder_sync_locks: KeyedLocks<(String, String)>,
 }
-
-type FolderSyncLockMap = HashMap<(String, String), Weak<tokio::sync::Mutex<()>>>;
 
 impl DbPool {
     /// Create a new pool with one writer and `reader_count` reader connections.
@@ -48,7 +46,7 @@ impl DbPool {
             writer: tokio::sync::Mutex::new(writer),
             readers,
             next_reader: AtomicUsize::new(0),
-            imap_folder_sync_locks: std::sync::Mutex::new(HashMap::new()),
+            imap_folder_sync_locks: KeyedLocks::default(),
         })
     }
 
@@ -69,18 +67,8 @@ impl DbPool {
         account_id: &str,
         folder_path: &str,
     ) -> Arc<tokio::sync::Mutex<()>> {
-        let mut locks = self
-            .imap_folder_sync_locks
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        locks.retain(|_, lock| lock.strong_count() > 0);
-        let key = (account_id.to_string(), folder_path.to_string());
-        if let Some(lock) = locks.get(&key).and_then(Weak::upgrade) {
-            return lock;
-        }
-        let lock = Arc::new(tokio::sync::Mutex::new(()));
-        locks.insert(key, Arc::downgrade(&lock));
-        lock
+        self.imap_folder_sync_locks
+            .get((account_id.to_string(), folder_path.to_string()))
     }
 
     /// Acquire a read-only connection (non-blocking round-robin).

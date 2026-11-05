@@ -1,4 +1,4 @@
-use crate::sync_ext::MutexExt;
+use crate::sync_ext::{KeyedLocks, MutexExt};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions, TryLockError};
 use std::net::{Shutdown, TcpStream};
@@ -6,7 +6,7 @@ use std::path::PathBuf;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, Weak};
+use std::sync::{Arc, Mutex, OnceLock};
 use tokio_util::sync::CancellationToken;
 
 use crate::db;
@@ -108,7 +108,7 @@ pub struct JmapPushHandle {
 /// and one registry mutex makes lookup-or-create atomic.
 #[derive(Default)]
 pub struct MeetLifecycleCoordinator {
-    locks: Mutex<HashMap<String, Weak<tokio::sync::Mutex<()>>>>,
+    locks: KeyedLocks<String>,
 }
 
 /// Weak per-account lock registry for remote operations and account mutation.
@@ -117,20 +117,12 @@ pub struct MeetLifecycleCoordinator {
 /// before any provider credential lock.
 #[derive(Default)]
 pub struct AccountLifecycleCoordinator {
-    locks: Mutex<HashMap<String, Weak<tokio::sync::Mutex<()>>>>,
+    locks: KeyedLocks<String>,
 }
 
 impl AccountLifecycleCoordinator {
     pub fn acquire(&self, account_id: &str) -> Arc<tokio::sync::Mutex<()>> {
-        let mut locks = self.locks.lock().unwrap_or_else(|error| error.into_inner());
-        locks.retain(|_, lock| lock.strong_count() > 0);
-        if let Some(lock) = locks.get(account_id).and_then(Weak::upgrade) {
-            return lock;
-        }
-
-        let lock = Arc::new(tokio::sync::Mutex::new(()));
-        locks.insert(account_id.to_string(), Arc::downgrade(&lock));
-        lock
+        self.locks.get(account_id.to_string())
     }
 }
 
@@ -140,15 +132,7 @@ impl MeetLifecycleCoordinator {
             crate::error::Error::Other("meeting lifecycle id must be a UUID".into())
         })?;
 
-        let mut locks = self.locks.lock().unwrap_or_else(|error| error.into_inner());
-        locks.retain(|_, lock| lock.strong_count() > 0);
-        if let Some(lock) = locks.get(lifecycle_id).and_then(Weak::upgrade) {
-            return Ok(lock);
-        }
-
-        let lock = Arc::new(tokio::sync::Mutex::new(()));
-        locks.insert(lifecycle_id.to_string(), Arc::downgrade(&lock));
-        Ok(lock)
+        Ok(self.locks.get(lifecycle_id.to_string()))
     }
 }
 
@@ -159,7 +143,7 @@ pub struct AppState {
     pub idle_generation: AtomicU64,
     pub idle_lifecycle_lock: Arc<tokio::sync::Mutex<()>>,
     pub idle_push_enabled: AtomicBool,
-    pub idle_account_locks: std::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    pub idle_account_locks: KeyedLocks<String>,
     pub jmap_push_generation: AtomicU64,
     pub jmap_push_handles: std::sync::Mutex<HashMap<String, JmapPushHandle>>,
     /// Per-account mail-sync-in-progress flags. If true, a mail sync or
@@ -337,7 +321,7 @@ impl AppState {
             idle_generation: AtomicU64::new(1),
             idle_lifecycle_lock: Arc::new(tokio::sync::Mutex::new(())),
             idle_push_enabled: AtomicBool::new(false),
-            idle_account_locks: std::sync::Mutex::new(HashMap::new()),
+            idle_account_locks: KeyedLocks::default(),
             jmap_push_generation: AtomicU64::new(1),
             jmap_push_handles: std::sync::Mutex::new(HashMap::new()),
             sync_in_progress: std::sync::Mutex::new(HashMap::new()),
@@ -566,7 +550,7 @@ mod tests {
     fn meet_lifecycle_rejects_malformed_ids_without_inserting() {
         let coordinator = MeetLifecycleCoordinator::default();
         assert!(coordinator.acquire("renderer-controlled").is_err());
-        assert!(coordinator.locks.lock().unwrap().is_empty());
+        assert_eq!(coordinator.locks.len(), 0);
     }
 
     #[test]
@@ -578,7 +562,7 @@ mod tests {
         }
 
         // Each acquisition prunes the dead entry from the preceding one.
-        assert_eq!(coordinator.locks.lock().unwrap().len(), 1);
+        assert_eq!(coordinator.locks.len(), 1);
     }
 
     #[test]
@@ -615,7 +599,7 @@ mod tests {
         for index in 0..32 {
             drop(coordinator.acquire(&format!("account-{index}")));
         }
-        assert_eq!(coordinator.locks.lock().unwrap().len(), 1);
+        assert_eq!(coordinator.locks.len(), 1);
     }
 
     #[test]

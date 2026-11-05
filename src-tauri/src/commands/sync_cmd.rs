@@ -65,12 +65,7 @@ pub(crate) struct ImapIdleSuspension {
 }
 
 fn imap_idle_account_lock(state: &AppState, account_id: &str) -> Arc<tokio::sync::Mutex<()>> {
-    state
-        .idle_account_locks
-        .lock_unpoisoned()
-        .entry(account_id.to_string())
-        .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
-        .clone()
+    state.idle_account_locks.get(account_id.to_string())
 }
 
 pub(crate) async fn suspend_imap_idle_for_account(

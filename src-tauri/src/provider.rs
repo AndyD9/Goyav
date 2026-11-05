@@ -281,18 +281,12 @@ pub struct ProviderCredentialService {
 
 #[derive(Default)]
 pub struct ProviderAccountCoordinator {
-    locks: std::sync::Mutex<std::collections::HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    locks: crate::sync_ext::KeyedLocks<String>,
 }
 
 impl ProviderAccountCoordinator {
     pub async fn lock_account(&self, account_id: &str) -> tokio::sync::OwnedMutexGuard<()> {
-        let account_lock = self
-            .locks
-            .lock_unpoisoned()
-            .entry(account_id.to_string())
-            .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
-            .clone();
-        account_lock.lock_owned().await
+        self.locks.get(account_id.to_string()).lock_owned().await
     }
 }
 

@@ -105,14 +105,15 @@ fn folder_sync_registry_prunes_unused_entries_without_removing_live_locks() {
         &live,
         &pool.imap_folder_sync_lock("account", "INBOX")
     ));
-    assert_eq!(pool.imap_folder_sync_locks.lock().unwrap().len(), 1);
+    assert_eq!(pool.imap_folder_sync_locks.len(), 1);
     let identity = Arc::downgrade(&live);
     drop(live);
     assert!(identity.upgrade().is_none());
     let _replacement = pool.imap_folder_sync_lock("account", "Sent");
-    let entries = pool.imap_folder_sync_locks.lock().unwrap();
-    assert_eq!(entries.len(), 1);
-    assert!(entries.contains_key(&("account".to_string(), "Sent".to_string())));
+    assert_eq!(pool.imap_folder_sync_locks.len(), 1);
+    assert!(pool
+        .imap_folder_sync_locks
+        .contains(&("account".to_string(), "Sent".to_string())));
 }
 
 #[test]
