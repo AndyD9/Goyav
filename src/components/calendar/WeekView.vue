@@ -12,7 +12,7 @@ import {
   endOfDayUTC,
 } from "@/lib/datetime";
 import type { CalendarEvent } from "@/lib/types";
-import { calendarDay, parseCalendarDay } from "@/lib/calendar-days";
+import { calendarDay, isCalendarToday, parseCalendarDay } from "@/lib/calendar-days";
 import { dragCalendarEvent, isCalendarDragging, canDragCalendarEvent } from "@/lib/calendar-drag-state";
 
 const props = defineProps<{
@@ -128,8 +128,7 @@ function formatHour(hour: number): string {
 }
 
 function isToday(date: Date): boolean {
-  return calendarDay(date) ===
-    getDateInTimezone(now.value.toISOString(), uiStore.displayTimezone);
+  return isCalendarToday(date, uiStore.displayTimezone, now.value);
 }
 
 function isWeekend(date: Date): boolean {

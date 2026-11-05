@@ -15,7 +15,12 @@ import {
   chooseRescheduleScope, confirmCalendarAction,
 } from "@/lib/calendar-action-confirmation";
 import * as api from "@/lib/tauri";
-import { calendarDay, monthGridDays, parseCalendarDay } from "@/lib/calendar-days";
+import {
+  calendarDay,
+  isCalendarToday,
+  monthGridDays,
+  parseCalendarDay,
+} from "@/lib/calendar-days";
 import { getDateInTimezone } from "@/lib/datetime";
 import { useUiStore } from "@/stores/ui";
 import CalendarSidebar from "@/components/calendar/CalendarSidebar.vue";
@@ -108,7 +113,7 @@ function isSameDate(a: Date, b: Date): boolean {
 }
 
 function isToday(d: Date): boolean {
-  return isSameDate(d, new Date());
+  return isCalendarToday(d, uiStore.displayTimezone);
 }
 
 interface PositionedEvent {

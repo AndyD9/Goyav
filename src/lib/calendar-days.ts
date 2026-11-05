@@ -1,3 +1,18 @@
+import { toDateInTimezone } from "@/lib/datetime";
+
+/**
+ * Whether a grid day is today in the calendar's display timezone. Every
+ * view highlights "today" with this, so they agree when the display
+ * timezone differs from the system one.
+ */
+export function isCalendarToday(
+  date: Date,
+  displayTimezone: string,
+  now: Date = new Date(),
+): boolean {
+  return calendarDay(date) === toDateInTimezone(now, displayTimezone);
+}
+
 /** Calendar dates are civil days, not UTC instants. */
 export function parseCalendarDay(day: string): Date {
   const [year, month, date] = day.split("-").map(Number);

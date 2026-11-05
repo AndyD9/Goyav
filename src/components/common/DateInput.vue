@@ -3,7 +3,7 @@
 
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useUiStore } from "@/stores/ui";
-import { calendarDay, parseCalendarDay } from "@/lib/calendar-days";
+import { calendarDay, isCalendarToday, parseCalendarDay } from "@/lib/calendar-days";
 import { t, dateLocale } from "@/i18n";
 
 const props = defineProps<{
@@ -96,12 +96,7 @@ function goNext() {
 }
 
 function isToday(d: Date): boolean {
-  const now = new Date();
-  return (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
-  );
+  return isCalendarToday(d, uiStore.displayTimezone);
 }
 
 function isSelected(d: Date): boolean {

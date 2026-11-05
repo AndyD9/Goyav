@@ -8,7 +8,12 @@ import {
   getHourInTimezone,
   getMinutesInTimezone,
 } from "@/lib/datetime";
-import { calendarDay, monthGridDays, parseCalendarDay } from "@/lib/calendar-days";
+import {
+  calendarDay,
+  isCalendarToday,
+  monthGridDays,
+  parseCalendarDay,
+} from "@/lib/calendar-days";
 import type { CalendarEvent } from "@/lib/types";
 import { dragCalendarEvent, isCalendarDragging, canDragCalendarEvent } from "@/lib/calendar-drag-state";
 
@@ -36,7 +41,7 @@ const weeks = computed(() => {
 const currentMonth = computed(() => parseCalendarDay(calendarStore.displayDate).getMonth());
 
 function isToday(date: Date): boolean {
-  return date.toDateString() === new Date().toDateString();
+  return isCalendarToday(date, uiStore.displayTimezone);
 }
 
 function isCurrentMonth(date: Date): boolean {
