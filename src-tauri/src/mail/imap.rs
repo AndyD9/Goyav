@@ -541,21 +541,30 @@ impl ImapConnection {
     }
 
     /// Create a new mailbox (folder) on the IMAP server.
-    pub fn create_folder(&mut self, folder_path: &str) -> Result<()> {
-        // Encode UTF-8 folder name to IMAP Modified UTF-7 (RFC 3501 §5.1.3)
-        let encoded = utf7_imap::encode_utf7_imap(folder_path.to_string());
-        log::info!(
-            "IMAP creating folder: {} (encoded: {})",
-            folder_path,
-            encoded
-        );
-        self.session.create(&encoded).map_err(|e| {
-            log::error!("IMAP CREATE folder '{}' failed: {}", folder_path, e);
+    /// The server's hierarchy delimiter (`LIST "" ""`, RFC 3501 §6.3.8).
+    /// Servers differ: Dovecot and Gmail use "/", Courier and Cyrus ".".
+    pub fn hierarchy_delimiter(&mut self) -> Result<String> {
+        let listed = self.session.list(None, None);
+        let names = self.checked("IMAP LIST (hierarchy delimiter)", listed)?;
+        Ok(names
+            .iter()
+            .find_map(|name| name.delimiter().map(str::to_string))
+            .unwrap_or_else(|| "/".to_string()))
+    }
+
+    /// Create folder `name` (UTF-8, as typed) under the raw server path
+    /// `parent`, or at the top level. Returns the new folder's server path.
+    pub fn create_child_folder(&mut self, parent: Option<&str>, name: &str) -> Result<String> {
+        let delimiter = self.hierarchy_delimiter()?;
+        let path = child_folder_path(parent, &delimiter, name)?;
+        log::info!("IMAP creating folder: {} (name: {})", path, name);
+        self.session.create(&path).map_err(|e| {
+            log::error!("IMAP CREATE folder '{}' failed: {}", path, e);
             Error::Imap(e.to_string())
         })?;
         // Subscribe so it shows in LIST
-        self.session.subscribe(&encoded).ok();
-        Ok(())
+        self.session.subscribe(&path).ok();
+        Ok(path)
     }
 
     pub fn delete_folder(&mut self, folder_path: &str) -> Result<()> {
@@ -1111,6 +1120,66 @@ fn parse_tolerant_fetches<T>(
 /// control character rather than silently stripping it (silent
 /// stripping would change the destination folder, which is worse than
 /// a clear error).
+/// Server path of a new folder `name` under `parent`. Only the new name is
+/// encoded to IMAP modified UTF-7 (RFC 3501 §5.1.3): the parent comes from
+/// LIST and is already in wire form, so encoding it again would corrupt
+/// any non-ASCII parent name. A name containing the delimiter would
+/// silently create nested folders, so it is refused.
+fn child_folder_path(parent: Option<&str>, delimiter: &str, name: &str) -> Result<String> {
+    if name.is_empty() {
+        return Err(Error::Imap("folder name is empty".into()));
+    }
+    if !delimiter.is_empty() && name.contains(delimiter) {
+        return Err(Error::Imap(format!(
+            "folder name cannot contain the server's folder separator \"{delimiter}\""
+        )));
+    }
+    let encoded = utf7_imap::encode_utf7_imap(name.to_string());
+    Ok(match parent {
+        Some(parent) if !parent.is_empty() => format!("{parent}{delimiter}{encoded}"),
+        _ => encoded,
+    })
+}
+
+#[cfg(test)]
+mod child_folder_path_tests {
+    use super::child_folder_path;
+
+    #[test]
+    fn joins_with_the_server_delimiter() {
+        assert_eq!(
+            child_folder_path(Some("Projects"), "/", "Q4").unwrap(),
+            "Projects/Q4"
+        );
+        assert_eq!(
+            child_folder_path(Some("INBOX.Projects"), ".", "Q4").unwrap(),
+            "INBOX.Projects.Q4"
+        );
+        assert_eq!(
+            child_folder_path(None, ".", "Receipts").unwrap(),
+            "Receipts"
+        );
+    }
+
+    #[test]
+    fn encodes_only_the_new_name() {
+        // "Été" under a parent already in wire form ("Ann&AOk-e" = "Année").
+        assert_eq!(
+            child_folder_path(Some("Ann&AOk-e"), "/", "Été").unwrap(),
+            "Ann&AOk-e/&AMk-t&AOk-"
+        );
+    }
+
+    #[test]
+    fn refuses_names_with_the_delimiter_or_empty() {
+        assert!(child_folder_path(Some("INBOX"), ".", "a.b").is_err());
+        assert!(child_folder_path(None, "/", "a/b").is_err());
+        assert!(child_folder_path(None, "/", "").is_err());
+        // The other separator is an ordinary character.
+        assert_eq!(child_folder_path(None, ".", "a/b").unwrap(), "a/b");
+    }
+}
+
 fn quote_mailbox_for_imap(name: &str) -> Result<String> {
     if let Some(c) = name.chars().find(|c| c.is_control()) {
         return Err(Error::Imap(format!(

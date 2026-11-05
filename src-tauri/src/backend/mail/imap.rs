@@ -472,11 +472,14 @@ impl MailBackend for ImapMailBackend {
         account: &MailAccountConfig,
         folder_path: &str,
     ) -> Result<()> {
+        // The frontend sends "parentPath/name" whatever the server's
+        // delimiter; the parent is the raw server path from LIST.
+        let (parent, name) = super::split_folder_path(folder_path);
+        let (parent, name) = (parent.map(str::to_string), name.to_string());
         let imap_config = build_imap_config(ctx, account).await?;
-        let folder_path = folder_path.to_string();
         tokio::task::spawn_blocking(move || {
             let mut conn = crate::mail::imap::ImapConnection::connect(&imap_config)?;
-            conn.create_folder(&folder_path)?;
+            conn.create_child_folder(parent.as_deref(), &name)?;
             conn.logout();
             Ok(())
         })
