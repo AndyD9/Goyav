@@ -766,6 +766,7 @@ dependencies = [
  "fern",
  "futures",
  "hickory-resolver",
+ "http",
  "iana-time-zone",
  "icalendar",
  "idna",

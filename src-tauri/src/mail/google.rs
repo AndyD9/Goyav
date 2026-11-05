@@ -9,7 +9,9 @@ use crate::calendar::recurrence_identity::{OccurrenceFields, UpdateOccurrenceInp
 use crate::calendar::{CalendarEvent, RecurrenceKind};
 use crate::error::{Error, Result};
 
+mod backoff;
 mod event_sets;
+use backoff::SendWithBackoff;
 pub(crate) use event_sets::event_set_content;
 
 const PEOPLE_PAGE_SIZE: usize = 1_000;
@@ -216,7 +218,7 @@ impl GoogleClient {
             if let Some(token) = token.as_deref() {
                 request = request.query(&[("pageToken", token)]);
             }
-            let response = request.send().await.map_err(|error| {
+            let response = request.send_with_backoff().await.map_err(|error| {
                 Error::Other(format!("Google calendar inventory failed: {error}"))
             })?;
             if !response.status().is_success() {
@@ -277,7 +279,7 @@ impl GoogleClient {
             .post(self.calendar_url("freeBusy"))
             .bearer_auth(&self.token)
             .json(&body)
-            .send()
+            .send_with_backoff()
             .await
             .map_err(|e| Error::Other(format!("Google Calendar FreeBusy failed: {}", e)))?;
         if !resp.status().is_success() {
@@ -360,7 +362,7 @@ impl GoogleClient {
             if let Some(token) = page_token.as_deref() {
                 request = request.query(&[("pageToken", token)]);
             }
-            let response = request.send().await.map_err(|error| {
+            let response = request.send_with_backoff().await.map_err(|error| {
                 Error::Other(format!("Google Calendar events fetch failed: {error}"))
             })?;
             if response.status().as_u16() == 410 && incremental {
@@ -466,7 +468,7 @@ impl GoogleClient {
             .post(&url)
             .bearer_auth(&self.token)
             .json(event)
-            .send()
+            .send_with_backoff()
             .await
             .map_err(|e| Error::Other(format!("Google Calendar request failed: {}", e)))?;
         if !resp.status().is_success() {
@@ -504,7 +506,7 @@ impl GoogleClient {
             .patch(&url)
             .bearer_auth(&self.token)
             .json(patch)
-            .send()
+            .send_with_backoff()
             .await
             .map_err(|e| Error::Other(format!("Google Calendar request failed: {}", e)))?;
         if !resp.status().is_success() {
@@ -537,7 +539,7 @@ impl GoogleClient {
             .bearer_auth(&self.token)
             .header(reqwest::header::IF_MATCH, expected_etag)
             .json(patch)
-            .send()
+            .send_with_backoff()
             .await
             .map_err(|error| {
                 Error::Other(format!(
@@ -571,7 +573,7 @@ impl GoogleClient {
             .http
             .get(self.calendar_url(&path))
             .bearer_auth(&self.token)
-            .send()
+            .send_with_backoff()
             .await
             .map_err(|error| {
                 Error::Sync(format!(
@@ -620,7 +622,7 @@ impl GoogleClient {
             .http
             .delete(&url)
             .bearer_auth(&self.token)
-            .send()
+            .send_with_backoff()
             .await
             .map_err(|e| Error::Other(format!("Google Calendar request failed: {}", e)))?;
         let status = resp.status();
@@ -664,7 +666,7 @@ impl GoogleClient {
             .post(&url)
             .bearer_auth(&self.token)
             .json(event)
-            .send()
+            .send_with_backoff()
             .await
             .map_err(|e| Error::Other(format!("Google Calendar import request failed: {}", e)))?;
         if !resp.status().is_success() {
@@ -703,7 +705,7 @@ impl GoogleClient {
                 "backgroundColor": background,
                 "foregroundColor": foreground,
             }))
-            .send()
+            .send_with_backoff()
             .await
             .map_err(|e| Error::Other(format!("Google color push request failed: {}", e)))?;
         if !resp.status().is_success() {
@@ -726,7 +728,7 @@ impl GoogleClient {
             .patch(&url)
             .bearer_auth(&self.token)
             .json(&serde_json::json!({ "summary": name }))
-            .send()
+            .send_with_backoff()
             .await
             .map_err(|e| Error::Other(format!("Google Calendar PATCH failed: {}", e)))?;
         if !resp.status().is_success() {
@@ -754,7 +756,7 @@ impl GoogleClient {
                 ("sources", "READ_SOURCE_TYPE_CONTACT"),
             ])
             .json(person)
-            .send()
+            .send_with_backoff()
             .await
             .map_err(|e| Error::Other(format!("Google create contact request failed: {}", e)))?;
         if !response.status().is_success() {
@@ -825,7 +827,7 @@ impl GoogleClient {
                 ("sources", "READ_SOURCE_TYPE_CONTACT"),
             ])
             .json(&body)
-            .send()
+            .send_with_backoff()
             .await
             .map_err(|e| Error::Other(format!("Google update contact request failed: {}", e)))?;
         if !response.status().is_success() {
@@ -851,7 +853,7 @@ impl GoogleClient {
                 ("personFields", PEOPLE_PERSON_FIELDS),
                 ("sources", "READ_SOURCE_TYPE_CONTACT"),
             ])
-            .send()
+            .send_with_backoff()
             .await
             .map_err(|e| Error::Other(format!("Google contact preflight request failed: {e}")))?;
         if !response.status().is_success() {
@@ -873,7 +875,7 @@ impl GoogleClient {
             .http
             .delete(&url)
             .bearer_auth(&self.token)
-            .send()
+            .send_with_backoff()
             .await
             .map_err(|e| Error::Other(format!("Google delete contact request failed: {}", e)))?;
         if !resp.status().is_success()
@@ -922,7 +924,7 @@ impl GoogleClient {
                 request = request.query(&[("pageToken", page_token)]);
             }
             let response = request
-                .send()
+                .send_with_backoff()
                 .await
                 .map_err(|error| Error::Other(format!("Google People API failed: {error}")))?;
             if response.status().as_u16() == 410 && sync_token.is_some() {
@@ -1020,7 +1022,7 @@ impl GoogleClient {
             for resource_name in chunk {
                 request = request.query(&[("resourceNames", resource_name)]);
             }
-            let response = request.send().await.map_err(|error| {
+            let response = request.send_with_backoff().await.map_err(|error| {
                 Error::Other(format!("Google People batch lookup failed: {error}"))
             })?;
             if !response.status().is_success() {
