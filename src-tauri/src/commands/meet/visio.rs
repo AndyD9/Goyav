@@ -4,6 +4,7 @@
 //! application-specific boundary: restricted auth windows, in-flight session
 //! state, account persistence, token lifecycle, cancellation, and expiry.
 
+use crate::sync_ext::MutexExt;
 use serde::Serialize;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri::Manager;
@@ -144,7 +145,7 @@ async fn login_start_desktop(
         phase: AtomicU8::new(LOGIN_ACTIVE),
     });
     let stale_sessions = {
-        let mut sessions = state.visio_login_sessions.lock().unwrap();
+        let mut sessions = state.visio_login_sessions.lock_unpoisoned();
         let now = std::time::Instant::now();
         let mut stale_sessions = Vec::new();
         sessions.retain(|_, candidate| {
@@ -172,8 +173,7 @@ async fn login_start_desktop(
             let state = expiry_app.state::<AppState>();
             let expired = state
                 .visio_login_sessions
-                .lock()
-                .unwrap()
+                .lock_unpoisoned()
                 .remove(&expiry_session_id);
             expired
         };
@@ -229,8 +229,7 @@ pub fn meet_visio_login_cancel(
     {
         let session = state
             .visio_login_sessions
-            .lock()
-            .unwrap()
+            .lock_unpoisoned()
             .remove(&session_id);
         if let Some(session) = session {
             if !mark_login_cancelled(&session) {
@@ -253,14 +252,13 @@ async fn login_complete_desktop(
 ) -> Result<String> {
     let session = state
         .visio_login_sessions
-        .lock()
-        .unwrap()
+        .lock_unpoisoned()
         .get(&session_id)
         .cloned()
         .ok_or_else(|| Error::Other("Visio login session expired; start again".into()))?;
     let result = complete_login(&state, &session, display_name).await;
     {
-        let mut sessions = state.visio_login_sessions.lock().unwrap();
+        let mut sessions = state.visio_login_sessions.lock_unpoisoned();
         if sessions
             .get(&session_id)
             .is_some_and(|current| std::sync::Arc::ptr_eq(current, &session))

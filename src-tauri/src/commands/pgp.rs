@@ -6,6 +6,7 @@
 //! in those apps. We list, import, export, fetch over WKD, and enumerate /
 //! auto-link OpenPGP smartcards.
 
+use crate::sync_ext::MutexExt;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
@@ -157,7 +158,7 @@ fn summary_to_dto(s: KeySummary, card_idents: Vec<String>) -> PgpKeySummary {
 pub async fn pgp_list_keys(state: State<'_, AppState>) -> Result<Vec<PgpKeySummary>> {
     let store = state.pgp_store().map_err(lt_err)?;
     tokio::task::spawn_blocking(move || {
-        let guard = store.lock().expect("pgp keystore mutex poisoned");
+        let guard = store.lock_unpoisoned();
         let summaries = guard.list_keys_summary().map_err(|e| lt_err(e.into()))?;
         let links = card_link::card_idents_map(&guard).map_err(lt_err)?;
         Ok(summaries
@@ -176,7 +177,7 @@ pub async fn pgp_list_keys(state: State<'_, AppState>) -> Result<Vec<PgpKeySumma
 pub async fn pgp_get_key(state: State<'_, AppState>, fingerprint: String) -> Result<PgpKeySummary> {
     let store = state.pgp_store().map_err(lt_err)?;
     tokio::task::spawn_blocking(move || {
-        let guard = store.lock().expect("pgp keystore mutex poisoned");
+        let guard = store.lock_unpoisoned();
         let summary = guard
             .get_key_summary(&fingerprint)
             .map_err(|e| lt_err(e.into()))?;
@@ -196,7 +197,7 @@ pub async fn pgp_import_key(state: State<'_, AppState>, data: Vec<u8>) -> Result
     let store = state.pgp_store().map_err(lt_err)?;
     tokio::task::spawn_blocking(move || {
         let data = sanitized_import_bytes(&data, None)?;
-        let guard = store.lock().expect("pgp keystore mutex poisoned");
+        let guard = store.lock_unpoisoned();
         let info = key::import_any(&guard, &data).map_err(lt_err)?;
         Ok(PgpImportResult {
             fingerprint: info.fingerprint,
@@ -236,7 +237,7 @@ pub async fn pgp_pick_and_import_key(
     let store = state.pgp_store().map_err(lt_err)?;
     let result = tokio::task::spawn_blocking(move || -> Result<PgpImportResult> {
         let bytes = sanitized_import_bytes(&bytes, None)?;
-        let guard = store.lock().expect("pgp keystore mutex poisoned");
+        let guard = store.lock_unpoisoned();
         let info = key::import_any(&guard, &bytes).map_err(lt_err)?;
         Ok(PgpImportResult {
             fingerprint: info.fingerprint,
@@ -252,7 +253,7 @@ pub async fn pgp_pick_and_import_key(
 pub async fn pgp_delete_key(state: State<'_, AppState>, fingerprint: String) -> Result<()> {
     let store = state.pgp_store().map_err(lt_err)?;
     tokio::task::spawn_blocking(move || {
-        let guard = store.lock().expect("pgp keystore mutex poisoned");
+        let guard = store.lock_unpoisoned();
         key::delete(&guard, &fingerprint).map_err(lt_err)
     })
     .await
@@ -263,7 +264,7 @@ pub async fn pgp_delete_key(state: State<'_, AppState>, fingerprint: String) -> 
 pub async fn pgp_export_public(state: State<'_, AppState>, fingerprint: String) -> Result<String> {
     let store = state.pgp_store().map_err(lt_err)?;
     tokio::task::spawn_blocking(move || {
-        let guard = store.lock().expect("pgp keystore mutex poisoned");
+        let guard = store.lock_unpoisoned();
         key::export_public_armored(&guard, &fingerprint).map_err(lt_err)
     })
     .await
@@ -293,7 +294,7 @@ pub async fn pgp_wkd_fetch(state: State<'_, AppState>, email: String) -> Result<
         let fetched = wecanencrypt::fetch_key_by_email(address)
             .map_err(|e| Error::Other(format!("wkd: {e}")))?;
         let data = sanitized_import_bytes(&fetched, Some(address))?;
-        let guard = store.lock().expect("pgp keystore mutex poisoned");
+        let guard = store.lock_unpoisoned();
         let info = key::import_any(&guard, &data).map_err(lt_err)?;
         Ok(info.fingerprint)
     })
@@ -360,7 +361,7 @@ pub async fn pgp_card_details(ident: String) -> Result<PgpCardDetails> {
 pub async fn pgp_auto_link_cards(state: State<'_, AppState>) -> Result<Vec<PgpCardDetection>> {
     let store = state.pgp_store().map_err(lt_err)?;
     let detections = tokio::task::spawn_blocking(move || {
-        let guard = store.lock().expect("pgp keystore mutex poisoned");
+        let guard = store.lock_unpoisoned();
         card_link::auto_link_all(&guard)
     })
     .await
@@ -444,8 +445,7 @@ pub async fn pgp_provide_secret(
     let secret = Zeroizing::new(value);
     let entry = state
         .pgp_pending_secrets
-        .lock()
-        .expect("pgp pending secrets mutex poisoned")
+        .lock_unpoisoned()
         .remove(&request_id);
     let Some(pending) = entry else {
         // Stale id (prompt was cancelled by the caller or already
@@ -462,8 +462,7 @@ pub async fn pgp_provide_secret(
 pub async fn pgp_cancel_secret(state: State<'_, AppState>, request_id: String) -> Result<()> {
     let entry = state
         .pgp_pending_secrets
-        .lock()
-        .expect("pgp pending secrets mutex poisoned")
+        .lock_unpoisoned()
         .remove(&request_id);
     if let Some(pending) = entry {
         let _ = pending.tx.send(None);
@@ -476,7 +475,7 @@ pub async fn pgp_cancel_secret(state: State<'_, AppState>, request_id: String) -
 /// values overwrite their backing buffers on drop.
 #[tauri::command]
 pub async fn pgp_forget_all(state: State<'_, AppState>) -> Result<()> {
-    let mut guard = state.pgp_cache.lock().expect("pgp cache mutex poisoned");
+    let mut guard = state.pgp_cache.lock_unpoisoned();
     *guard = libtumpa::cache::CredentialCache::new();
     Ok(())
 }
@@ -485,11 +484,7 @@ pub async fn pgp_forget_all(state: State<'_, AppState>) -> Result<()> {
 /// previously-connected card disappears from `pgp_list_cards`.
 #[tauri::command]
 pub async fn pgp_forget_card(state: State<'_, AppState>, ident: String) -> Result<()> {
-    state
-        .pgp_cache
-        .lock()
-        .expect("pgp cache mutex poisoned")
-        .clear_card(&ident);
+    state.pgp_cache.lock_unpoisoned().clear_card(&ident);
     Ok(())
 }
 
@@ -554,12 +549,7 @@ pub async fn acquire_secret(
 
     // 2. Agent down (or no agent key): consult the in-process cache.
     if !agent_up {
-        if let Some(cached) = cache
-            .lock()
-            .expect("pgp cache mutex poisoned")
-            .get(target)
-            .cloned()
-        {
+        if let Some(cached) = cache.lock_unpoisoned().get(target).cloned() {
             return Ok(cached);
         }
     }
@@ -580,10 +570,7 @@ pub async fn acquire_secret(
         false
     };
     if !stored_in_agent {
-        cache
-            .lock()
-            .expect("pgp cache mutex poisoned")
-            .store(target, secret.clone());
+        cache.lock_unpoisoned().store(target, secret.clone());
     }
     Ok(secret)
 }
@@ -602,8 +589,7 @@ async fn prompt_via_dialog(
     let request_id = uuid::Uuid::new_v4().to_string();
     let (tx, rx) = tokio::sync::oneshot::channel();
     pending
-        .lock()
-        .expect("pgp pending secrets mutex poisoned")
+        .lock_unpoisoned()
         .insert(request_id.clone(), PendingSecret { tx });
     let payload = SecretPromptPayload {
         request_id: &request_id,
@@ -836,7 +822,7 @@ pub async fn pgp_decrypt_message(
     // resident). Both branches share `acquire_secret` for the prompt and
     // `evict_cached_secret` for failed-auth recovery.
     let software_key = {
-        let guard = store.lock().expect("pgp keystore mutex poisoned");
+        let guard = store.lock_unpoisoned();
         libtumpa::decrypt::find_software_decryption_key(&guard, &ciphertext).map_err(lt_err)?
     };
 
@@ -861,9 +847,7 @@ pub async fn pgp_decrypt_message(
         let ciphertext_clone = ciphertext.clone();
         let key_data_clone = key_data.clone();
         let join = tokio::task::spawn_blocking(move || {
-            let guard = store_for_blocking
-                .lock()
-                .expect("pgp keystore mutex poisoned");
+            let guard = store_for_blocking.lock_unpoisoned();
             libtumpa::decrypt::decrypt_and_verify_with_key(
                 &guard,
                 &key_data_clone,
@@ -888,9 +872,7 @@ pub async fn pgp_decrypt_message(
             let store_for_blocking = store.clone();
             let ciphertext_clone = ciphertext.clone();
             tokio::task::spawn_blocking(move || {
-                let guard = store_for_blocking
-                    .lock()
-                    .expect("pgp keystore mutex poisoned");
+                let guard = store_for_blocking.lock_unpoisoned();
                 libtumpa::decrypt::find_decryption_card(&guard, &ciphertext_clone)
             })
             .await
@@ -928,9 +910,7 @@ pub async fn pgp_decrypt_message(
         let key_data_clone = key_data.clone();
         let ident_for_blocking = ident.clone();
         let join = tokio::task::spawn_blocking(move || {
-            let guard = store_for_blocking
-                .lock()
-                .expect("pgp keystore mutex poisoned");
+            let guard = store_for_blocking.lock_unpoisoned();
             libtumpa::decrypt::decrypt_and_verify_on_card(
                 &guard,
                 &key_data_clone,
@@ -1015,7 +995,7 @@ pub async fn pgp_verify_message(
     if let Some((signed_entity, signature)) = crate::mail::pgp_mime::extract_signed_payload(&raw) {
         let store = state.pgp_store().map_err(lt_err)?;
         let outcome = tokio::task::spawn_blocking(move || {
-            let guard = store.lock().expect("pgp keystore mutex poisoned");
+            let guard = store.lock_unpoisoned();
             // Try canonical first; fall through to tolerant variants on
             // a Bad outcome. UnknownKey / Good shortcut out.
             let primary = libtumpa::verify::verify_detached(&guard, &signed_entity, &signature);
@@ -1105,10 +1085,7 @@ pub fn evict_cached_secret(
     target: &str,
     agent_key: Option<&str>,
 ) {
-    cache
-        .lock()
-        .expect("pgp cache mutex poisoned")
-        .remove(target);
+    cache.lock_unpoisoned().remove(target);
     if let Some(ak) = agent_key {
         let ak = ak.to_string();
         tokio::spawn(async move {

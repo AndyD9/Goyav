@@ -1,3 +1,4 @@
+use crate::sync_ext::MutexExt;
 use futures::FutureExt;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -29,7 +30,7 @@ pub(crate) fn try_acquire_sync_guard(
     operation: &str,
 ) -> Option<SyncGuard> {
     let flag = {
-        let mut map = flags.lock().unwrap();
+        let mut map = flags.lock_unpoisoned();
         map.entry(account_id.to_string())
             .or_insert_with(|| Arc::new(AtomicBool::new(false)))
             .clone()
@@ -66,8 +67,7 @@ pub(crate) struct ImapIdleSuspension {
 fn imap_idle_account_lock(state: &AppState, account_id: &str) -> Arc<tokio::sync::Mutex<()>> {
     state
         .idle_account_locks
-        .lock()
-        .unwrap()
+        .lock_unpoisoned()
         .entry(account_id.to_string())
         .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
         .clone()
@@ -88,7 +88,7 @@ pub(crate) async fn suspend_imap_idle_for_account(
 
 fn request_imap_idle_stop(state: &AppState, account_id: &str) -> Option<u64> {
     let (generation, control) = {
-        let mut handles = state.idle_handles.lock().unwrap();
+        let mut handles = state.idle_handles.lock_unpoisoned();
         let handle = handles.get_mut(account_id)?;
         if !matches!(handle.phase, IdlePhase::Joining | IdlePhase::StopFailed) {
             handle.phase = IdlePhase::Stopping;
@@ -107,7 +107,7 @@ async fn wait_for_imap_idle_stop(
 ) -> Result<()> {
     loop {
         let finished_thread = {
-            let mut handles = state.idle_handles.lock().unwrap();
+            let mut handles = state.idle_handles.lock_unpoisoned();
             match handles.get_mut(account_id) {
                 None => return Ok(()),
                 Some(handle) if handle.generation != generation => {
@@ -139,7 +139,7 @@ async fn wait_for_imap_idle_stop(
 
         if let Some(thread) = finished_thread {
             let join_succeeded = thread.join().is_ok();
-            let mut handles = state.idle_handles.lock().unwrap();
+            let mut handles = state.idle_handles.lock_unpoisoned();
             if let Some(handle) = handles
                 .get_mut(account_id)
                 .filter(|handle| handle.generation == generation)
@@ -182,7 +182,7 @@ fn finish_jmap_push_join(
         .expect("a JMAP task taken for joining must already be finished");
     let join_succeeded =
         join_result.is_ok() || join_result.is_err_and(|error| error.is_cancelled());
-    let mut handles = state.jmap_push_handles.lock().unwrap();
+    let mut handles = state.jmap_push_handles.lock_unpoisoned();
     if let Some(handle) = handles
         .get_mut(account_id)
         .filter(|handle| handle.generation == generation)
@@ -223,7 +223,7 @@ impl Drop for JmapPushReservation<'_> {
         if self.committed {
             return;
         }
-        let mut handles = self.state.jmap_push_handles.lock().unwrap();
+        let mut handles = self.state.jmap_push_handles.lock_unpoisoned();
         if handles
             .get(&self.account_id)
             .is_some_and(|handle| handle.generation == self.generation && handle.task.is_none())
@@ -234,7 +234,7 @@ impl Drop for JmapPushReservation<'_> {
 }
 
 fn cancel_jmap_push(cancellation: &CancellationToken, event_gate: &Mutex<()>) {
-    let _event_guard = event_gate.lock().unwrap();
+    let _event_guard = event_gate.lock_unpoisoned();
     cancellation.cancel();
 }
 
@@ -243,7 +243,7 @@ fn if_jmap_push_running(
     event_gate: &Mutex<()>,
     action: impl FnOnce(),
 ) {
-    let _event_guard = event_gate.lock().unwrap();
+    let _event_guard = event_gate.lock_unpoisoned();
     if !cancellation.is_cancelled() {
         action();
     }
@@ -257,7 +257,7 @@ async fn wait_for_jmap_push_stop(
 ) -> Result<()> {
     loop {
         let finished_task = {
-            let mut handles = state.jmap_push_handles.lock().unwrap();
+            let mut handles = state.jmap_push_handles.lock_unpoisoned();
             match handles.get_mut(account_id) {
                 None => return Ok(()),
                 Some(handle) if handle.generation > generation => return Ok(()),
@@ -323,7 +323,7 @@ async fn reserve_jmap_push_start<'a>(
                 return Ok(None);
             }
 
-            let mut handles = state.jmap_push_handles.lock().unwrap();
+            let mut handles = state.jmap_push_handles.lock_unpoisoned();
             let finished_task = handles
                 .get_mut(account_id)
                 .filter(|handle| {
@@ -488,7 +488,7 @@ fn record_deferred_mail_sync(
     account_id: &str,
     current_folder: Option<String>,
 ) {
-    let mut pending = pending.lock().unwrap();
+    let mut pending = pending.lock_unpoisoned();
     pending
         .entry(account_id.to_string())
         .and_modify(|folder| {
@@ -509,7 +509,7 @@ fn take_deferred_mail_sync(
     state: &State<'_, AppState>,
     account_id: &str,
 ) -> Option<Option<String>> {
-    state.pending_mail_sync.lock().unwrap().remove(account_id)
+    state.pending_mail_sync.lock_unpoisoned().remove(account_id)
 }
 
 async fn run_mail_sync_once(
@@ -904,8 +904,7 @@ async fn start_imap_idle_inner(
             }
             let stopping_generation = state
                 .idle_handles
-                .lock()
-                .unwrap()
+                .lock_unpoisoned()
                 .get(&account.id)
                 .filter(|handle| matches!(handle.phase, IdlePhase::Stopping | IdlePhase::Joining))
                 .map(|handle| handle.generation);
@@ -960,7 +959,7 @@ async fn start_imap_idle_inner(
         use_xoauth2: credentials.use_xoauth2,
     };
 
-    let mut handles = state.idle_handles.lock().unwrap();
+    let mut handles = state.idle_handles.lock_unpoisoned();
     let Some(handle) = handles.get_mut(&account.id) else {
         return Ok(());
     };
@@ -1006,7 +1005,7 @@ fn reserve_imap_idle_start(
     state: &AppState,
     account_id: &str,
 ) -> Result<Option<(u64, Arc<IdleControl>)>> {
-    let mut handles = state.idle_handles.lock().unwrap();
+    let mut handles = state.idle_handles.lock_unpoisoned();
     let finished = handles
         .get(account_id)
         .and_then(|handle| handle.thread.as_ref())
@@ -1060,7 +1059,7 @@ fn reserve_new_imap_idle_generation(
 }
 
 fn remove_imap_idle_generation(state: &AppState, account_id: &str, generation: u64) {
-    let mut handles = state.idle_handles.lock().unwrap();
+    let mut handles = state.idle_handles.lock_unpoisoned();
     if handles
         .get(account_id)
         .is_some_and(|handle| handle.generation == generation)
@@ -1108,7 +1107,7 @@ async fn start_jmap_push(
     if !state.idle_push_enabled.load(Ordering::Acquire) || cancellation.is_cancelled() {
         return Ok(());
     }
-    let mut handles = state.jmap_push_handles.lock().unwrap();
+    let mut handles = state.jmap_push_handles.lock_unpoisoned();
     let Some(handle) = handles.get_mut(&account.id) else {
         return Ok(());
     };
@@ -1154,7 +1153,7 @@ pub async fn stop_idle(state: State<'_, AppState>) -> Result<()> {
         let _lifecycle_guard = state.idle_lifecycle_lock.lock().await;
         state.idle_push_enabled.store(false, Ordering::Release);
         let idle_generations = {
-            let mut handles = state.idle_handles.lock().unwrap();
+            let mut handles = state.idle_handles.lock_unpoisoned();
             let mut generations = Vec::new();
             for (account_id, handle) in handles.iter_mut() {
                 log::info!("Stopping IDLE loop for account {}", account_id);
@@ -1170,7 +1169,7 @@ pub async fn stop_idle(state: State<'_, AppState>) -> Result<()> {
             generations
         };
         let jmap_generations = {
-            let mut jmap_handles = state.jmap_push_handles.lock().unwrap();
+            let mut jmap_handles = state.jmap_push_handles.lock_unpoisoned();
             let mut generations = Vec::new();
             for (account_id, handle) in jmap_handles.iter_mut() {
                 log::info!("Stopping JMAP push for account {}", account_id);

@@ -1,3 +1,4 @@
+use crate::sync_ext::MutexExt;
 use serde::Deserialize;
 use tauri::{Emitter, Manager, State};
 
@@ -997,7 +998,7 @@ async fn apply_pgp_envelope(
     // secret packets; for card-resident signers it's public-only and
     // the secret material lives on the card (gated by the PIN).
     let (signer_data, signer_info) = {
-        let guard = store.lock().expect("pgp keystore mutex poisoned");
+        let guard = store.lock_unpoisoned();
         libtumpa::store::resolve_signer(&guard, &account.email).map_err(|e| {
             Error::Other(format!("openpgp: signer lookup for {}: {e}", account.email))
         })?
@@ -1148,9 +1149,7 @@ async fn apply_pgp_envelope(
         let hidden_owned = hidden_recipients;
 
         let join_result = tokio::task::spawn_blocking(move || -> libtumpa::Result<Vec<u8>> {
-            let guard = store_for_blocking
-                .lock()
-                .expect("pgp keystore mutex poisoned");
+            let guard = store_for_blocking.lock_unpoisoned();
             let visible_refs: Vec<&str> = visible_owned.iter().map(|s| s.as_str()).collect();
             let hidden_refs: Vec<&str> = hidden_owned.iter().map(|s| s.as_str()).collect();
             match signer_secret {
@@ -1222,9 +1221,7 @@ async fn apply_pgp_envelope(
         let canonical_inner_clone = canonical_inner.clone();
 
         let join_result = tokio::task::spawn_blocking(move || {
-            let _guard = store_for_blocking
-                .lock()
-                .expect("pgp keystore mutex poisoned");
+            let _guard = store_for_blocking.lock_unpoisoned();
             sign_detached_with_hash(
                 &signer_data_clone,
                 &signer_info_clone,
@@ -1293,7 +1290,7 @@ async fn build_signer_pubkey_attachment(
     let store = state.pgp_store().ok()?;
     let sender_email = sender_email.to_string();
     tokio::task::spawn_blocking(move || {
-        let guard = store.lock().expect("pgp keystore mutex poisoned");
+        let guard = store.lock_unpoisoned();
         signer_pubkey_attachment_from_store(&guard, &sender_email)
     })
     .await
@@ -1348,7 +1345,7 @@ async fn build_autocrypt_header(state: &State<'_, AppState>, sender_email: &str)
     let store = state.pgp_store().ok()?;
     let sender_email = sender_email.to_string();
     tokio::task::spawn_blocking(move || {
-        let guard = store.lock().expect("pgp keystore mutex poisoned");
+        let guard = store.lock_unpoisoned();
         let (_signer_data, signer_info) =
             libtumpa::store::resolve_signer(&guard, &sender_email).ok()?;
         let addr = extract_addr_spec(&sender_email);
@@ -1396,7 +1393,7 @@ async fn encrypt_draft_to_self(
     let raw = raw_message.to_vec();
     let email = sender_email.to_string();
     tokio::task::spawn_blocking(move || {
-        let guard = store.lock().expect("pgp keystore mutex poisoned");
+        let guard = store.lock_unpoisoned();
         encrypt_draft_core(&guard, &email, &raw)
     })
     .await
@@ -1442,7 +1439,7 @@ async fn has_resolvable_public_key(
     let store = store.clone();
     let id = id.to_string();
     tokio::task::spawn_blocking(move || {
-        let guard = store.lock().expect("pgp keystore mutex poisoned");
+        let guard = store.lock_unpoisoned();
         match libtumpa::store::resolve_recipient(&guard, &id) {
             Ok((_data, info)) => libtumpa::store::ensure_key_usable_for_encryption(&info).is_ok(),
             Err(_) => false,
@@ -1560,7 +1557,7 @@ fn check_pgp_recipient_keys(
     }
 
     let store = open_keystore()?;
-    let guard = store.lock().expect("pgp keystore mutex poisoned");
+    let guard = store.lock_unpoisoned();
     let mut out = Vec::with_capacity(validated.len());
     for email in validated {
         let status = match libtumpa::store::resolve_recipient(&guard, &email) {

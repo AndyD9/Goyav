@@ -1,5 +1,6 @@
 //! Injectable credentials and OAuth token-endpoint dependencies for providers.
 
+use crate::sync_ext::MutexExt;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -213,8 +214,7 @@ impl ProviderAccountCoordinator {
     pub async fn lock_account(&self, account_id: &str) -> tokio::sync::OwnedMutexGuard<()> {
         let account_lock = self
             .locks
-            .lock()
-            .unwrap()
+            .lock_unpoisoned()
             .entry(account_id.to_string())
             .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
             .clone();

@@ -20,6 +20,7 @@ mod path_validation;
 mod pgp_cert;
 mod provider;
 mod state;
+mod sync_ext;
 mod updater;
 
 use std::sync::atomic::{AtomicU8, Ordering};

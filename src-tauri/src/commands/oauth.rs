@@ -1,3 +1,4 @@
+use crate::sync_ext::MutexExt;
 use std::collections::HashMap;
 use std::net::TcpListener;
 use std::sync::Mutex;
@@ -24,7 +25,7 @@ struct OAuthSession {
 static OAUTH_SESSIONS: Mutex<Option<HashMap<u16, OAuthSession>>> = Mutex::new(None);
 
 fn store_session(port: u16, session: OAuthSession) {
-    let mut guard = OAUTH_SESSIONS.lock().unwrap();
+    let mut guard = OAUTH_SESSIONS.lock_unpoisoned();
     let map = guard.get_or_insert_with(HashMap::new);
     // Evict expired sessions to prevent unbounded growth
     let now = Instant::now();
@@ -33,7 +34,7 @@ fn store_session(port: u16, session: OAuthSession) {
 }
 
 fn take_session(port: u16) -> Option<OAuthSession> {
-    let mut guard = OAUTH_SESSIONS.lock().unwrap();
+    let mut guard = OAUTH_SESSIONS.lock_unpoisoned();
     guard.as_mut().and_then(|map| {
         let session = map.remove(&port)?;
         // Reject expired sessions

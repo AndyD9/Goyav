@@ -6,6 +6,7 @@
 //! create / pair an account; the event editor calls
 //! `meet_create_url` once the account is set up.
 
+use crate::sync_ext::MutexExt;
 use serde::Serialize;
 use tauri::State;
 
@@ -40,7 +41,7 @@ pub async fn meet_talk_login_start(
     .await?;
     let session_id = uuid::Uuid::new_v4().to_string();
     {
-        let mut sessions = state.talk_login_sessions.lock().unwrap();
+        let mut sessions = state.talk_login_sessions.lock_unpoisoned();
         let now = std::time::Instant::now();
         sessions.retain(|_, session| now.duration_since(session.created) < TALK_LOGIN_SESSION_TTL);
         sessions.insert(
@@ -68,8 +69,7 @@ pub async fn meet_talk_login_complete(
 ) -> Result<String> {
     let session = state
         .talk_login_sessions
-        .lock()
-        .unwrap()
+        .lock_unpoisoned()
         .remove(&session_id)
         .ok_or_else(|| Error::Other("Talk login session expired; start again".into()))?;
     if session.created.elapsed() >= TALK_LOGIN_SESSION_TTL {
@@ -172,7 +172,7 @@ pub async fn meet_matrix_login_start(
     let (url, listener, sso_state) = meet::matrix::sso_login_start(&homeserver_url)?;
     let port = listener.port()?;
     {
-        let mut map = state.matrix_sso_listeners.lock().unwrap();
+        let mut map = state.matrix_sso_listeners.lock_unpoisoned();
         evict_stale_matrix_sessions(&mut map);
         map.insert(
             port,
@@ -200,8 +200,7 @@ pub async fn meet_matrix_login_complete(
 ) -> Result<String> {
     let session = state
         .matrix_sso_listeners
-        .lock()
-        .unwrap()
+        .lock_unpoisoned()
         .remove(&port)
         .ok_or_else(|| {
             Error::Other(format!(
@@ -330,7 +329,7 @@ pub async fn meet_zoom_login_start(
     // start fails with EADDRINUSE — and the eviction sweep that
     // runs after the bind never reaches the stale entry.
     if let Some(fixed_port) = crate::oauth::ZOOM.redirect_fixed_port {
-        let mut map = state.zoom_oauth_sessions.lock().unwrap();
+        let mut map = state.zoom_oauth_sessions.lock_unpoisoned();
         evict_stale_zoom_sessions(&mut map);
         if let Some(prev) = map.remove(&fixed_port) {
             log::info!(
@@ -349,7 +348,7 @@ pub async fn meet_zoom_login_start(
         .map_err(|e| Error::Other(format!("zoom listener port: {}", e)))?
         .port();
     {
-        let mut map = state.zoom_oauth_sessions.lock().unwrap();
+        let mut map = state.zoom_oauth_sessions.lock_unpoisoned();
         map.insert(
             port,
             crate::state::ZoomOAuthSession {
@@ -387,8 +386,7 @@ pub async fn meet_zoom_login_complete(
 ) -> Result<String> {
     let session = state
         .zoom_oauth_sessions
-        .lock()
-        .unwrap()
+        .lock_unpoisoned()
         .remove(&port)
         .ok_or_else(|| {
             Error::Other(format!(

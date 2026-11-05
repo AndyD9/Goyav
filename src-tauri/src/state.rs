@@ -1,3 +1,4 @@
+use crate::sync_ext::MutexExt;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions, TryLockError};
 use std::net::{Shutdown, TcpStream};
@@ -37,7 +38,7 @@ impl IdleControl {
 
     pub fn register_socket(&self, socket: &TcpStream) -> std::io::Result<()> {
         let clone = socket.try_clone()?;
-        let mut active = self.socket.lock().unwrap();
+        let mut active = self.socket.lock_unpoisoned();
         if self.should_stop() {
             let _ = clone.shutdown(Shutdown::Both);
         } else {
@@ -47,21 +48,21 @@ impl IdleControl {
     }
 
     pub fn clear_socket(&self) {
-        self.socket.lock().unwrap().take();
+        self.socket.lock_unpoisoned().take();
     }
 
     pub fn request_stop(&self) {
         {
-            let _event_gate = self.event_gate.lock().unwrap();
+            let _event_gate = self.event_gate.lock_unpoisoned();
             self.stop_flag.store(true, Ordering::Release);
         }
-        if let Some(socket) = self.socket.lock().unwrap().as_ref() {
+        if let Some(socket) = self.socket.lock_unpoisoned().as_ref() {
             let _ = socket.shutdown(Shutdown::Both);
         }
     }
 
     pub fn if_running(&self, action: impl FnOnce()) {
-        let _event_gate = self.event_gate.lock().unwrap();
+        let _event_gate = self.event_gate.lock_unpoisoned();
         if !self.should_stop() {
             action();
         }
