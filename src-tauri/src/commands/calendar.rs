@@ -2729,8 +2729,10 @@ pub async fn sync_calendars(
         return Ok(());
     }
 
-    // When force_full_sync is true (manual Sync button), clear Google/O365
-    // sync tokens to force a full sync that reconciles server-side deletions.
+    // When force_full_sync is true (explicit recovery: Shift+click on Sync in
+    // the calendar view, or "Full resync" in the calendar menu), clear the
+    // Google sync tokens so every event is re-read. Routine and plain manual
+    // syncs stay incremental.
     if force_full_sync.unwrap_or(false) {
         let conn = state.db.writer().await;
         // Escape SQL LIKE metacharacters in account_id to prevent

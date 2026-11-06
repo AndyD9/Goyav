@@ -19,6 +19,72 @@ fn sync_display_accepts_untitled_instantaneous_series_without_edit_permission() 
     assert!(validate_source(&set, &account).is_err());
 }
 
+#[test]
+fn sync_display_reads_rdate_and_exdate_lines_but_refuses_writes() {
+    let account = account("calendar", "google");
+    let mut value = master();
+    value["recurrence"] = json!([
+        "RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=10",
+        "EXDATE;TZID=Europe/Stockholm:20260921T100000,20260928T100000",
+        "RDATE;TZID=Europe/Stockholm:20260916T100000,20260917T100000",
+        "EXDATE:20260917T080000Z",
+    ]);
+    let live = exception("2026-10-05T10:00:00+02:00", "series1_20261005T080000Z");
+    let set =
+        from_sync_resources(&account, &event(), "source@calendar.test", &value, &[live]).unwrap();
+    assert_eq!(
+        set.event.recurrence_rule.as_deref(),
+        Some("FREQ=WEEKLY;BYDAY=MO;COUNT=10")
+    );
+    let slots: Vec<_> = set
+        .overrides
+        .iter()
+        .map(|o| {
+            (
+                o.original_start.as_str(),
+                o.event.is_some(),
+                o.native.is_some(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        slots,
+        vec![
+            // RDATE adds an occurrence carrying the master's content.
+            ("2026-09-16T08:00:00Z", true, false),
+            // EXDATE removes RRULE and RDATE occurrences alike.
+            ("2026-09-17T08:00:00Z", false, false),
+            ("2026-09-21T08:00:00Z", false, false),
+            ("2026-09-28T08:00:00Z", false, false),
+            ("2026-10-05T08:00:00Z", true, true),
+        ]
+    );
+    let added = set.overrides[0].event.as_ref().unwrap();
+    assert_eq!(added.title, "Weekly planning");
+    assert_eq!(added.end_time, "2026-09-16T09:00:00Z");
+    // A write would have to keep the extra lines; the strict parser refuses
+    // rather than letting a patch drop them.
+    assert!(validate_source(&set, &account).is_err());
+}
+
+#[test]
+fn sync_display_rejects_conflicting_native_exceptions_and_unknown_lines() {
+    let account = account("calendar", "google");
+    let first = exception("2026-09-21T10:00:00+02:00", "first");
+    let second = exception("2026-09-21T10:00:00+02:00", "second");
+    assert!(from_sync_resources(
+        &account,
+        &event(),
+        "source@calendar.test",
+        &master(),
+        &[first, second]
+    )
+    .is_err());
+    let mut value = master();
+    value["recurrence"] = json!(["RRULE:FREQ=WEEKLY", "EXRULE:FREQ=MONTHLY"]);
+    assert!(from_sync_resources(&account, &event(), "source@calendar.test", &value, &[]).is_err());
+}
+
 fn master() -> Value {
     json!({"id": "series1", "etag": "\"master-v1\"", "iCalUID": "series@example.test",
         "summary": "Weekly planning", "description": "<p>Full native body</p>", "location": "Room 2",

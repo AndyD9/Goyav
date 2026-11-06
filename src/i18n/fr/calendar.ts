@@ -70,6 +70,11 @@ export const calendar: Record<string, string> = {
   Calendars: "Calendriers",
   "No calendars": "Aucun calendrier",
   "Sync this calendar": "Synchroniser ce calendrier",
+  "Full resync of the account": "Resynchronisation complète du compte",
+  "Re-downloads every event of this account. Slow on large calendars.":
+    "Retélécharge tous les événements de ce compte. Lent sur les gros calendriers.",
+  "Sync calendars (Shift+click: full resync)":
+    "Synchroniser les calendriers (Maj+clic : resynchronisation complète)",
   "Rename…": "Renommer…",
   "Change color…": "Changer la couleur…",
   Unsubscribe: "Se désabonner",

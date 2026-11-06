@@ -600,6 +600,26 @@ fn recurrence_dates_for(component: &Component, key: &str, display: bool) -> Resu
     Ok(result)
 }
 
+/// Display positions named by one RDATE/EXDATE property line. Google's
+/// `recurrence` array carries the same iCalendar lines, so it reuses this.
+pub(in crate::backend::calendar) fn display_recurrence_positions(
+    line: &str,
+) -> Result<Vec<String>> {
+    let (head, values) = split(line)?;
+    values
+        .split(',')
+        .map(|value| position_for(&format!("{head}:{value}"), true))
+        .collect()
+}
+
+/// The master's content moved to an extra (RDATE) occurrence position.
+pub(in crate::backend::calendar) fn occurrence_at(
+    master: &CalendarEvent,
+    original: &str,
+) -> Result<CalendarEvent> {
+    at_position(master, original)
+}
+
 fn at_position(master: &CalendarEvent, original: &str) -> Result<CalendarEvent> {
     let mut event = master.clone();
     if master.all_day {

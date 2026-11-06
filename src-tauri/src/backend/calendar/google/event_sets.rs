@@ -166,6 +166,20 @@ fn parse_event(
     account: &AccountFull,
     local: &CalendarEvent,
 ) -> Result<CalendarEvent> {
+    Ok(parse_event_for(value, account, local, false)?.0)
+}
+
+/// Strict parsing accepts exactly one RRULE, the structurally writable subset.
+/// Display parsing also reads RDATE/EXDATE lines (returned for the caller to
+/// turn into overrides) and equivalent duplicate RRULEs. Such sets stay
+/// read-only: `validate_source` re-parses strictly before any write, so a
+/// patch can never silently drop the extra recurrence lines.
+fn parse_event_for<'a>(
+    value: &'a Value,
+    account: &AccountFull,
+    local: &CalendarEvent,
+    display: bool,
+) -> Result<(CalendarEvent, Vec<&'a str>)> {
     if value["attendeesOmitted"].as_bool() == Some(true) {
         return Err(invalid("incomplete attendee list"));
     }
@@ -180,25 +194,30 @@ fn parse_event(
             "timed recurring master omitted its expansion timezone",
         ));
     }
-    let recurrence_rule = if recurrence_kind == RecurrenceKind::Series {
+    let mut rules = Vec::new();
+    let mut dates = Vec::new();
+    if recurrence_kind == RecurrenceKind::Series {
         let lines = value["recurrence"]
             .as_array()
             .ok_or_else(|| invalid("missing recurrence"))?;
-        if lines.len() != 1 {
+        if !display && lines.len() != 1 {
             return Err(invalid(
                 "only one RRULE is supported; additional recurrence properties cannot be discarded",
             ));
         }
-        Some(
-            lines[0]
+        for line in lines {
+            let line = line
                 .as_str()
-                .and_then(|s| s.strip_prefix("RRULE:"))
-                .ok_or_else(|| invalid("unsupported recurrence property"))?
-                .to_owned(),
-        )
-    } else {
-        None
-    };
+                .ok_or_else(|| invalid("unsupported recurrence property"))?;
+            if let Some(rule) = line.strip_prefix("RRULE:") {
+                rules.push(rule);
+            } else if display && recurrence_date_kind(line).is_some() {
+                dates.push(line);
+            } else {
+                return Err(invalid("unsupported recurrence property"));
+            }
+        }
+    }
     let optional = |key: &str| -> Result<Option<String>> {
         match value.get(key) {
             None | Some(Value::Null) => Ok(None),
@@ -226,7 +245,7 @@ fn parse_event(
     // calendar rather than the authenticated account. Preserve that flag in
     // native data and identify the account by its actual address here.
     let (attendees_json, my_status) = parse_google_attendees(value, &account.email, false);
-    Ok(CalendarEvent {
+    let mut event = CalendarEvent {
         id: local.id.clone(),
         account_id: account.id.clone(),
         calendar_id: local.calendar_id.clone(),
@@ -238,7 +257,7 @@ fn parse_event(
         end_time,
         all_day,
         timezone,
-        recurrence_rule,
+        recurrence_rule: None,
         recurrence_kind,
         organizer_email: value["organizer"]["email"].as_str().map(str::to_owned),
         attendees_json,
@@ -247,7 +266,28 @@ fn parse_event(
         ical_data: None,
         remote_id: Some(text(value, "id")?.into()),
         etag: Some(text(value, "etag")?.into()),
-    })
+    };
+    event.recurrence_rule = match rules.as_slice() {
+        [] => None,
+        [first, rest @ ..] if rest.iter().all(|rule| rule == first) => Some((*first).to_owned()),
+        many => Some(
+            crate::calendar::display_recurrence::equivalent_rule_cutoffs(many, &event)
+                .map_err(|error| invalid(format!("conflicting RRULE properties: {error}")))?,
+        ),
+    };
+    Ok((event, dates))
+}
+
+/// RDATE adds an occurrence, EXDATE removes one; anything else is `None`.
+fn recurrence_date_kind(line: &str) -> Option<bool> {
+    let name = line.split([';', ':']).next()?;
+    if name.eq_ignore_ascii_case("RDATE") {
+        Some(true)
+    } else if name.eq_ignore_ascii_case("EXDATE") {
+        Some(false)
+    } else {
+        None
+    }
 }
 
 /// Decode one complete master group from an unexpanded sync snapshot. Generated
@@ -259,27 +299,65 @@ pub(super) fn from_sync_resources(
     value: &Value,
     resources: &[Value],
 ) -> Result<CalendarEventSet> {
-    let event = parse_event(value, account, template)?;
+    let (event, dates) = parse_event_for(value, account, template, true)?;
     let resource = native(value, calendar)?;
-    let mut overrides = Vec::new();
+    // Keyed by canonical position: sorted, and later entries win. RDATEs go
+    // first, EXDATEs remove them (RFC 5545), and native exceptions are the
+    // most specific statement about their slot.
+    let mut overrides = BTreeMap::new();
+    for adds in [true, false] {
+        for line in dates
+            .iter()
+            .filter(|l| recurrence_date_kind(l) == Some(adds))
+        {
+            for position in
+                super::super::caldav::display_recurrence_positions(line).map_err(invalid)?
+            {
+                let original_start = canonical_position(&event, &position)?;
+                let occurrence = if adds {
+                    Some(
+                        super::super::caldav::occurrence_at(&event, &original_start)
+                            .map_err(invalid)?,
+                    )
+                } else {
+                    None
+                };
+                overrides.insert(
+                    original_start.clone(),
+                    CalendarOverride {
+                        original_start,
+                        event: occurrence,
+                        native: None,
+                    },
+                );
+            }
+        }
+    }
+    let mut seen = HashSet::new();
     for item in resources
         .iter()
         .filter(|item| item["recurringEventId"].as_str() == Some(resource.event_id.as_str()))
     {
-        overrides.push(CalendarOverride {
-            original_start: original(item, &event)?,
-            event: if item["status"].as_str() == Some("cancelled") {
-                None
-            } else {
-                Some(parse_event(item, account, template)?)
+        let original_start = original(item, &event)?;
+        if !seen.insert(original_start.clone()) {
+            return Err(invalid("duplicate original occurrence"));
+        }
+        overrides.insert(
+            original_start.clone(),
+            CalendarOverride {
+                original_start,
+                event: if item["status"].as_str() == Some("cancelled") {
+                    None
+                } else {
+                    Some(parse_event(item, account, template)?)
+                },
+                native: Some(native(item, calendar)?),
             },
-            native: Some(native(item, calendar)?),
-        });
+        );
     }
-    overrides.sort_by(|a, b| a.original_start.cmp(&b.original_start));
     let set = CalendarEventSet {
         event,
-        overrides,
+        overrides: overrides.into_values().collect(),
         native: Some(resource),
         content: None,
     };

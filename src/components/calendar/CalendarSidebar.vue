@@ -110,14 +110,16 @@ function onCalendarItemDrop(cal: Calendar) {
   });
 }
 
-async function syncThisCalendar() {
+async function syncThisCalendar(fullResync = false) {
   if (!contextMenu.value) return;
   const accountId = contextMenu.value.accountId;
   syncing.value = contextMenu.value.calendarId;
   closeContextMenu();
 
   try {
-    await api.syncCalendars(accountId);
+    // Provider sync is per account; a full resync discards the sync cursors
+    // and re-reads every event, so it stays an explicit recovery action.
+    await calendarStore.syncCalendars(accountId, { fullResync });
     await calendarStore.fetchCalendars();
     await calendarStore.fetchEvents();
   } catch (error) {
@@ -325,7 +327,13 @@ async function unsubscribeThisCalendar() {
         class="cal-context-menu"
         :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
       >
-        <button class="ctx-item" @click="syncThisCalendar" data-testid="calendar-sync">{{ t("Sync this calendar") }}</button>
+        <button class="ctx-item" @click="syncThisCalendar()" data-testid="calendar-sync">{{ t("Sync this calendar") }}</button>
+        <button
+          class="ctx-item"
+          :title="t('Re-downloads every event of this account. Slow on large calendars.')"
+          data-testid="calendar-full-resync"
+          @click="syncThisCalendar(true)"
+        >{{ t("Full resync of the account") }}</button>
         <button class="ctx-item" @click="startRename" data-testid="calendar-rename">{{ t("Rename…") }}</button>
         <button class="ctx-item" @click="startRecolor" data-testid="calendar-recolor">{{ t("Change color…") }}</button>
         <button

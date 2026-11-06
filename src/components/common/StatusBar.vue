@@ -68,16 +68,36 @@ const lastSyncLabel = computed(() => {
   return tn(Math.floor(diff / 3600), "Last sync {count} hour ago", "Last sync {count} hours ago");
 });
 
-async function syncAll() {
-  const isCalendar = route.name === "calendar";
+const isCalendarRoute = computed(() => route.name === "calendar");
+
+const syncTitle = computed(() =>
+  isCalendarRoute.value
+    ? t("Sync calendars (Shift+click: full resync)")
+    : t("Sync"),
+);
+
+async function syncCalendarsOnly(fullResync: boolean) {
+  // Calendar only: no mail or contact sync. Accounts settle in parallel and
+  // the store performs one refresh once they are all done.
+  try {
+    await calendarStore.syncCalendars(undefined, { fullResync });
+  } catch (error) {
+    console.error("Calendar sync failed:", error);
+  }
+  lastSyncTime.value = new Date();
+}
+
+async function syncAll(event?: MouseEvent) {
+  if (isCalendarRoute.value) {
+    await syncCalendarsOnly(event?.shiftKey === true);
+    return;
+  }
   const isContacts = route.name === "contacts";
 
   for (const account of accountsStore.accounts) {
     if (!account.enabled) continue;
     try {
-      if (isCalendar) {
-        await api.syncCalendars(account.id, true);
-      } else if (isContacts) {
+      if (isContacts) {
         await api.syncContacts(account.id);
       } else {
         await api.triggerSync(
@@ -90,11 +110,6 @@ async function syncAll() {
     }
   }
 
-  if (isCalendar) {
-    await calendarStore.fetchCalendars();
-    await calendarStore.fetchEvents();
-  }
-
   lastSyncTime.value = new Date();
 }
 </script>
@@ -102,7 +117,7 @@ async function syncAll() {
 <template>
   <div class="status-bar">
     <div class="status-left">
-      <button class="sync-btn" :title="t('Sync')" @click="syncAll">
+      <button class="sync-btn" data-testid="status-sync" :title="syncTitle" @click="syncAll">
         <span class="sync-icon" :class="{ spinning: activityStore.hasActiveOperations }">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" />

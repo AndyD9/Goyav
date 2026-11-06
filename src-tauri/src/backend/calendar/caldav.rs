@@ -6,6 +6,8 @@ mod event_sets;
 mod resource;
 mod timezones;
 
+pub(super) use resource::{display_recurrence_positions, occurrence_at};
+
 #[cfg(test)]
 mod tests;
 

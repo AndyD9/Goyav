@@ -292,7 +292,17 @@ export const useCalendarStore = defineStore("calendar", () => {
     await fetchEvents();
   }
 
-  async function syncCalendars(accountId?: string) {
+  /**
+   * Routine syncs fetch provider deltas only. `fullResync` discards the sync
+   * cursors and re-reads every event, which is slow on large calendars; keep
+   * it for explicit user recovery.
+   */
+  async function syncCalendars(
+    accountId?: string,
+    options: { fullResync?: boolean } = {},
+  ) {
+    const providerSync = (id: string) =>
+      options.fullResync ? api.syncCalendars(id, true) : api.syncCalendars(id);
     if (accountsStore.accounts.length === 0) {
       await accountsStore.fetchAccounts();
     }
@@ -302,7 +312,7 @@ export const useCalendarStore = defineStore("calendar", () => {
         throw new Error(t("Graph calendar sync is waiting for its Retry-After cooldown."));
       }
       try {
-        await api.syncCalendars(accountId);
+        await providerSync(accountId);
         delete syncErrors.value[accountId];
       } catch (error) {
         syncErrors.value[accountId] = String(error);
@@ -313,10 +323,11 @@ export const useCalendarStore = defineStore("calendar", () => {
     }
     // Settle accounts independently, then perform one final coherent refresh.
     const targets = accountsStore.accounts.filter(
-      (account) => !calendarSyncIsCoolingDown(account.id),
+      (account) =>
+        account.enabled !== false && !calendarSyncIsCoolingDown(account.id),
     );
     const results = await Promise.allSettled(
-      targets.map((account) => api.syncCalendars(account.id)),
+      targets.map((account) => providerSync(account.id)),
     );
     for (let index = 0; index < results.length; index += 1) {
       const result = results[index];

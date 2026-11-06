@@ -370,6 +370,20 @@ async fn sync_google(ctx: &CalendarBackendCtx<'_>, account: &AccountFull) -> Res
             "google_resource_sync_token_{}_{}",
             account_id, remote_cal_id
         );
+        let projection_key = format!(
+            "google_resource_projection_{}_{}",
+            account_id, remote_cal_id
+        );
+        let projection_stale = {
+            let conn = db.reader();
+            conn.query_row(
+                "SELECT value FROM app_metadata WHERE key = ?1",
+                rusqlite::params![projection_key],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+                != Some(GOOGLE_PROJECTION_VERSION.to_owned())
+        };
 
         // Check for existing syncToken
         let existing_token: Option<String> = {
@@ -456,6 +470,14 @@ async fn sync_google(ctx: &CalendarBackendCtx<'_>, account: &AccountFull) -> Res
                     merged.insert(id, value);
                 }
             }
+            if projection_stale {
+                // Resources an older projection rejected stay in the mirror
+                // untouched by later deltas; retry them once with this one.
+                for (id, _) in db::calendar_sync::unreadable_resources(&db.reader(), local_cal_id)?
+                {
+                    touched.insert(id);
+                }
+            }
             events_data.items = merged.into_values().collect();
             delta = Some(google_delta_scope(&before, touched, &events_data.items));
         }
@@ -473,6 +495,13 @@ async fn sync_google(ctx: &CalendarBackendCtx<'_>, account: &AccountFull) -> Res
                     conn.execute(
                         "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?1, ?2)",
                         rusqlite::params![sync_key, events_data.next_sync_token],
+                    )?;
+                }
+                if projection_stale {
+                    let conn = db.writer().await;
+                    conn.execute(
+                        "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?1, ?2)",
+                        rusqlite::params![projection_key, GOOGLE_PROJECTION_VERSION],
                     )?;
                 }
                 report_mirror_errors(&db.reader(), local_cal_id, &mut read_errors)?;
@@ -505,6 +534,10 @@ async fn sync_google(ctx: &CalendarBackendCtx<'_>, account: &AccountFull) -> Res
                 transaction.execute(
                     "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?1, ?2)",
                     rusqlite::params![sync_key, events_data.next_sync_token],
+                )?;
+                transaction.execute(
+                    "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?1, ?2)",
+                    rusqlite::params![projection_key, GOOGLE_PROJECTION_VERSION],
                 )?;
                 transaction.commit()?;
                 drop(conn);
@@ -559,6 +592,10 @@ async fn sync_google(ctx: &CalendarBackendCtx<'_>, account: &AccountFull) -> Res
             "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?1, ?2)",
             rusqlite::params![sync_key, events_data.next_sync_token],
         )?;
+        transaction.execute(
+            "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?1, ?2)",
+            rusqlite::params![projection_key, GOOGLE_PROJECTION_VERSION],
+        )?;
         transaction.commit()?;
         log::debug!(
             "sync_calendars_google: saved syncToken for calendar {}",
@@ -586,6 +623,12 @@ async fn sync_google(ctx: &CalendarBackendCtx<'_>, account: &AccountFull) -> Res
         Err(Error::Sync(read_errors.join("; ")))
     }
 }
+
+/// Bump when the projection learns to display resources it used to reject.
+/// Incremental syncs then retry each calendar's unreadable resources once,
+/// instead of leaving them broken until an upstream change or a full resync.
+/// 2: RDATE/EXDATE series lines and instances whose series is not visible.
+const GOOGLE_PROJECTION_VERSION: &str = "2";
 
 /// Project Google wire resources into display sets. `items` is the complete
 /// current wire mirror (exceptions need their master and vice versa); `only`
@@ -736,10 +779,20 @@ fn project_google_resources(
                     .as_str()
                     .is_some_and(|master| live_ids.contains(master))
                 {
-                    resources.push(db::calendar_sync::Resource::unsupported(
-                        native,
-                        "Google exception lacks a master",
-                    ));
+                    // Google lists instances whose series this calendar
+                    // cannot see (an invitation to a single occurrence, a
+                    // series deleted while its exceptions survive). Show the
+                    // instance on its own; `validate_source` refuses writes
+                    // to it because it still names a recurringEventId.
+                    let mut event = cal_event;
+                    event.recurrence_kind = RecurrenceKind::Standalone;
+                    let set = CalendarEventSet {
+                        native: Some(native),
+                        event,
+                        overrides: vec![],
+                        content: None,
+                    };
+                    resources.push(db::calendar_sync::Resource::readable(set)?);
                 } else {
                     resources.push(db::calendar_sync::Resource {
                         native,
@@ -2950,13 +3003,15 @@ mod recurrence_sync_tests {
                     .recurrence_kind,
                 RecurrenceKind::Standalone
             );
-            for id in [
-                "occurrence",
-                "malformed",
-                "omitted",
-                "local-null",
-                "local-empty",
-            ] {
+            // An instance whose series this calendar cannot see is shown on
+            // its own rather than dropped.
+            assert_eq!(
+                db::calendar::get_event(&conn, "occurrence")
+                    .unwrap()
+                    .recurrence_kind,
+                RecurrenceKind::Standalone
+            );
+            for id in ["malformed", "omitted", "local-null", "local-empty"] {
                 assert!(db::calendar::get_event(&conn, id).is_err(), "{id}");
             }
             let new_count: i64 = conn
@@ -2966,7 +3021,7 @@ mod recurrence_sync_tests {
                     |row| row.get(0),
                 )
                 .unwrap();
-            assert_eq!(new_count, 0);
+            assert_eq!(new_count, 1);
             let token: Option<String> = conn
                 .query_row(
                     "SELECT value FROM app_metadata WHERE key = ?1",
@@ -2983,7 +3038,7 @@ mod recurrence_sync_tests {
                     |row| row.get::<_, i64>(0)
                 )
                 .unwrap(),
-                3
+                1
             );
         }
     }
@@ -3230,6 +3285,79 @@ mod recurrence_sync_tests {
     }
 
     #[tokio::test]
+    async fn incremental_sync_retries_resources_an_older_projection_rejected_once() {
+        const PROJECTION_KEY: &str = "google_resource_projection_acc1_primary";
+        let (_dir, db) = setup_db().await;
+        let calendars = json!({"items": [{"id": "primary", "summary": "Calendar"}]});
+        let mut orphan = remote_event("orphan");
+        orphan["recurringEventId"] = json!("hidden-series");
+        orphan["originalStartTime"] = orphan["start"].clone();
+        let (root, captured) = serve_responses(vec![
+            (200, calendars.clone()),
+            (200, json!({"items": [orphan], "nextSyncToken": "t1"})),
+            (200, calendars.clone()),
+            (200, json!({"items": [], "nextSyncToken": "t2"})),
+            (200, calendars),
+            (200, json!({"items": [], "nextSyncToken": "t3"})),
+        ])
+        .await;
+        let services = services(&root);
+        let ctx = CalendarBackendCtx {
+            db: &db,
+            services: &services,
+        };
+        let account = account("calendar", "google");
+        // Leave the orphan as an older projection did: unreadable, no rows.
+        let reject = |conn: &rusqlite::Connection| {
+            conn.execute(
+                "UPDATE calendar_remote_resources
+                 SET set_data = NULL, event_id = NULL, error = 'old projection'
+                 WHERE remote_id = 'orphan'",
+                [],
+            )
+            .unwrap();
+            conn.execute("DELETE FROM calendar_events WHERE remote_id = 'orphan'", [])
+                .unwrap();
+        };
+        let displayed = |conn: &rusqlite::Connection| -> i64 {
+            conn.query_row(
+                "SELECT COUNT(*) FROM calendar_events WHERE remote_id = 'orphan'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap()
+        };
+
+        sync_google(&ctx, &account).await.unwrap();
+        assert_eq!(displayed(&db.reader()), 1);
+        {
+            let conn = db.writer().await;
+            reject(&conn);
+            conn.execute("DELETE FROM app_metadata WHERE key = ?1", [PROJECTION_KEY])
+                .unwrap();
+        }
+
+        // An empty delta still retries the stale projection's rejects.
+        sync_google(&ctx, &account).await.unwrap();
+        assert_eq!(displayed(&db.reader()), 1);
+        assert!(
+            db::calendar_sync::unreadable_resources(&db.reader(), "cal1")
+                .unwrap()
+                .is_empty()
+        );
+
+        // With the marker current, unchanged unreadable resources are left
+        // alone so quiet calendars keep the cheap empty-delta path.
+        reject(&*db.writer().await);
+        sync_google(&ctx, &account).await.unwrap_err();
+        assert_eq!(displayed(&db.reader()), 0);
+
+        let requests = captured.await.unwrap();
+        assert_events_query(&requests[3], Some("t1"));
+        assert_events_query(&requests[5], Some("t2"));
+    }
+
+    #[tokio::test]
     async fn unreadable_resources_do_not_block_related_updates_or_deletions() {
         for malformed_recurring in [true, false] {
             let (_dir, db) = setup_db().await;
@@ -3253,7 +3381,7 @@ mod recurrence_sync_tests {
             let mut known = remote_event("known");
             if malformed_recurring {
                 known["recurringEventId"] = json!("master");
-                known["originalStartTime"] = known["start"].clone();
+                known["originalStartTime"] = json!(42);
             } else {
                 known.as_object_mut().unwrap().remove("end");
             }
