@@ -1,6 +1,8 @@
 //! Google calendar backend (Calendar API v3 with OAuth2).
 
 use async_trait::async_trait;
+use std::collections::HashSet;
+
 use rusqlite::OptionalExtension;
 
 use crate::calendar::event_set::CalendarEventSet;
@@ -395,6 +397,10 @@ async fn sync_google(ctx: &CalendarBackendCtx<'_>, account: &AccountFull) -> Res
         let mut events_data = match page {
             EventsPage::Events(data) => data,
             EventsPage::SyncTokenExpired => {
+                log::info!(
+                    "sync_calendars_google: syncToken expired for calendar {}, doing a full read",
+                    remote_cal_id
+                );
                 full = true;
                 match client.list_resources_sync(remote_cal_id, None).await? {
                     EventsPage::Events(data) => data,
@@ -406,6 +412,10 @@ async fn sync_google(ctx: &CalendarBackendCtx<'_>, account: &AccountFull) -> Res
                 }
             }
         };
+        let fetched = events_data.items.len();
+        // For an incremental read: the provider IDs whose projection must be
+        // rebuilt, and the cached IDs that left the inventory.
+        let mut delta: Option<(HashSet<String>, HashSet<String>)> = None;
         if !full {
             let mut merged = std::collections::BTreeMap::new();
             for resource in cached.expect("incremental read requires a mirror") {
@@ -416,12 +426,26 @@ async fn sync_google(ctx: &CalendarBackendCtx<'_>, account: &AccountFull) -> Res
                     })?,
                 );
             }
+            let before: HashSet<String> = merged.keys().cloned().collect();
+            let mut touched = HashSet::new();
             for value in events_data.items {
                 let id = value["id"]
                     .as_str()
                     .filter(|id| !id.is_empty())
                     .ok_or_else(|| Error::Sync("Google resource omitted its ID".into()))?
                     .to_owned();
+                // An exception's display lives in its master's set, so a
+                // changed exception re-projects the master too.
+                if let Some(master) = value["recurringEventId"].as_str() {
+                    touched.insert(master.to_owned());
+                }
+                if let Some(master) = merged
+                    .get(&id)
+                    .and_then(|old| old["recurringEventId"].as_str())
+                {
+                    touched.insert(master.to_owned());
+                }
+                touched.insert(id.clone());
                 if value["status"].as_str() == Some("cancelled")
                     && value.get("recurringEventId").is_none()
                 {
@@ -433,160 +457,93 @@ async fn sync_google(ctx: &CalendarBackendCtx<'_>, account: &AccountFull) -> Res
                 }
             }
             events_data.items = merged.into_values().collect();
+            delta = Some(google_delta_scope(&before, touched, &events_data.items));
         }
 
-        let count = events_data.items.len();
+        if let Some((affected, removed)) = &delta {
+            if affected.is_empty() && removed.is_empty() {
+                // Nothing changed upstream: keep the mirror and projection as
+                // they are and only advance the cursor.
+                log::info!(
+                    "sync_calendars_google: no changes for calendar {}",
+                    remote_cal_id
+                );
+                if existing_token.as_deref() != Some(events_data.next_sync_token.as_str()) {
+                    let conn = db.writer().await;
+                    conn.execute(
+                        "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?1, ?2)",
+                        rusqlite::params![sync_key, events_data.next_sync_token],
+                    )?;
+                }
+                report_mirror_errors(&db.reader(), local_cal_id, &mut read_errors)?;
+                continue;
+            }
+        }
+
+        let mut applied = false;
+        if let Some((affected, removed)) = &delta {
+            let resources = project_google_resources(
+                account,
+                local_cal_id,
+                remote_cal_id,
+                *is_primary,
+                &events_data.items,
+                Some(affected),
+            )?;
+            let mut conn = db.writer().await;
+            let transaction = conn.transaction()?;
+            if db::calendar_sync::apply_calendar_changes(
+                &transaction,
+                account_id,
+                local_cal_id,
+                "google",
+                &resources,
+                removed,
+            )? {
+                // The cursor and the applied delta are one transaction, so the
+                // next sync cannot skip a lost provider change.
+                transaction.execute(
+                    "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?1, ?2)",
+                    rusqlite::params![sync_key, events_data.next_sync_token],
+                )?;
+                transaction.commit()?;
+                drop(conn);
+                report_mirror_errors(&db.reader(), local_cal_id, &mut read_errors)?;
+                applied = true;
+                log::info!(
+                    "sync_calendars_google: applied {} changed and {} removed resources ({} fetched) for calendar {}",
+                    resources.len(),
+                    removed.len(),
+                    fetched,
+                    remote_cal_id
+                );
+            } else {
+                log::info!(
+                    "sync_calendars_google: local state needs a complete rebuild for calendar {}",
+                    remote_cal_id
+                );
+            }
+        }
+        if applied {
+            continue;
+        }
+
         log::info!(
-            "sync_calendars_google: fetched {} events for calendar {}",
-            count,
+            "sync_calendars_google: rebuilding {} events ({} fetched{}) for calendar {}",
+            events_data.items.len(),
+            fetched,
+            if full { ", full read" } else { "" },
             remote_cal_id
         );
-
-        let mut resources = Vec::new();
-        {
-            for ev in &events_data.items {
-                let event_id_remote = ev["id"]
-                    .as_str()
-                    .filter(|id| !id.is_empty())
-                    .ok_or_else(|| Error::Sync("Google resource omitted its ID".into()))?;
-
-                let native = crate::calendar::event_set::NativeCalendarResource {
-                    protocol: "google".into(),
-                    calendar_id: remote_cal_id.clone(),
-                    event_id: event_id_remote.into(),
-                    revision: ev["etag"].as_str().map(str::to_owned),
-                    data: ev.to_string(),
-                };
-                if ev["status"].as_str() == Some("cancelled") {
-                    if ev.get("recurringEventId").is_some() {
-                        resources.push(db::calendar_sync::Resource {
-                            native,
-                            set: None,
-                            error: None,
-                        });
-                    }
-                    continue;
-                }
-
-                let title = ev["summary"].as_str().unwrap_or("(No title)");
-                let description = ev["description"].as_str().map(|s| s.to_string());
-                let location = ev["location"].as_str().map(|s| s.to_string());
-
-                // Parse start/end — can be date (all-day) or dateTime
-                let start_tz = ev["start"]["timeZone"].as_str().map(|s| s.to_string());
-                let (start_time, all_day) = if let Some(dt) = ev["start"]["dateTime"].as_str() {
-                    (
-                        crate::calendar::timezone::to_utc(dt, start_tz.as_deref().unwrap_or("")),
-                        false,
-                    )
-                } else if let Some(d) = ev["start"]["date"].as_str() {
-                    (d.to_string(), true)
-                } else {
-                    resources.push(db::calendar_sync::Resource::unsupported(
-                        native,
-                        "Google event omitted its start",
-                    ));
-                    continue;
-                };
-
-                let end_time = if let Some(dt) = ev["end"]["dateTime"].as_str() {
-                    let end_tz = ev["end"]["timeZone"].as_str().unwrap_or("");
-                    crate::calendar::timezone::to_utc(dt, end_tz)
-                } else if let Some(d) = ev["end"]["date"].as_str() {
-                    d.to_string()
-                } else {
-                    resources.push(db::calendar_sync::Resource::unsupported(
-                        native,
-                        "Google event omitted its end",
-                    ));
-                    continue;
-                };
-
-                let organizer_email = parse_google_organizer(ev, &account.email, *is_primary);
-                let uid = ev["iCalUID"].as_str().map(|s| s.to_string());
-                let (attendees_json, my_status) =
-                    parse_google_attendees(ev, &account.email, *is_primary);
-
-                let cal_event = CalendarEvent {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    account_id: account_id.to_string(),
-                    calendar_id: local_cal_id.clone(),
-                    uid,
-                    title: title.to_string(),
-                    description,
-                    location,
-                    start_time,
-                    end_time,
-                    all_day,
-                    timezone: start_tz,
-                    recurrence_rule: None,
-                    recurrence_kind: google_recurrence_kind(ev),
-                    organizer_email,
-                    attendees_json,
-                    my_status,
-                    source_message_id: None,
-                    ical_data: None,
-                    remote_id: Some(event_id_remote.to_string()),
-                    etag: ev["etag"].as_str().map(|s| s.to_string()),
-                };
-
-                if cal_event.recurrence_kind == RecurrenceKind::Series {
-                    match event_sets::from_sync_resources(
-                        account,
-                        &cal_event,
-                        remote_cal_id,
-                        ev,
-                        &events_data.items,
-                    ) {
-                        Ok(set) => resources.push(db::calendar_sync::Resource::readable(set)?),
-                        Err(error) => {
-                            resources.push(db::calendar_sync::Resource::unsupported(native, error))
-                        }
-                    }
-                } else if cal_event.recurrence_kind == RecurrenceKind::Standalone {
-                    // This is a complete resource, including a series converted
-                    // into a standalone event. Do not let old ownership absorb it.
-                    let set = CalendarEventSet {
-                        native: Some(native),
-                        event: cal_event,
-                        overrides: vec![],
-                        content: None,
-                    };
-                    resources.push(db::calendar_sync::Resource::readable(set)?);
-                } else if cal_event.recurrence_kind == RecurrenceKind::Occurrence {
-                    // Finite overrides are persisted with the master's set below.
-                    if !events_data.items.iter().any(|master| {
-                        master["id"].as_str() == ev["recurringEventId"].as_str()
-                            && master["status"].as_str() != Some("cancelled")
-                    }) {
-                        resources.push(db::calendar_sync::Resource::unsupported(
-                            native,
-                            "Google exception lacks a master",
-                        ));
-                    } else {
-                        resources.push(db::calendar_sync::Resource {
-                            native,
-                            set: None,
-                            error: None,
-                        });
-                    }
-                } else {
-                    resources.push(db::calendar_sync::Resource::unsupported(
-                        native,
-                        "Google event has ambiguous recurrence",
-                    ));
-                }
-            }
-        }
-
-        for resource in &resources {
-            if let Some(error) = &resource.error {
-                read_errors.push(format!(
-                    "Google resource {} cannot be displayed: {error}",
-                    resource.native.event_id
-                ));
-            }
-        }
+        let resources = project_google_resources(
+            account,
+            local_cal_id,
+            remote_cal_id,
+            *is_primary,
+            &events_data.items,
+            None,
+        )?;
+        collect_read_errors(&resources, &mut read_errors);
         let mut conn = db.writer().await;
         let transaction = conn.transaction()?;
         db::calendar_sync::replace_calendar(
@@ -628,6 +585,234 @@ async fn sync_google(ctx: &CalendarBackendCtx<'_>, account: &AccountFull) -> Res
     } else {
         Err(Error::Sync(read_errors.join("; ")))
     }
+}
+
+/// Project Google wire resources into display sets. `items` is the complete
+/// current wire mirror (exceptions need their master and vice versa); `only`
+/// limits the output to the resources a delta touched.
+fn project_google_resources(
+    account: &AccountFull,
+    local_cal_id: &str,
+    remote_cal_id: &str,
+    is_primary: bool,
+    items: &[serde_json::Value],
+    only: Option<&HashSet<String>>,
+) -> Result<Vec<db::calendar_sync::Resource>> {
+    // Index the series relationships once: scanning every item per series or
+    // exception is quadratic, which a 7,000-event calendar makes noticeable.
+    let mut exceptions: std::collections::HashMap<&str, Vec<serde_json::Value>> =
+        std::collections::HashMap::new();
+    let mut live_ids = HashSet::new();
+    for item in items {
+        if let Some(master) = item["recurringEventId"].as_str() {
+            exceptions.entry(master).or_default().push(item.clone());
+        }
+        if item["status"].as_str() != Some("cancelled") {
+            if let Some(id) = item["id"].as_str() {
+                live_ids.insert(id);
+            }
+        }
+    }
+    let mut resources = Vec::new();
+    {
+        for ev in items {
+            if only.is_some_and(|only| !ev["id"].as_str().is_some_and(|id| only.contains(id))) {
+                continue;
+            }
+            let event_id_remote = ev["id"]
+                .as_str()
+                .filter(|id| !id.is_empty())
+                .ok_or_else(|| Error::Sync("Google resource omitted its ID".into()))?;
+
+            let native = crate::calendar::event_set::NativeCalendarResource {
+                protocol: "google".into(),
+                calendar_id: remote_cal_id.to_owned(),
+                event_id: event_id_remote.into(),
+                revision: ev["etag"].as_str().map(str::to_owned),
+                data: ev.to_string(),
+            };
+            if ev["status"].as_str() == Some("cancelled") {
+                if ev.get("recurringEventId").is_some() {
+                    resources.push(db::calendar_sync::Resource {
+                        native,
+                        set: None,
+                        error: None,
+                    });
+                }
+                continue;
+            }
+
+            let title = ev["summary"].as_str().unwrap_or("(No title)");
+            let description = ev["description"].as_str().map(|s| s.to_string());
+            let location = ev["location"].as_str().map(|s| s.to_string());
+
+            // Parse start/end — can be date (all-day) or dateTime
+            let start_tz = ev["start"]["timeZone"].as_str().map(|s| s.to_string());
+            let (start_time, all_day) = if let Some(dt) = ev["start"]["dateTime"].as_str() {
+                (
+                    crate::calendar::timezone::to_utc(dt, start_tz.as_deref().unwrap_or("")),
+                    false,
+                )
+            } else if let Some(d) = ev["start"]["date"].as_str() {
+                (d.to_string(), true)
+            } else {
+                resources.push(db::calendar_sync::Resource::unsupported(
+                    native,
+                    "Google event omitted its start",
+                ));
+                continue;
+            };
+
+            let end_time = if let Some(dt) = ev["end"]["dateTime"].as_str() {
+                let end_tz = ev["end"]["timeZone"].as_str().unwrap_or("");
+                crate::calendar::timezone::to_utc(dt, end_tz)
+            } else if let Some(d) = ev["end"]["date"].as_str() {
+                d.to_string()
+            } else {
+                resources.push(db::calendar_sync::Resource::unsupported(
+                    native,
+                    "Google event omitted its end",
+                ));
+                continue;
+            };
+
+            let organizer_email = parse_google_organizer(ev, &account.email, is_primary);
+            let uid = ev["iCalUID"].as_str().map(|s| s.to_string());
+            let (attendees_json, my_status) =
+                parse_google_attendees(ev, &account.email, is_primary);
+
+            let cal_event = CalendarEvent {
+                id: uuid::Uuid::new_v4().to_string(),
+                account_id: account.id.clone(),
+                calendar_id: local_cal_id.to_owned(),
+                uid,
+                title: title.to_string(),
+                description,
+                location,
+                start_time,
+                end_time,
+                all_day,
+                timezone: start_tz,
+                recurrence_rule: None,
+                recurrence_kind: google_recurrence_kind(ev),
+                organizer_email,
+                attendees_json,
+                my_status,
+                source_message_id: None,
+                ical_data: None,
+                remote_id: Some(event_id_remote.to_string()),
+                etag: ev["etag"].as_str().map(|s| s.to_string()),
+            };
+
+            if cal_event.recurrence_kind == RecurrenceKind::Series {
+                match event_sets::from_sync_resources(
+                    account,
+                    &cal_event,
+                    remote_cal_id,
+                    ev,
+                    exceptions
+                        .get(event_id_remote)
+                        .map(Vec::as_slice)
+                        .unwrap_or_default(),
+                ) {
+                    Ok(set) => resources.push(db::calendar_sync::Resource::readable(set)?),
+                    Err(error) => {
+                        resources.push(db::calendar_sync::Resource::unsupported(native, error))
+                    }
+                }
+            } else if cal_event.recurrence_kind == RecurrenceKind::Standalone {
+                // This is a complete resource, including a series converted
+                // into a standalone event. Do not let old ownership absorb it.
+                let set = CalendarEventSet {
+                    native: Some(native),
+                    event: cal_event,
+                    overrides: vec![],
+                    content: None,
+                };
+                resources.push(db::calendar_sync::Resource::readable(set)?);
+            } else if cal_event.recurrence_kind == RecurrenceKind::Occurrence {
+                // Finite overrides are persisted with the master's set below.
+                if !ev["recurringEventId"]
+                    .as_str()
+                    .is_some_and(|master| live_ids.contains(master))
+                {
+                    resources.push(db::calendar_sync::Resource::unsupported(
+                        native,
+                        "Google exception lacks a master",
+                    ));
+                } else {
+                    resources.push(db::calendar_sync::Resource {
+                        native,
+                        set: None,
+                        error: None,
+                    });
+                }
+            } else {
+                resources.push(db::calendar_sync::Resource::unsupported(
+                    native,
+                    "Google event has ambiguous recurrence",
+                ));
+            }
+        }
+    }
+    Ok(resources)
+}
+
+fn collect_read_errors(resources: &[db::calendar_sync::Resource], read_errors: &mut Vec<String>) {
+    for resource in resources {
+        if let Some(error) = &resource.error {
+            read_errors.push(format!(
+                "Google resource {} cannot be displayed: {error}",
+                resource.native.event_id
+            ));
+        }
+    }
+}
+
+/// Incremental syncs leave unchanged unreadable resources in place; report
+/// them from the mirror so every sync surfaces the same errors a full one does.
+fn report_mirror_errors(
+    conn: &rusqlite::Connection,
+    local_cal_id: &str,
+    read_errors: &mut Vec<String>,
+) -> Result<()> {
+    for (id, error) in db::calendar_sync::unreadable_resources(conn, local_cal_id)? {
+        read_errors.push(format!("Google resource {id} cannot be displayed: {error}"));
+    }
+    Ok(())
+}
+
+/// Which mirror resources an incremental read touched. `touched` holds every
+/// delta ID plus the masters of delta exceptions; the exceptions of a touched
+/// master are added here because their readability depends on the master.
+/// Returns (resources to re-project, cached IDs that left the inventory).
+fn google_delta_scope(
+    before: &HashSet<String>,
+    touched: HashSet<String>,
+    items: &[serde_json::Value],
+) -> (HashSet<String>, HashSet<String>) {
+    let after: HashSet<&str> = items
+        .iter()
+        .filter_map(|item| item["id"].as_str())
+        .collect();
+    let removed = before
+        .iter()
+        .filter(|id| !after.contains(id.as_str()))
+        .cloned()
+        .collect();
+    let mut affected: HashSet<String> = touched
+        .iter()
+        .filter(|id| after.contains(id.as_str()))
+        .cloned()
+        .collect();
+    for item in items {
+        if let (Some(id), Some(master)) = (item["id"].as_str(), item["recurringEventId"].as_str()) {
+            if touched.contains(master) {
+                affected.insert(id.to_owned());
+            }
+        }
+    }
+    (affected, removed)
 }
 
 #[async_trait]
@@ -3332,5 +3517,379 @@ mod tests {
         assert_eq!(attendees[1]["email"], "alias@example.com");
         assert_eq!(attendees[1]["responseStatus"], "declined");
         assert_eq!(attendees[1]["self"], true);
+    }
+}
+
+#[cfg(test)]
+mod incremental_sync_tests {
+    use super::sync_testutil::{cache_event, serve_responses, services, setup_db};
+    use super::{sync_google, CalendarBackendCtx};
+    use crate::backend::testutil::account;
+    use crate::db;
+    use rusqlite::OptionalExtension;
+    use serde_json::json;
+
+    const SYNC_KEY: &str = "google_resource_sync_token_acc1_primary";
+
+    fn calendars() -> serde_json::Value {
+        json!({"items": [{"id": "primary", "summary": "Calendar", "primary": true}]})
+    }
+
+    fn standalone(id: &str, summary: &str) -> serde_json::Value {
+        json!({
+            "id": id,
+            "iCalUID": format!("uid-{id}@example.test"),
+            "summary": summary,
+            "etag": format!("etag-{id}-{summary}"),
+            "start": {"dateTime": "2026-09-14T09:00:00Z"},
+            "end": {"dateTime": "2026-09-14T10:00:00Z"}
+        })
+    }
+
+    fn master() -> serde_json::Value {
+        json!({
+            "id": "master",
+            "iCalUID": "master@example.test",
+            "summary": "Weekly",
+            "etag": "master-etag",
+            "start": {"dateTime": "2026-09-15T09:00:00+02:00", "timeZone": "Europe/Paris"},
+            "end": {"dateTime": "2026-09-15T10:00:00+02:00", "timeZone": "Europe/Paris"},
+            "recurrence": ["RRULE:FREQ=WEEKLY"]
+        })
+    }
+
+    fn exception(summary: &str) -> serde_json::Value {
+        json!({
+            "id": "master_20260929",
+            "iCalUID": "master@example.test",
+            "summary": summary,
+            "etag": format!("exception-etag-{summary}"),
+            "start": {"dateTime": "2026-09-29T11:00:00+02:00"},
+            "end": {"dateTime": "2026-09-29T12:00:00+02:00"},
+            "recurringEventId": "master",
+            "originalStartTime": {
+                "dateTime": "2026-09-29T09:00:00+02:00",
+                "timeZone": "Europe/Paris"
+            }
+        })
+    }
+
+    fn sync_token_of(request: &str) -> Option<String> {
+        let target = request.split_whitespace().nth(1).unwrap();
+        url::Url::parse(&format!("http://localhost{target}"))
+            .unwrap()
+            .query_pairs()
+            .find(|(key, _)| key == "syncToken")
+            .map(|(_, value)| value.into_owned())
+    }
+
+    fn saved_token(conn: &rusqlite::Connection) -> Option<String> {
+        conn.query_row(
+            "SELECT value FROM app_metadata WHERE key = ?1",
+            [SYNC_KEY],
+            |row| row.get(0),
+        )
+        .optional()
+        .unwrap()
+    }
+
+    fn event_id(conn: &rusqlite::Connection, remote: &str) -> Option<String> {
+        conn.query_row(
+            "SELECT id FROM calendar_events WHERE calendar_id = 'cal1' AND remote_id = ?1",
+            [remote],
+            |row| row.get(0),
+        )
+        .optional()
+        .unwrap()
+    }
+
+    /// A complete projection rewrite clears `pending_rsvp_status`; a resource
+    /// that keeps the marker was not rewritten by the sync.
+    fn mark_untouched(conn: &rusqlite::Connection, remote: &str) {
+        conn.execute(
+            "UPDATE calendar_events SET pending_rsvp_status = 'marker' WHERE remote_id = ?1",
+            [remote],
+        )
+        .unwrap();
+    }
+
+    fn untouched(conn: &rusqlite::Connection, remote: &str) -> bool {
+        conn.query_row(
+            "SELECT pending_rsvp_status FROM calendar_events WHERE remote_id = ?1",
+            [remote],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .unwrap()
+        .as_deref()
+            == Some("marker")
+    }
+
+    fn mirror_ids(conn: &rusqlite::Connection) -> Vec<String> {
+        let mut stmt = conn
+            .prepare("SELECT remote_id FROM calendar_remote_resources WHERE calendar_id = 'cal1' ORDER BY remote_id")
+            .unwrap();
+        stmt.query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn routine_syncs_reuse_the_stored_token_and_rewrite_only_changes() {
+        let (_dir, db) = setup_db().await;
+        let (root, captured) = serve_responses(vec![
+            // 1: first sync is a complete read.
+            (200, calendars()),
+            (
+                200,
+                json!({
+                    "items": [
+                        master(),
+                        exception("Moved"),
+                        standalone("a", "A"),
+                        standalone("b", "B"),
+                        standalone("c", "C")
+                    ],
+                    "nextSyncToken": "token-1"
+                }),
+            ),
+            // 2: one change, one deletion, one creation.
+            (200, calendars()),
+            (
+                200,
+                json!({
+                    "items": [
+                        standalone("a", "A renamed"),
+                        {"id": "c", "status": "cancelled"},
+                        standalone("d", "D")
+                    ],
+                    "nextSyncToken": "token-2"
+                }),
+            ),
+            // 3: nothing changed upstream.
+            (200, calendars()),
+            (200, json!({"items": [], "nextSyncToken": "token-3"})),
+            // 4: an exception changed; its master's set must follow.
+            (200, calendars()),
+            (
+                200,
+                json!({"items": [exception("Moved again")], "nextSyncToken": "token-4"}),
+            ),
+        ])
+        .await;
+        let provider_services = services(&root);
+        let ctx = CalendarBackendCtx {
+            db: &db,
+            services: &provider_services,
+        };
+        let account = account("calendar", "google");
+
+        sync_google(&ctx, &account).await.unwrap();
+        let (a_id, master_id) = {
+            let conn = db.writer().await;
+            assert_eq!(saved_token(&conn).as_deref(), Some("token-1"));
+            for remote in ["master", "a", "b"] {
+                mark_untouched(&conn, remote);
+            }
+            (
+                event_id(&conn, "a").unwrap(),
+                event_id(&conn, "master").unwrap(),
+            )
+        };
+
+        sync_google(&ctx, &account).await.unwrap();
+        {
+            let conn = db.reader();
+            assert_eq!(saved_token(&conn).as_deref(), Some("token-2"));
+            assert_eq!(event_id(&conn, "a").as_deref(), Some(a_id.as_str()));
+            assert_eq!(
+                db::calendar::get_event(&conn, &a_id).unwrap().title,
+                "A renamed"
+            );
+            assert!(!untouched(&conn, "a"));
+            assert!(event_id(&conn, "c").is_none());
+            assert!(event_id(&conn, "d").is_some());
+            assert!(untouched(&conn, "b"), "unchanged event was rewritten");
+            assert!(untouched(&conn, "master"), "unchanged series was rewritten");
+            assert_eq!(
+                mirror_ids(&conn),
+                ["a", "b", "d", "master", "master_20260929"]
+            );
+        }
+
+        sync_google(&ctx, &account).await.unwrap();
+        {
+            let conn = db.reader();
+            assert_eq!(saved_token(&conn).as_deref(), Some("token-3"));
+            assert!(untouched(&conn, "b"));
+            assert!(untouched(&conn, "master"));
+        }
+
+        sync_google(&ctx, &account).await.unwrap();
+        {
+            let conn = db.reader();
+            assert_eq!(saved_token(&conn).as_deref(), Some("token-4"));
+            assert!(untouched(&conn, "b"));
+            assert!(!untouched(&conn, "master"));
+            assert_eq!(
+                event_id(&conn, "master").as_deref(),
+                Some(master_id.as_str())
+            );
+            let set = db::calendar_sync::displayed_set(&conn, &master_id)
+                .unwrap()
+                .unwrap();
+            assert_eq!(set.overrides.len(), 1);
+            assert_eq!(
+                set.overrides[0].event.as_ref().unwrap().title,
+                "Moved again"
+            );
+        }
+
+        let requests = captured.await.unwrap();
+        assert_eq!(requests.len(), 8);
+        let tokens: Vec<_> = [1, 3, 5, 7]
+            .iter()
+            .map(|index| sync_token_of(&requests[*index]))
+            .collect();
+        assert_eq!(
+            tokens,
+            [
+                None,
+                Some("token-1".into()),
+                Some("token-2".into()),
+                Some("token-3".into())
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn cancelled_master_removes_its_exceptions_incrementally() {
+        let (_dir, db) = setup_db().await;
+        let (root, captured) = serve_responses(vec![
+            (200, calendars()),
+            (
+                200,
+                json!({
+                    "items": [master(), exception("Moved"), standalone("b", "B")],
+                    "nextSyncToken": "token-1"
+                }),
+            ),
+            (200, calendars()),
+            (
+                200,
+                json!({
+                    "items": [{"id": "master", "status": "cancelled"}],
+                    "nextSyncToken": "token-2"
+                }),
+            ),
+        ])
+        .await;
+        let provider_services = services(&root);
+        let ctx = CalendarBackendCtx {
+            db: &db,
+            services: &provider_services,
+        };
+        let account = account("calendar", "google");
+        sync_google(&ctx, &account).await.unwrap();
+        mark_untouched(&*db.writer().await, "b");
+        sync_google(&ctx, &account).await.unwrap();
+
+        let conn = db.reader();
+        assert!(event_id(&conn, "master").is_none());
+        assert_eq!(mirror_ids(&conn), ["b"]);
+        assert!(untouched(&conn, "b"));
+        assert_eq!(saved_token(&conn).as_deref(), Some("token-2"));
+        let recurrence_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM calendar_recurrence_objects",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(recurrence_rows, 0);
+        assert_eq!(captured.await.unwrap().len(), 4);
+    }
+
+    #[tokio::test]
+    async fn incremental_syncs_keep_reporting_unreadable_resources() {
+        let (_dir, db) = setup_db().await;
+        let broken = json!({"id": "broken", "summary": "No start"});
+        let (root, captured) = serve_responses(vec![
+            (200, calendars()),
+            (
+                200,
+                json!({"items": [broken, standalone("b", "B")], "nextSyncToken": "token-1"}),
+            ),
+            (200, calendars()),
+            (200, json!({"items": [], "nextSyncToken": "token-2"})),
+            (200, calendars()),
+            (
+                200,
+                json!({"items": [standalone("b", "B renamed")], "nextSyncToken": "token-3"}),
+            ),
+        ])
+        .await;
+        let provider_services = services(&root);
+        let ctx = CalendarBackendCtx {
+            db: &db,
+            services: &provider_services,
+        };
+        let account = account("calendar", "google");
+        for expected_token in ["token-1", "token-2", "token-3"] {
+            let error = sync_google(&ctx, &account).await.unwrap_err().to_string();
+            assert!(
+                error.contains("Google resource broken cannot be displayed"),
+                "{error}"
+            );
+            assert!(!error.contains("resource b "), "{error}");
+            assert_eq!(saved_token(&db.reader()).as_deref(), Some(expected_token));
+        }
+        let conn = db.reader();
+        let b = event_id(&conn, "b").unwrap();
+        assert_eq!(
+            db::calendar::get_event(&conn, &b).unwrap().title,
+            "B renamed"
+        );
+        assert_eq!(captured.await.unwrap().len(), 6);
+    }
+
+    #[tokio::test]
+    async fn drifted_local_rows_fall_back_to_a_complete_rebuild() {
+        let (_dir, db) = setup_db().await;
+        let (root, captured) = serve_responses(vec![
+            (200, calendars()),
+            (
+                200,
+                json!({"items": [standalone("b", "B")], "nextSyncToken": "token-1"}),
+            ),
+            (200, calendars()),
+            (
+                200,
+                json!({"items": [standalone("d", "D")], "nextSyncToken": "token-2"}),
+            ),
+        ])
+        .await;
+        let provider_services = services(&root);
+        let ctx = CalendarBackendCtx {
+            db: &db,
+            services: &provider_services,
+        };
+        let account = account("calendar", "google");
+        sync_google(&ctx, &account).await.unwrap();
+        {
+            let conn = db.writer().await;
+            mark_untouched(&conn, "b");
+            cache_event(&conn, "local-only", None);
+        }
+        sync_google(&ctx, &account).await.unwrap();
+
+        let requests = captured.await.unwrap();
+        assert_eq!(sync_token_of(&requests[3]).as_deref(), Some("token-1"));
+        let conn = db.reader();
+        assert!(db::calendar::get_event(&conn, "local-only").is_err());
+        assert!(event_id(&conn, "d").is_some());
+        // The complete rebuild rewrote the unchanged resource too.
+        assert!(!untouched(&conn, "b"));
+        assert_eq!(saved_token(&conn).as_deref(), Some("token-2"));
     }
 }

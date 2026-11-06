@@ -38,9 +38,15 @@ but not an obsolete display projection. Failed or incomplete inventories cannot
 establish absence. Graph series enumeration failures and revision changes are
 incomplete reads, not unsupported event content.
 
-Google incremental reads rebuild a complete inventory from the wire mirror.
-The mirror and cursor advance in the same SQLite transaction. A missing mirror
-requires a full provider read; legacy cursors cannot establish its initial state.
+Google incremental reads merge the delta into the wire mirror, which stays a
+complete inventory, but re-project and rewrite only the resources the delta
+touched: changed and removed IDs, the master of a changed exception, and the
+exceptions of a changed master. An empty delta only advances the cursor. The
+delta is applied only when the calendar's display rows are exactly the mirror's
+own projection (no action routing, owned action sets, or unmirrored rows);
+otherwise the sync falls back to the complete replacement above. The mirror and
+cursor advance in the same SQLite transaction. A missing mirror requires a full
+provider read; legacy cursors cannot establish its initial state.
 JMAP projects each calendar membership separately and verifies stable inventory
 identity before decoding individual resources. Graph reads display sets without
 requiring mutation validators, while writes retain strict conditional checks.

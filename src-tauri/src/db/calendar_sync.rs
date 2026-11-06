@@ -76,36 +76,7 @@ pub(crate) fn replace_calendar(
     protocol: &str,
     resources: &[Resource],
 ) -> Result<()> {
-    let target = super::calendar::get_calendar(tx, calendar)?;
-    if target.account_id != account || target.remote_id.as_deref().is_none_or(str::is_empty) {
-        return Err(Error::Sync(
-            "Remote mirror destination is not a provider calendar".into(),
-        ));
-    }
-    let mut remotes = HashSet::new();
-    let mut projected = HashSet::new();
-    for resource in resources {
-        if resource.native.protocol != protocol
-            || Some(resource.native.calendar_id.as_str()) != target.remote_id.as_deref()
-            || resource.native.event_id.is_empty()
-            || !remotes.insert(resource.native.event_id.as_str())
-        {
-            return Err(Error::Sync(
-                "Remote inventory has conflicting resource identity".into(),
-            ));
-        }
-        if let Some(set) = &resource.set {
-            set.validate_display()?;
-            if set.event.account_id != account
-                || set.event.calendar_id != calendar
-                || set.event.remote_id.as_deref() != Some(resource.native.event_id.as_str())
-            {
-                return Err(Error::Sync(
-                    "Remote projection belongs to another resource".into(),
-                ));
-            }
-        }
-    }
+    let remotes = validate_resources(tx, account, calendar, protocol, resources)?;
 
     // These are editing aids, not sync identity. Drop obsolete routing before
     // replacing the mirror so neither retired addresses nor claims hide resources.
@@ -118,54 +89,11 @@ pub(crate) fn replace_calendar(
         (SELECT id FROM calendar_events WHERE account_id = ?1 AND calendar_id = ?2)",
         params![account, calendar],
     )?;
+    let mut projected = HashSet::new();
     for resource in resources {
-        let mut canonical = resource.set.clone();
-        let id = if let Some(set) = &mut canonical {
-            let existing: Option<String> = tx.query_row(
-                "SELECT id FROM calendar_events WHERE account_id = ?1 AND calendar_id = ?2 AND remote_id = ?3 ORDER BY id LIMIT 1",
-                params![account, calendar, resource.native.event_id], |row| row.get(0),
-            ).optional()?;
-            set.event.id = existing.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-            let exists: bool = tx.query_row(
-                "SELECT EXISTS(SELECT 1 FROM calendar_events WHERE id = ?1)",
-                [&set.event.id],
-                |row| row.get(0),
-            )?;
-            if exists {
-                super::calendar::update_event(tx, &set.event)?;
-                tx.execute("UPDATE calendar_events SET remote_id = ?1, etag = ?2, pending_rsvp_status = NULL WHERE id = ?3", params![set.event.remote_id, set.event.etag, set.event.id])?;
-            } else {
-                super::calendar::insert_event(tx, &set.event)?;
-            }
-            super::calendar_invitation::invalidate(tx, &set.event.id)?;
-            tx.execute(
-                "DELETE FROM calendar_action_members WHERE event_id = ?1 OR owner_event_id = ?1",
-                [&set.event.id],
-            )?;
-            tx.execute(
-                "DELETE FROM calendar_action_sets WHERE event_id = ?1",
-                [&set.event.id],
-            )?;
-            // Recurrence identities are editing aids, not a prerequisite for
-            // displaying an upstream event that the editor cannot mutate.
-            if set.validate().is_ok() {
-                replace_recurrence(tx, set)?;
-            }
-            projected.insert(set.event.id.clone());
-            Some(set.event.id.clone())
-        } else {
-            None
-        };
-        tx.execute(
-            "INSERT INTO calendar_remote_resources(calendar_id, remote_id, protocol, native_data, set_data, event_id, error)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-             ON CONFLICT(calendar_id, remote_id) DO UPDATE SET protocol = excluded.protocol,
-                native_data = excluded.native_data, set_data = excluded.set_data,
-                event_id = excluded.event_id, error = excluded.error",
-            params![calendar, resource.native.event_id, protocol,
-                encode(&resource.native)?,
-                canonical.as_ref().map(encode).transpose()?, id, resource.error],
-        )?;
+        if let Some(id) = upsert_resource(tx, account, calendar, protocol, resource)? {
+            projected.insert(id);
+        }
     }
     let rows = {
         let mut stmt = tx
@@ -198,9 +126,231 @@ pub(crate) fn replace_calendar(
             )?;
         }
     }
+    mark_refreshed(tx, calendar, protocol)
+}
+
+/// Apply one provider delta to a mirror that a complete read already published.
+///
+/// `changed` holds the re-projected resources the delta touched (plus the
+/// recurrence relatives whose projection depends on them) and `removed` the
+/// provider IDs that left the inventory. Every other mirror row and its
+/// display projection is left untouched, so a routine sync with a handful of
+/// provider changes writes a handful of rows instead of the whole calendar.
+///
+/// Returns `false` without writing anything when the local state is not a
+/// clean projection of the mirror (local action routing, owned action sets, or
+/// display rows the mirror does not account for). Those are cleared only by a
+/// complete replacement, so the caller must fall back to `replace_calendar`.
+pub(crate) fn apply_calendar_changes(
+    tx: &Transaction<'_>,
+    account: &str,
+    calendar: &str,
+    protocol: &str,
+    changed: &[Resource],
+    removed: &HashSet<String>,
+) -> Result<bool> {
+    if !mirror_is_clean_projection(tx, account, calendar, protocol)? {
+        return Ok(false);
+    }
+    let remotes = validate_resources(tx, account, calendar, protocol, changed)?;
+    if removed.iter().any(|id| remotes.contains(id.as_str())) {
+        return Err(Error::Sync(
+            "Remote delta both changes and removes one resource".into(),
+        ));
+    }
+
+    // Display rows currently owned by the touched provider resources. Their
+    // recurrence identities are rebuilt exactly as a complete replacement would.
+    let mut stale = Vec::new();
+    {
+        let mut stmt = tx.prepare(
+            "SELECT id FROM calendar_events WHERE account_id = ?1 AND calendar_id = ?2 AND remote_id = ?3",
+        )?;
+        for remote in remotes
+            .iter()
+            .copied()
+            .chain(removed.iter().map(String::as_str))
+        {
+            let rows = stmt
+                .query_map(params![account, calendar, remote], |row| {
+                    row.get::<_, String>(0)
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            stale.extend(rows);
+        }
+    }
+    for id in &stale {
+        tx.execute(
+            "DELETE FROM calendar_recurrence_objects WHERE event_id = ?1",
+            [id],
+        )?;
+    }
+    let mut projected = HashSet::new();
+    for resource in changed {
+        if let Some(id) = upsert_resource(tx, account, calendar, protocol, resource)? {
+            projected.insert(id);
+        }
+    }
+    for id in stale {
+        if !projected.contains(&id) {
+            tx.execute("DELETE FROM calendar_events WHERE id = ?1", [&id])?;
+        }
+    }
+    for id in removed {
+        tx.execute(
+            "DELETE FROM calendar_remote_resources WHERE calendar_id = ?1 AND remote_id = ?2",
+            params![calendar, id],
+        )?;
+    }
+    mark_refreshed(tx, calendar, protocol)?;
+    Ok(true)
+}
+
+/// A delta may only be layered onto a mirror whose display rows are exactly its
+/// own projection. Anything a complete replacement would sweep away forces one.
+fn mirror_is_clean_projection(
+    conn: &Connection,
+    account: &str,
+    calendar: &str,
+    protocol: &str,
+) -> Result<bool> {
+    let dirty: bool = conn.query_row(
+        "SELECT NOT EXISTS(SELECT 1 FROM calendar_remote_sync WHERE calendar_id = ?2 AND protocol = ?3)
+            OR EXISTS(SELECT 1 FROM calendar_action_addresses WHERE account_id = ?1 AND calendar_id = ?2)
+            OR EXISTS(SELECT 1 FROM calendar_action_sets s JOIN calendar_events e ON e.id = s.event_id
+                      WHERE e.calendar_id = ?2)
+            OR EXISTS(SELECT 1 FROM calendar_action_members m JOIN calendar_events e
+                      ON e.id = m.event_id OR e.id = m.owner_event_id WHERE e.calendar_id = ?2)
+            OR EXISTS(SELECT 1 FROM calendar_events e WHERE e.calendar_id = ?2
+                      AND (e.account_id != ?1 OR NOT EXISTS(SELECT 1 FROM calendar_remote_resources r
+                           WHERE r.event_id = e.id AND r.calendar_id = ?2)))
+            OR EXISTS(SELECT 1 FROM calendar_remote_resources r WHERE r.calendar_id = ?2
+                      AND (r.protocol != ?3 OR (r.event_id IS NOT NULL AND NOT EXISTS(
+                           SELECT 1 FROM calendar_events e WHERE e.id = r.event_id
+                           AND e.calendar_id = ?2 AND e.remote_id = r.remote_id))))",
+        params![account, calendar, protocol],
+        |row| row.get(0),
+    )?;
+    Ok(!dirty)
+}
+
+fn validate_resources<'a>(
+    tx: &Transaction<'_>,
+    account: &str,
+    calendar: &str,
+    protocol: &str,
+    resources: &'a [Resource],
+) -> Result<HashSet<&'a str>> {
+    let target = super::calendar::get_calendar(tx, calendar)?;
+    if target.account_id != account || target.remote_id.as_deref().is_none_or(str::is_empty) {
+        return Err(Error::Sync(
+            "Remote mirror destination is not a provider calendar".into(),
+        ));
+    }
+    let mut remotes = HashSet::new();
+    for resource in resources {
+        if resource.native.protocol != protocol
+            || Some(resource.native.calendar_id.as_str()) != target.remote_id.as_deref()
+            || resource.native.event_id.is_empty()
+            || !remotes.insert(resource.native.event_id.as_str())
+        {
+            return Err(Error::Sync(
+                "Remote inventory has conflicting resource identity".into(),
+            ));
+        }
+        if let Some(set) = &resource.set {
+            set.validate_display()?;
+            if set.event.account_id != account
+                || set.event.calendar_id != calendar
+                || set.event.remote_id.as_deref() != Some(resource.native.event_id.as_str())
+            {
+                return Err(Error::Sync(
+                    "Remote projection belongs to another resource".into(),
+                ));
+            }
+        }
+    }
+    Ok(remotes)
+}
+
+/// Publish one resource's wire data and display projection. Returns the display
+/// event ID it projects to, if any.
+fn upsert_resource(
+    tx: &Transaction<'_>,
+    account: &str,
+    calendar: &str,
+    protocol: &str,
+    resource: &Resource,
+) -> Result<Option<String>> {
+    let mut canonical = resource.set.clone();
+    let id = if let Some(set) = &mut canonical {
+        let existing: Option<String> = tx.query_row(
+            "SELECT id FROM calendar_events WHERE account_id = ?1 AND calendar_id = ?2 AND remote_id = ?3 ORDER BY id LIMIT 1",
+            params![account, calendar, resource.native.event_id], |row| row.get(0),
+        ).optional()?;
+        set.event.id = existing.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let exists: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM calendar_events WHERE id = ?1)",
+            [&set.event.id],
+            |row| row.get(0),
+        )?;
+        if exists {
+            super::calendar::update_event(tx, &set.event)?;
+            tx.execute("UPDATE calendar_events SET remote_id = ?1, etag = ?2, pending_rsvp_status = NULL WHERE id = ?3", params![set.event.remote_id, set.event.etag, set.event.id])?;
+        } else {
+            super::calendar::insert_event(tx, &set.event)?;
+        }
+        super::calendar_invitation::invalidate(tx, &set.event.id)?;
+        tx.execute(
+            "DELETE FROM calendar_action_members WHERE event_id = ?1 OR owner_event_id = ?1",
+            [&set.event.id],
+        )?;
+        tx.execute(
+            "DELETE FROM calendar_action_sets WHERE event_id = ?1",
+            [&set.event.id],
+        )?;
+        // Recurrence identities are editing aids, not a prerequisite for
+        // displaying an upstream event that the editor cannot mutate.
+        if set.validate().is_ok() {
+            replace_recurrence(tx, set)?;
+        }
+        Some(set.event.id.clone())
+    } else {
+        None
+    };
+    tx.execute(
+        "INSERT INTO calendar_remote_resources(calendar_id, remote_id, protocol, native_data, set_data, event_id, error)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(calendar_id, remote_id) DO UPDATE SET protocol = excluded.protocol,
+            native_data = excluded.native_data, set_data = excluded.set_data,
+            event_id = excluded.event_id, error = excluded.error",
+        params![calendar, resource.native.event_id, protocol,
+            encode(&resource.native)?,
+            canonical.as_ref().map(encode).transpose()?, id, resource.error],
+    )?;
+    Ok(id)
+}
+
+fn mark_refreshed(tx: &Transaction<'_>, calendar: &str, protocol: &str) -> Result<()> {
     tx.execute("INSERT INTO calendar_remote_sync(calendar_id, protocol) VALUES (?1, ?2)
         ON CONFLICT(calendar_id) DO UPDATE SET protocol = excluded.protocol, refreshed_at = CURRENT_TIMESTAMP", params![calendar, protocol])?;
     Ok(())
+}
+
+/// The provider resources of one calendar mirror that could not be displayed,
+/// as (provider ID, reason). Incremental syncs report these without re-reading.
+pub(crate) fn unreadable_resources(
+    conn: &Connection,
+    calendar: &str,
+) -> Result<Vec<(String, String)>> {
+    let mut stmt = conn.prepare(
+        "SELECT remote_id, error FROM calendar_remote_resources
+         WHERE calendar_id = ?1 AND error IS NOT NULL ORDER BY remote_id",
+    )?;
+    let rows = stmt
+        .query_map([calendar], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
 }
 
 pub(crate) fn displayed_set(conn: &Connection, event: &str) -> Result<Option<CalendarEventSet>> {
