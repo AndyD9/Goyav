@@ -965,6 +965,21 @@ async fn start_imap_idle_inner(
         return Ok(());
     }
 
+    let providers = state.providers.clone();
+    let runtime = tokio::runtime::Handle::current();
+    let refresh_config: crate::mail::idle::IdleConfigRefresher = Box::new(move || {
+        let credentials =
+            runtime.block_on(providers.credentials().mail_credentials(&full_account))?;
+        Ok(ImapConfig {
+            host: full_account.imap_host.clone(),
+            port: full_account.imap_port,
+            username: full_account.username.clone(),
+            password: credentials.secret,
+            use_tls: full_account.use_tls,
+            use_xoauth2: credentials.use_xoauth2,
+        })
+    });
+
     let account_id = account.id.clone();
     let thread_control = control.clone();
     let event_control = control.clone();
@@ -972,6 +987,7 @@ async fn start_imap_idle_inner(
     let thread = std::thread::spawn(move || {
         crate::mail::idle::run_idle_loop(
             config,
+            refresh_config,
             account_id.clone(),
             thread_control,
             Box::new(move |event| {

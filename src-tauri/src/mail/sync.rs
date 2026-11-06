@@ -84,29 +84,33 @@ fn sync_account_blocking(
     {
         let rt = tokio::runtime::Handle::current();
         let conn = rt.block_on(db.writer());
-        for (display_name, path) in &imap_folders {
-            let folder_type = db::folders::guess_folder_type(display_name)
-                .or_else(|| db::folders::guess_folder_type(path));
-            db::folders::upsert_folder(&conn, account_id, display_name, path, folder_type, None)?;
+        for folder in &imap_folders {
+            let folder_type = db::folders::guess_folder_type(&folder.display_name)
+                .or_else(|| db::folders::guess_folder_type(&folder.path));
+            db::folders::upsert_folder(
+                &conn,
+                account_id,
+                &folder.display_name,
+                &folder.path,
+                folder_type,
+                None,
+            )?;
+            if folder.holds_only_copies {
+                drop_local_copies(&conn, account_id, &folder.path)?;
+            }
         }
     }
 
-    // Gmail virtual folders that duplicate content — skip envelope sync
-    // but keep them in the DB (they're needed for move/delete operations).
-    // [Gmail]/All Mail contains every email, [Gmail]/Important is a virtual view.
-    // [Gmail] itself is not a selectable mailbox.
-    let skip_sync_folders: &[&str] = &["[Gmail]/All Mail", "[Gmail]/Important", "[Gmail]"];
-
     // Sync order: priority folders first (current, INBOX), then rest in parallel.
-    // Folders in skip_sync_folders are registered in DB (above) but not synced.
+    // Folders holding only copies (Gmail's All Mail / Important, in any
+    // language) stay registered in the DB above — move/delete use them — but
+    // are not synced: All Mail alone would duplicate every other folder.
     let mut priority: Vec<String> = Vec::new();
     let mut others: Vec<String> = Vec::new();
-    for (_, path) in &imap_folders {
-        if skip_sync_folders
-            .iter()
-            .any(|skip| path.eq_ignore_ascii_case(skip))
-        {
-            log::debug!("Skipping envelope sync for Gmail virtual folder: {}", path);
+    for folder in &imap_folders {
+        let path = &folder.path;
+        if folder.holds_only_copies {
+            log::debug!("Skipping envelope sync for duplicate-only folder: {}", path);
             continue;
         }
         if current_folder
@@ -296,6 +300,34 @@ fn sync_account_blocking(
     let _ = std::fs::create_dir_all(data_dir.join(account_id));
 
     Ok(grand_total)
+}
+
+/// Remove envelopes cached for a folder that is no longer synced (localized
+/// Gmail All Mail used to be), so it doesn't keep thousands of stale
+/// duplicates. Only touches the local DB; a no-op once the folder is empty.
+fn drop_local_copies(
+    conn: &rusqlite::Connection,
+    account_id: &str,
+    folder_path: &str,
+) -> Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    let removed = tx.execute(
+        "DELETE FROM messages WHERE account_id = ?1 AND folder_path = ?2",
+        rusqlite::params![account_id, folder_path],
+    )?;
+    if removed == 0 {
+        return Ok(());
+    }
+    db::folders::update_last_seen_uid(&tx, account_id, folder_path, 0)?;
+    db::folders::update_uid_state(&tx, account_id, folder_path, 0, 0)?;
+    db::folders::update_folder_counts(&tx, account_id, folder_path, 0, 0)?;
+    tx.commit()?;
+    log::info!(
+        "Removed {} cached duplicates from unsynced folder '{}'",
+        removed,
+        folder_path
+    );
+    Ok(())
 }
 
 /// Sync a folder by fetching envelopes only (no message bodies).

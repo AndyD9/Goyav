@@ -1,15 +1,68 @@
 use imap::types::NameAttribute;
 use imap::Session;
 use native_tls::TlsStream;
-use std::net::TcpStream;
+use std::net::{TcpStream, ToSocketAddrs};
+use std::time::Duration;
 
 use crate::error::{Error, Result};
 use crate::mail::search::build_imap_search;
 use crate::message::{normalize_message_id, SearchHit, SearchQuery};
 use crate::state::IdleControl;
 
+/// How long a non-IDLE IMAP socket may wait on a single read or write before
+/// the command fails. Per call, not per command: a long FETCH that keeps
+/// streaming data never trips it.
+const IMAP_IO_TIMEOUT: Duration = Duration::from_secs(90);
+
+/// How long to wait for the TCP handshake with each resolved address.
+const IMAP_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
+
+fn connect_tcp(host: &str, port: u16) -> std::io::Result<TcpStream> {
+    let mut last_error = None;
+    for addr in (host, port).to_socket_addrs()? {
+        match TcpStream::connect_timeout(&addr, IMAP_CONNECT_TIMEOUT) {
+            Ok(stream) => return Ok(stream),
+            Err(e) => last_error = Some(e),
+        }
+    }
+    Err(last_error.unwrap_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("no address found for {host}"),
+        )
+    }))
+}
+
 fn mailbox_is_selectable(attributes: &[NameAttribute<'_>]) -> bool {
     !attributes.contains(&NameAttribute::NoSelect)
+}
+
+/// Gmail-style folders that only hold copies of mail stored in other folders.
+/// Gmail localizes their names ("[Gmail]/Tous les messages", "[Gmail]/Alle
+/// Nachrichten"...), so the RFC 6154 `\All` and RFC 8457 `\Important`
+/// attributes are what identify them; the English names cover servers that
+/// don't advertise SPECIAL-USE.
+const DUPLICATE_FOLDER_NAMES: &[&str] = &["[Gmail]/All Mail", "[Gmail]/Important", "[Gmail]"];
+
+fn mailbox_holds_only_copies(path: &str, attributes: &[NameAttribute<'_>]) -> bool {
+    !mailbox_is_selectable(attributes)
+        || attributes.iter().any(|attribute| {
+            matches!(attribute, NameAttribute::Custom(name)
+                if name.eq_ignore_ascii_case("\\All") || name.eq_ignore_ascii_case("\\Important"))
+        })
+        || DUPLICATE_FOLDER_NAMES
+            .iter()
+            .any(|name| path.eq_ignore_ascii_case(name))
+}
+
+/// One mailbox from `LIST`.
+pub struct ListedFolder {
+    pub display_name: String,
+    /// Raw IMAP path, as SELECT and the local DB expect it.
+    pub path: String,
+    /// Not selectable, or only copies of mail held elsewhere (Gmail's All
+    /// Mail / Important): registered locally but never synced or searched.
+    pub holds_only_copies: bool,
 }
 
 #[derive(Clone)]
@@ -224,7 +277,7 @@ impl ImapConnection {
             Error::Imap(e.to_string())
         })?;
 
-        let stream = TcpStream::connect((&*config.host, config.port)).map_err(|e| {
+        let stream = connect_tcp(&config.host, config.port).map_err(|e| {
             log::error!(
                 "IMAP connection failed to {}:{}: {}",
                 config.host,
@@ -233,6 +286,17 @@ impl ImapConnection {
             );
             Error::Imap(e.to_string())
         })?;
+        // A socket with no deadline blocks forever once the network silently
+        // drops it (sleep, Wi-Fi change), and the sync holding it keeps the
+        // account's sync guard, so every later sync is deferred until restart.
+        // IDLE sockets are left alone: the imap crate drives their read
+        // timeout itself, and shutdown goes through IdleControl.
+        if idle_control.is_none() {
+            stream
+                .set_read_timeout(Some(IMAP_IO_TIMEOUT))
+                .and_then(|()| stream.set_write_timeout(Some(IMAP_IO_TIMEOUT)))
+                .map_err(|e| Error::Imap(format!("Failed to set IMAP socket timeout: {e}")))?;
+        }
         let socket = stream
             .try_clone()
             .map_err(|e| Error::Imap(format!("Failed to retain IMAP shutdown handle: {e}")))?;
@@ -296,7 +360,7 @@ impl ImapConnection {
         })
     }
 
-    pub fn list_folders(&mut self) -> Result<Vec<(String, String)>> {
+    pub fn list_folders(&mut self) -> Result<Vec<ListedFolder>> {
         log::debug!("IMAP listing folders");
         let listed = self.session.list(None, Some("*"));
         let mailboxes = self.checked("IMAP LIST", listed)?;
@@ -312,11 +376,25 @@ impl ImapConnection {
                 .rsplit_once(delimiter)
                 .map(|(_, last)| last.to_string())
                 .unwrap_or_else(|| decoded.clone());
-            folders.push((display_name, path));
+            let holds_only_copies = mailbox_holds_only_copies(&path, mb.attributes());
+            folders.push(ListedFolder {
+                display_name,
+                path,
+                holds_only_copies,
+            });
         }
         log::info!("IMAP found {} folders", folders.len());
-        for (display, path) in &folders {
-            log::debug!("  folder: {} ({})", display, path);
+        for folder in &folders {
+            log::debug!(
+                "  folder: {} ({}){}",
+                folder.display_name,
+                folder.path,
+                if folder.holds_only_copies {
+                    " [not synced]"
+                } else {
+                    ""
+                }
+            );
         }
         Ok(folders)
     }
@@ -866,10 +944,6 @@ impl Drop for ImapConnection {
     }
 }
 
-/// Folders that contain duplicate copies of mail (Gmail virtual folders).
-/// Skipping them avoids returning the same hit multiple times.
-const SEARCH_SKIP_FOLDERS: &[&str] = &["[Gmail]/All Mail", "[Gmail]/Important", "[Gmail]"];
-
 /// Cap on per-folder search hits, to bound work on huge mailboxes.
 const SEARCH_PER_FOLDER_LIMIT: usize = 200;
 /// Cap on total hits returned across all folders for one query.
@@ -891,7 +965,12 @@ pub fn search_account_blocking(
     let folders = conn.list_folders()?;
 
     let mut hits: Vec<SearchHit> = Vec::new();
-    for (_display, path) in folders {
+    for folder in folders {
+        // Folders holding only copies would return the same hit twice.
+        if folder.holds_only_copies {
+            continue;
+        }
+        let path = folder.path;
         if hits.len() >= SEARCH_TOTAL_LIMIT {
             break;
         }
@@ -901,13 +980,6 @@ pub fn search_account_blocking(
             log::warn!("IMAP search: aborting, connection desynchronized");
             break;
         }
-        if SEARCH_SKIP_FOLDERS
-            .iter()
-            .any(|skip| path.eq_ignore_ascii_case(skip))
-        {
-            continue;
-        }
-
         if let Err(e) = conn.select_folder(&path) {
             log::warn!("IMAP search: SELECT {} failed: {}", path, e);
             continue;
@@ -1296,13 +1368,45 @@ mod quote_mailbox_tests {
 
 #[cfg(test)]
 mod mailbox_selectability_tests {
-    use super::{mailbox_is_selectable, NameAttribute};
+    use super::{mailbox_holds_only_copies, mailbox_is_selectable, NameAttribute};
 
     #[test]
     fn noselect_attribute_is_not_executable() {
         assert!(!mailbox_is_selectable(&[NameAttribute::NoSelect]));
         assert!(mailbox_is_selectable(&[NameAttribute::NoInferiors]));
         assert!(mailbox_is_selectable(&[]));
+    }
+
+    #[test]
+    fn localized_gmail_all_mail_is_recognized_by_its_special_use() {
+        let all = [
+            NameAttribute::Custom("\\HasNoChildren".into()),
+            NameAttribute::Custom("\\All".into()),
+        ];
+        assert!(mailbox_holds_only_copies("[Gmail]/Tous les messages", &all));
+        assert!(mailbox_holds_only_copies(
+            "[Gmail]/Important",
+            &[NameAttribute::Custom("\\Important".into())]
+        ));
+    }
+
+    #[test]
+    fn english_names_and_noselect_parents_are_still_skipped() {
+        assert!(mailbox_holds_only_copies("[Gmail]/All Mail", &[]));
+        assert!(mailbox_holds_only_copies(
+            "[Gmail]",
+            &[NameAttribute::NoSelect]
+        ));
+    }
+
+    #[test]
+    fn regular_folders_are_synced() {
+        assert!(!mailbox_holds_only_copies("INBOX", &[]));
+        let sent = [NameAttribute::Custom("\\Sent".into())];
+        assert!(!mailbox_holds_only_copies(
+            "[Gmail]/Messages envoy&AOk-s",
+            &sent
+        ));
     }
 }
 
