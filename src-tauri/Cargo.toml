@@ -26,7 +26,7 @@ imap = "2"
 imap-proto = "0.10"
 native-tls = "0.2"
 mail-parser = "0.9"
-rusqlite = { version = "0.39", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 maildir = "0.6"
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
@@ -71,12 +71,12 @@ clearurls = "0.0.4"
 # OpenPGP keystore + smartcard + WKD operations. Shares the on-disk
 # keystore at ~/.tumpa/keys.db with tumpa-cli and the tumpa desktop app
 # (honors $TUMPA_DIR / $TUMPA_KEYSTORE).
-libtumpa = { version = "0.4.5", default-features = false, features = ["card", "network"] }
+libtumpa = { version = "0.4.6", default-features = false, features = ["card", "network"] }
 # Same versions libtumpa already pulls in; used directly to fetch WKD keys
 # without importing them and to verify certificate bindings before import
 # (src/pgp_cert.rs).
-wecanencrypt = { version = "=0.16.3", default-features = false, features = ["keystore", "network"] }
-pgp = { version = "=0.20.0", default-features = false, features = ["bzip2"] }
+wecanencrypt = { version = "=0.17.0", default-features = false, features = ["keystore", "network"] }
+pgp = { version = "=0.21.0", default-features = false, features = ["bzip2"] }
 zeroize = { version = "1", features = ["derive"] }
 # Self-update from the GitHub releases (see src/updater.rs).
 tauri-plugin-updater = "2"
