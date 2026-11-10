@@ -17,6 +17,7 @@ import ThreadRow from "./ThreadRow.vue";
 import QuickFilterBar from "./QuickFilterBar.vue";
 import SearchResults from "./SearchResults.vue";
 import SearchScopeBar from "./SearchScopeBar.vue";
+import BulkActionBar from "./BulkActionBar.vue";
 import LoadingState from "@/components/common/LoadingState.vue";
 
 const messagesStore = useMessagesStore();
@@ -71,12 +72,51 @@ async function onMobileSwipeDelete(messageId: string) {
 const shiftHeld = ref(false);
 const ctrlHeld = ref(false);
 
+// Selection shortcuts only apply while the list was the last thing
+// clicked, so Cmd+A in the reader still selects text.
+const listHasFocus = ref(false);
+
+function onDocumentPointerDown(event: MouseEvent) {
+  const target = event.target as HTMLElement | null;
+  listHasFocus.value = !!target?.closest("[data-testid='message-list']");
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target.isContentEditable
+  );
+}
+
 function onKeyDown(event: KeyboardEvent) {
   if (event.key === "Shift") shiftHeld.value = true;
   if (event.key === "Control" || event.key === "Meta") ctrlHeld.value = true;
-  if (event.key === "Delete" && messagesStore.selectedIds.length > 0) {
+  const typing = isTypingTarget(event.target);
+  // Backspace is the Delete key on Mac keyboards.
+  if (
+    (event.key === "Delete" || (event.key === "Backspace" && listHasFocus.value)) &&
+    !typing &&
+    messagesStore.selectedIds.length > 0
+  ) {
     event.preventDefault();
     messagesStore.deleteSelected();
+  }
+  if (
+    (event.metaKey || event.ctrlKey) &&
+    !event.altKey &&
+    !event.shiftKey &&
+    event.key.toLowerCase() === "a" &&
+    listHasFocus.value &&
+    !typing
+  ) {
+    event.preventDefault();
+    messagesStore.selectAllVisible();
+  }
+  if (event.key === "Escape" && bulkMode.value && !messagesStore.quickFilterVisible && !typing) {
+    messagesStore.clearSelection();
   }
   if (event.key === "/" && !(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) {
     event.preventDefault();
@@ -96,11 +136,22 @@ function onKeyUp(event: KeyboardEvent) {
 onMounted(() => {
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
+  document.addEventListener("mousedown", onDocumentPointerDown, true);
 });
 
 onUnmounted(() => {
   window.removeEventListener("keydown", onKeyDown);
   window.removeEventListener("keyup", onKeyUp);
+  document.removeEventListener("mousedown", onDocumentPointerDown, true);
+});
+
+// The bar replaces the column headers whenever the selection is more
+// than the message open in the reader (whose own action bar covers it).
+const bulkMode = computed(() => {
+  if (isDragging.value) return false;
+  const selected = messagesStore.selectedIds;
+  if (selected.length > 1) return true;
+  return selected.length === 1 && selected[0] !== messagesStore.activeMessageId;
 });
 
 const contextMenu = ref<{
@@ -325,10 +376,11 @@ async function ctxMoveTo(folderPath: string) {
   closeContextMenu();
   const toastId = showToast(t("Moving {count} message(s)...", { count: ids.length }), "loading", 0);
   try {
-    await api.moveMessages(accountId, ids, folderPath);
-    clearSelectionAndMessage();
+    await messagesStore.moveSelected(folderPath);
   } catch (error) {
     console.error("Move failed:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    showToast(t("Action failed: {error}", { error: message }), "error", 6000);
   } finally {
     dismissToast(toastId);
   }
@@ -579,7 +631,7 @@ function resolveFolderName(path: string): string {
       class="folder-search-scope"
     />
     <QuickFilterBar v-if="messagesStore.quickFilterVisible" />
-    <div class="column-headers" :class="{ cards: cardsLayout }">
+    <div class="column-headers" :class="{ cards: cardsLayout, bulk: bulkMode }">
       <div
         class="col col-check"
         data-testid="select-all-cell"
@@ -593,7 +645,8 @@ function resolveFolderName(path: string): string {
           @click.stop="toggleSelectAll"
         />
       </div>
-      <template v-if="cardsLayout">
+      <BulkActionBar v-if="bulkMode" />
+      <template v-else-if="cardsLayout">
         <span class="sort-label">{{ t("Sort by") }}</span>
         <button
           v-for="option in SORT_OPTIONS"
@@ -889,6 +942,11 @@ function resolveFolderName(path: string): string {
   color: var(--color-text-secondary);
   flex-shrink: 0;
   user-select: none;
+}
+
+.column-headers.bulk {
+  height: auto;
+  min-height: 32px;
 }
 
 .col {

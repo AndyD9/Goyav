@@ -28,6 +28,13 @@ export const messageList: Record<string, string> = {
   "Not Spam": "Pas un indésirable",
   "Show as Thread": "Afficher en conversation",
   "Remove from Thread": "Retirer de la conversation",
+
+  // Bulk action bar
+  "Clear selection": "Désélectionner tout",
+  "Find a folder": "Chercher un dossier",
+  "No matching folder": "Aucun dossier correspondant",
+  "Archiving {count} message(s)…": "Archivage de {count} message(s)…",
+  "Moving {count} message(s) to spam…": "Déplacement de {count} message(s) vers les indésirables…",
   "Subject:": "Objet :",
 
   // Quick filter bar

@@ -632,14 +632,97 @@ export const useMessagesStore = defineStore("messages", () => {
       .catch((error) => console.error("Failed to mark as unread:", error));
   }
 
+  /** Bulk read/unread: updates the list optimistically and sends one
+   *  flag change for the whole batch instead of one per message. */
   function setReadStatus(messageIds: string[], read: boolean) {
-    for (const id of messageIds) {
-      if (read) {
-        markAsRead(id);
+    const accountId = accountsStore.activeAccountId;
+    if (!accountId || messageIds.length === 0) return;
+    const ids = new Set(messageIds);
+
+    for (const id of ids) {
+      const message = findMessage(id);
+      if (!message || message.flags.includes("seen") === read) continue;
+      message.flags = read
+        ? [...message.flags, "seen"]
+        : message.flags.filter((flag) => flag !== "seen");
+    }
+
+    for (const thread of threads.value) {
+      const touched = thread.message_ids.filter((id) => ids.has(id));
+      if (touched.length === 0) continue;
+      if (touched.length === thread.message_ids.length) {
+        thread.unread_count = read ? 0 : thread.message_count;
       } else {
-        markAsUnread(id);
+        const delta = read ? -touched.length : touched.length;
+        thread.unread_count = Math.min(
+          thread.message_count,
+          Math.max(0, thread.unread_count + delta),
+        );
       }
     }
+
+    void api
+      .setMessageFlags(accountId, [...ids], ["seen"], read)
+      .catch((error) => {
+        console.error("Failed to change read status:", error);
+        void fetchMessages();
+      });
+  }
+
+  /** Bulk star/unstar, same optimistic pattern as setReadStatus. */
+  function setStarred(messageIds: string[], starred: boolean) {
+    const accountId = accountsStore.activeAccountId;
+    if (!accountId || messageIds.length === 0) return;
+    const ids = new Set(messageIds);
+
+    for (const id of ids) {
+      const message = findMessage(id);
+      if (!message || message.flags.includes("flagged") === starred) continue;
+      message.flags = starred
+        ? [...message.flags, "flagged"]
+        : message.flags.filter((flag) => flag !== "flagged");
+    }
+
+    for (const thread of threads.value) {
+      if (!thread.message_ids.some((id) => ids.has(id))) continue;
+      if (starred && !thread.flags.includes("flagged")) {
+        thread.flags = [...thread.flags, "flagged"];
+      } else if (!starred && thread.message_ids.every((id) => ids.has(id))) {
+        thread.flags = thread.flags.filter((flag) => flag !== "flagged");
+      }
+    }
+
+    void api
+      .setMessageFlags(accountId, [...ids], ["flagged"], starred)
+      .catch((error) => {
+        console.error("Failed to change star:", error);
+        void fetchMessages();
+      });
+  }
+
+  /** True when at least one selected message (or thread) has `flag`
+   *  set (`present`) or unset (`!present`). Drives which bulk actions
+   *  are offered: "Mark read" only when something is unread, etc. */
+  function selectionHasFlag(flag: "seen" | "flagged", present: boolean): boolean {
+    for (const id of resolveSelectedIds()) {
+      const message = findMessage(id);
+      if (message) {
+        if (message.flags.includes(flag) === present) return true;
+        continue;
+      }
+      const thread = threads.value.find((candidate) =>
+        candidate.message_ids.includes(id),
+      );
+      if (!thread) continue;
+      if (flag === "seen") {
+        const hasRead = thread.unread_count < thread.message_count;
+        const hasUnread = thread.unread_count > 0;
+        if (present ? hasRead : hasUnread) return true;
+      } else if (thread.flags.includes("flagged") === present) {
+        return true;
+      }
+    }
+    return false;
   }
 
   function toggleStar(messageId: string) {
@@ -773,11 +856,13 @@ export const useMessagesStore = defineStore("messages", () => {
     return allIds;
   }
 
-  async function deleteSelected() {
-    const accountId = accountsStore.activeAccountId;
-    if (!accountId || selectedIds.value.length === 0) return;
-    const ids = resolveSelectedIds();
+  function selectAllVisible() {
+    selectedIds.value = getVisibleIds();
+  }
 
+  /** Drops messages from the list, the thread rows and the reader
+   *  before the server confirms a delete or move. */
+  function removeLocally(ids: string[]) {
     messages.value = messages.value.filter(
       (message) => !ids.includes(message.id),
     );
@@ -817,14 +902,40 @@ export const useMessagesStore = defineStore("messages", () => {
     }
 
     selectedIds.value = [];
-    activeMessage.value = null;
-    activeMessageId.value = null;
+    if (activeMessageId.value && ids.includes(activeMessageId.value)) {
+      activeMessage.value = null;
+      activeMessageId.value = null;
+    }
+  }
+
+  async function deleteSelected() {
+    const accountId = accountsStore.activeAccountId;
+    if (!accountId || selectedIds.value.length === 0) return;
+    const ids = resolveSelectedIds();
+    removeLocally(ids);
 
     try {
       await api.deleteMessages(accountId, ids);
     } catch (error) {
       // Later server failures arrive through op-failed and trigger reconciliation.
       console.error("Delete dispatch failed:", error);
+    }
+  }
+
+  /** Moves the selection to another folder of the same account. The
+   *  rows disappear at once; a refused dispatch reloads the folder and
+   *  rethrows so the caller can report it. */
+  async function moveSelected(targetFolder: string) {
+    const accountId = accountsStore.activeAccountId;
+    if (!accountId || selectedIds.value.length === 0) return;
+    if (targetFolder === foldersStore.activeFolderPath) return;
+    const ids = resolveSelectedIds();
+    removeLocally(ids);
+    try {
+      await api.moveMessages(accountId, ids, targetFolder);
+    } catch (error) {
+      void fetchMessages();
+      throw error;
     }
   }
 
@@ -952,6 +1063,8 @@ export const useMessagesStore = defineStore("messages", () => {
     toggleSelectMessage,
     clearSelection,
     deleteSelected,
+    moveSelected,
+    selectAllVisible,
     setSort,
     quickFilter,
     quickFilterText,
@@ -966,6 +1079,8 @@ export const useMessagesStore = defineStore("messages", () => {
     toggleStar,
     markAsUnread,
     setReadStatus,
+    setStarred,
+    selectionHasFlag,
     subjectForMessage,
     serverHits,
     serverSearchLoading,

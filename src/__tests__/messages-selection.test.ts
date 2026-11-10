@@ -16,6 +16,7 @@ vi.mock("@/lib/tauri", () => ({
   }),
   setMessageFlags: vi.fn().mockResolvedValue(undefined),
   deleteMessages: vi.fn().mockResolvedValue(undefined),
+  moveMessages: vi.fn().mockResolvedValue(undefined),
   listFolders: vi.fn().mockResolvedValue([]),
   getLastView: vi.fn().mockResolvedValue({ account_id: null, folder_path: null }),
   saveLastView: vi.fn().mockResolvedValue(undefined),
@@ -337,5 +338,106 @@ describe("Threaded Shift+click range selection", () => {
     // t1 is collapsed so only its header (msg1) is visible; t2 expanded
     // contributes its header (msg3) plus reply rows (msg4).
     expect(store.selectedIds).toEqual(["msg1", "msg3", "msg4"]);
+  });
+});
+
+describe("Bulk actions", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.mocked(api.setMessageFlags).mockClear();
+    vi.mocked(api.moveMessages).mockClear();
+    vi.mocked(api.getMessages).mockClear();
+  });
+
+  it("setReadStatus sends one flag change for the whole batch", () => {
+    const store = setup(false);
+    store.messages = [makeSummary("msg1", []), makeSummary("msg2", []), makeSummary("msg3", ["seen"])];
+
+    store.setReadStatus(["msg1", "msg2", "msg3"], true);
+
+    expect(api.setMessageFlags).toHaveBeenCalledTimes(1);
+    expect(api.setMessageFlags).toHaveBeenCalledWith("acc1", ["msg1", "msg2", "msg3"], ["seen"], true);
+    expect(store.messages.every((m) => m.flags.includes("seen"))).toBe(true);
+  });
+
+  it("setReadStatus(false) keeps thread unread counts within bounds", () => {
+    const store = setup(true);
+    store.threads = [makeThread("t1", ["msg1", "msg2"], 1), makeThread("t2", ["msg3", "msg4", "msg5"], 3)];
+
+    store.setReadStatus(["msg1", "msg2", "msg3"], false);
+
+    expect(store.threads[0].unread_count).toBe(2);
+    expect(store.threads[1].unread_count).toBe(3);
+
+    store.setReadStatus(["msg1", "msg2"], true);
+    expect(store.threads[0].unread_count).toBe(0);
+  });
+
+  it("setStarred stars every selected message in one call", () => {
+    const store = setup(false);
+    store.messages = [makeSummary("msg1"), makeSummary("msg2", ["seen", "flagged"])];
+
+    store.setStarred(["msg1", "msg2"], true);
+
+    expect(api.setMessageFlags).toHaveBeenCalledTimes(1);
+    expect(api.setMessageFlags).toHaveBeenCalledWith("acc1", ["msg1", "msg2"], ["flagged"], true);
+    expect(store.messages[0].flags).toContain("flagged");
+    expect(store.messages[1].flags.filter((f) => f === "flagged")).toHaveLength(1);
+  });
+
+  it("selectionHasFlag reports whether a bulk action applies", () => {
+    const store = setup(false);
+    store.messages = [makeSummary("msg1", ["seen"]), makeSummary("msg2", [])];
+    store.selectedIds = ["msg1", "msg2"];
+    expect(store.selectionHasFlag("seen", false)).toBe(true);
+    expect(store.selectionHasFlag("seen", true)).toBe(true);
+    expect(store.selectionHasFlag("flagged", true)).toBe(false);
+
+    store.selectedIds = ["msg1"];
+    expect(store.selectionHasFlag("seen", false)).toBe(false);
+  });
+
+  it("moveSelected removes the rows at once and moves them in one call", async () => {
+    const store = setup(false);
+    store.messages = [makeSummary("msg1"), makeSummary("msg2"), makeSummary("msg3")];
+    store.selectedIds = ["msg1", "msg3"];
+
+    await store.moveSelected("Archive");
+
+    expect(api.moveMessages).toHaveBeenCalledWith("acc1", ["msg1", "msg3"], "Archive");
+    expect(store.messages.map((m) => m.id)).toEqual(["msg2"]);
+    expect(store.selectedIds).toEqual([]);
+  });
+
+  it("moveSelected moves whole threads in threaded mode", async () => {
+    const store = setup(true);
+    store.threads = [makeThread("t1", ["msg1", "msg2"]), makeThread("t2", ["msg3"])];
+    store.selectedIds = ["msg1"];
+
+    await store.moveSelected("Archive");
+
+    expect(api.moveMessages).toHaveBeenCalledWith("acc1", ["msg1", "msg2"], "Archive");
+    expect(store.threads.map((th) => th.thread_id)).toEqual(["t2"]);
+  });
+
+  it("moveSelected is a no-op when the target is the open folder", async () => {
+    const store = setup(false);
+    store.messages = [makeSummary("msg1")];
+    store.selectedIds = ["msg1"];
+
+    await store.moveSelected("INBOX");
+
+    expect(api.moveMessages).not.toHaveBeenCalled();
+    expect(store.messages).toHaveLength(1);
+  });
+
+  it("moveSelected reloads the folder and rethrows when the move is refused", async () => {
+    const store = setup(false);
+    store.messages = [makeSummary("msg1")];
+    store.selectedIds = ["msg1"];
+    vi.mocked(api.moveMessages).mockRejectedValueOnce(new Error("offline"));
+
+    await expect(store.moveSelected("Archive")).rejects.toThrow("offline");
+    expect(api.getMessages).toHaveBeenCalled();
   });
 });
