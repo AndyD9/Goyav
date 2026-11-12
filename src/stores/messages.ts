@@ -18,6 +18,10 @@ import { useUiStore } from "./ui";
 
 export type SortColumn = "subject" | "from" | "date" | "flagged";
 
+/** The always-visible list filter: every message, unread only, or
+ *  flagged (shown as "Important") only. */
+export type ReadStateFilter = "all" | "unread" | "starred";
+
 /** Where the toolbar search looks: the open folder, every folder of the
  *  active account, or every folder of every account. */
 export type SearchScope = "folder" | "account" | "all";
@@ -124,6 +128,26 @@ export const useMessagesStore = defineStore("messages", () => {
 
   function toggleQuickFilter(key: "unread" | "starred" | "has_attachment" | "contact") {
     quickFilter.value = { ...quickFilter.value, [key]: !quickFilter.value[key] };
+    fetchMessages(true);
+  }
+
+  /** Null when the full quick filter bar combines unread and starred. */
+  const readStateFilter = computed((): ReadStateFilter | null => {
+    const { unread, starred } = quickFilter.value;
+    if (unread && starred) return null;
+    if (unread) return "unread";
+    if (starred) return "starred";
+    return "all";
+  });
+
+  /** Exclusive unread/starred choice; other quick filters are kept. */
+  function setReadStateFilter(mode: ReadStateFilter) {
+    if (readStateFilter.value === mode) return;
+    quickFilter.value = {
+      ...quickFilter.value,
+      unread: mode === "unread",
+      starred: mode === "starred",
+    };
     fetchMessages(true);
   }
 
@@ -1072,6 +1096,8 @@ export const useMessagesStore = defineStore("messages", () => {
     quickFilterFields,
     hasActiveFilter,
     toggleQuickFilter,
+    readStateFilter,
+    setReadStateFilter,
     toggleTextField,
     onFilterTextChange,
     clearQuickFilters,

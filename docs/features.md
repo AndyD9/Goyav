@@ -75,6 +75,7 @@ security.
 - [x] Right-click context menu: Reply, Reply All, Forward, Move To, Copy To, Delete
 - [x] Not Spam: toolbar button and context menu in Junk folder (moves to Inbox)
 - [x] Folder count badges update immediately after move/delete
+- [x] Always-visible list filter: All / Unread / Important (flagged), synced with the Quick Filter bar
 
 ### Threading
 - [x] Conversation threading via `In-Reply-To` and `References` headers

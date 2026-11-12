@@ -9,6 +9,12 @@ export const messageList: Record<string, string> = {
 
   // States and counts
   "No messages": "Aucun message",
+  "No unread messages": "Aucun message non lu",
+  "No important messages": "Aucun message important",
+
+  // Read-state filter chips
+  Show: "Afficher",
+  Important: "Important",
   "Loading more...": "Chargement de la suite…",
   "{count} of {total}": "{count} sur {total}",
   "{count} of {total} threads ({messages} messages)": "{count} sur {total} conversations ({messages} messages)",

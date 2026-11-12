@@ -8,7 +8,7 @@ import { useMessagesStore } from "@/stores/messages";
 import { useAccountsStore } from "@/stores/accounts";
 import { useFoldersStore } from "@/stores/folders";
 import { useUiStore } from "@/stores/ui";
-import type { SortColumn } from "@/stores/messages";
+import type { ReadStateFilter, SortColumn } from "@/stores/messages";
 import type { MessageSummary, SearchHit } from "@/lib/types";
 import { openComposeWindow } from "@/lib/compose-window";
 import * as api from "@/lib/tauri";
@@ -516,6 +516,20 @@ function toggleSelectAll() {
   }
 }
 
+const READ_FILTER_OPTIONS = computed<ReadonlyArray<{ mode: ReadStateFilter; label: string }>>(() => [
+  { mode: "all", label: t("All") },
+  { mode: "unread", label: t("Unread") },
+  { mode: "starred", label: t("Important") },
+]);
+
+const emptyLabel = computed(() => {
+  if (!messagesStore.quickFilterText.trim()) {
+    if (messagesStore.readStateFilter === "unread") return t("No unread messages");
+    if (messagesStore.readStateFilter === "starred") return t("No important messages");
+  }
+  return t("No messages");
+});
+
 function toggleQuickFilter() {
   messagesStore.quickFilterVisible = !messagesStore.quickFilterVisible;
   if (!messagesStore.quickFilterVisible) {
@@ -631,6 +645,23 @@ function resolveFolderName(path: string): string {
       class="folder-search-scope"
     />
     <QuickFilterBar v-if="messagesStore.quickFilterVisible" />
+    <div
+      v-else
+      class="read-filter"
+      role="group"
+      :aria-label="t('Show')"
+      data-testid="read-filter"
+    >
+      <button
+        v-for="option in READ_FILTER_OPTIONS"
+        :key="option.mode"
+        class="read-filter-chip"
+        :class="{ active: messagesStore.readStateFilter === option.mode }"
+        :aria-pressed="messagesStore.readStateFilter === option.mode"
+        :data-testid="`read-filter-${option.mode}`"
+        @click="messagesStore.setReadStateFilter(option.mode)"
+      >{{ option.label }}</button>
+    </div>
     <div class="column-headers" :class="{ cards: cardsLayout, bulk: bulkMode }">
       <div
         class="col col-check"
@@ -691,7 +722,8 @@ function resolveFolderName(path: string): string {
     <div
       v-else-if="messagesStore.messages.length === 0 && messagesStore.threads.length === 0"
       class="empty"
-    >{{ t("No messages") }}</div>
+      data-testid="message-list-empty"
+    >{{ emptyLabel }}</div>
 
     <div
       v-else-if="uiStore.threadingEnabled"
@@ -930,6 +962,39 @@ function resolveFolderName(path: string): string {
   overflow-x: hidden;
   background: var(--color-bg);
   border-right: 1px solid var(--color-border);
+}
+
+.read-filter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  flex-shrink: 0;
+}
+
+.read-filter-chip {
+  padding: 2px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.read-filter-chip:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+}
+
+.read-filter-chip.active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: white;
 }
 
 .column-headers {
