@@ -101,7 +101,16 @@ const days = computed(() => {
 });
 
 const now = ref(new Date());
-let nowIntervalId: ReturnType<typeof setInterval> | null = null;
+let nowTimerId: ReturnType<typeof setTimeout> | null = null;
+
+// Tick on each minute boundary so the shown time never lags a minute.
+function scheduleNowTick() {
+  const delay = 60_000 - (Date.now() % 60_000) + 50;
+  nowTimerId = setTimeout(() => {
+    now.value = new Date();
+    scheduleNowTick();
+  }, delay);
+}
 
 function formatDayName(date: Date): string {
   return date.toLocaleDateString(dateLocale(), { weekday: "short" }).toUpperCase();
@@ -139,16 +148,34 @@ function isWeekend(date: Date): boolean {
   return day === 0 || day === 6;
 }
 
-function isCurrentHour(hour: number): boolean {
-  const todayVisible = days.value.some((d) => isToday(d));
-  return todayVisible && getHourInTimezone(now.value.toISOString(), uiStore.displayTimezone) === hour;
-}
+const todayVisible = computed(() => days.value.some((d) => isToday(d)));
 
-const nowMarkerTop = computed(() => {
-  const hour = getHourInTimezone(now.value.toISOString(), uiStore.displayTimezone);
-  const minutes = getMinutesInTimezone(now.value.toISOString(), uiStore.displayTimezone);
-  return `${hour * HOUR_HEIGHT + (minutes / 60) * HOUR_HEIGHT}px`;
-});
+const nowHour = computed(() => getHourInTimezone(now.value.toISOString(), uiStore.displayTimezone));
+const nowMinutes = computed(() => getMinutesInTimezone(now.value.toISOString(), uiStore.displayTimezone));
+
+const nowMarkerTop = computed(
+  () => `${nowHour.value * HOUR_HEIGHT + (nowMinutes.value / 60) * HOUR_HEIGHT}px`,
+);
+
+const nowLabel = computed(() =>
+  formatInTimezone(now.value.toISOString(), uiStore.displayTimezone, {
+    weekday: undefined,
+    month: undefined,
+    day: undefined,
+    year: undefined,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: uiStore.hour12,
+  }),
+);
+
+/** The hour label the current-time badge sits on, hidden to avoid overlap. */
+function hourLabelCovered(hour: number): boolean {
+  if (!todayVisible.value) return false;
+  if (nowMinutes.value < 15) return hour === nowHour.value;
+  if (nowMinutes.value > 45) return hour === nowHour.value + 1;
+  return false;
+}
 
 // Cross-midnight events render as one segment per day.
 interface EventSegment {
@@ -475,9 +502,7 @@ async function centerOnNow() {
 }
 
 onMounted(() => {
-  nowIntervalId = setInterval(() => {
-    now.value = new Date();
-  }, 60000);
+  scheduleNowTick();
   void centerOnNow();
 });
 
@@ -485,9 +510,9 @@ onMounted(() => {
 onActivated(centerOnNow);
 
 onUnmounted(() => {
-  if (nowIntervalId !== null) {
-    clearInterval(nowIntervalId);
-    nowIntervalId = null;
+  if (nowTimerId !== null) {
+    clearTimeout(nowTimerId);
+    nowTimerId = null;
   }
   if (dragCleanup) dragCleanup();
   if (allDayResizeCleanup) allDayResizeCleanup();
@@ -554,10 +579,20 @@ onUnmounted(() => {
           v-for="hour in hours"
           :key="hour"
           class="hour-label"
-          :class="{ 'current-hour': isCurrentHour(hour) }"
+          :class="{ covered: hourLabelCovered(hour) }"
         >
           <span v-if="hour > 0">{{ formatHour(hour) }}</span>
         </div>
+      </div>
+
+      <div
+        v-if="todayVisible"
+        class="now-line"
+        :style="{ top: nowMarkerTop }"
+        data-testid="cal-now-line"
+        aria-hidden="true"
+      >
+        <span class="now-time" data-testid="cal-now-time">{{ nowLabel }}</span>
       </div>
 
       <div
@@ -767,12 +802,12 @@ onUnmounted(() => {
   top: -8px;
 }
 
-.hour-label.current-hour {
-  color: var(--color-accent);
-  font-weight: 700;
+.hour-label.covered span {
+  visibility: hidden;
 }
 
 .time-grid {
+  position: relative;
   flex: 1;
   overflow-y: scroll;
   display: flex;
@@ -814,13 +849,42 @@ onUnmounted(() => {
   background-color: color-mix(in srgb, var(--color-bg-tertiary) 30%, transparent);
 }
 
+/* Faint line across every visible day; today's column gets the bold one. */
+.now-line {
+  position: absolute;
+  left: 64px;
+  right: 0;
+  height: 0;
+  border-top: 1px solid color-mix(in srgb, var(--color-danger) 45%, transparent);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.now-time {
+  position: absolute;
+  right: 100%;
+  top: 0;
+  transform: translateY(-50%);
+  margin-right: 4px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--color-danger);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .now-marker {
   position: absolute;
   left: -1px;
   right: 0;
   height: 2px;
-  background: var(--color-accent);
-  z-index: 5;
+  transform: translateY(-50%);
+  background: var(--color-danger);
+  z-index: 6;
   pointer-events: none;
 }
 
@@ -832,7 +896,7 @@ onUnmounted(() => {
   transform: translateY(-50%);
   width: 8px;
   height: 8px;
-  background: var(--color-accent);
+  background: var(--color-danger);
   border-radius: 50%;
 }
 
