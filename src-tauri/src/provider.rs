@@ -781,6 +781,7 @@ impl ProviderCredentials for ProviderCredentialService {
 
     async fn google_access_token(&self, account_id: &str) -> Result<String> {
         let _guard = self.account_locks.lock_account(account_id).await;
+        crate::oauth::ensure_not_reauth_required(account_id)?;
         let tokens = self.required_tokens(
             account_id,
             "No Google OAuth tokens. Please sign in with Google in Settings.",
@@ -792,11 +793,18 @@ impl ProviderCredentials for ProviderCredentialService {
         let refresh_token = tokens
             .refresh_token
             .ok_or_else(|| Error::Other("No refresh token".into()))?;
+        // Google answers `invalid_grant` for an expired or revoked refresh
+        // token (e.g. 7-day expiry of OAuth apps in "Testing" mode): latch
+        // it so sync stops retrying until the user signs in again.
         let refreshed = self
             .endpoint
             .refresh(&crate::oauth::GOOGLE, &refresh_token)
-            .await?;
+            .await
+            .map_err(|error| crate::oauth::auth_required_on_invalid_grant(account_id, error))?;
         self.tokens.store(account_id, &refreshed)?;
+        // Injected stores do not necessarily delegate to oauth::store_tokens,
+        // so clear only after their persistence boundary reports success.
+        crate::oauth::clear_reauth_required(account_id);
         Ok(refreshed.access_token)
     }
 
@@ -1769,6 +1777,66 @@ mod tests {
         assert_eq!(endpoint.refresh_calls(), 2);
         let stored = store.load(account_id).unwrap().unwrap();
         assert_eq!(stored.refresh_token.as_deref(), Some("rotated-refresh"));
+    }
+
+    #[tokio::test]
+    async fn google_invalid_grant_latches_until_sign_in() {
+        let account_id = "google-invalid-grant";
+        crate::oauth::clear_reauth_required(account_id);
+        let store = Arc::new(MemoryTokenStore::default());
+        store.store(account_id, &expired_tokens()).unwrap();
+        // Google's body for an expired or revoked refresh token.
+        let endpoint = Arc::new(ScriptedTokenEndpoint::new(vec![Err(Error::Other(
+            "Token refresh error: {\n  \"error\": \"invalid_grant\",\n  \
+             \"error_description\": \"Token has been expired or revoked.\"\n}"
+                .into(),
+        ))]));
+        let credentials = ProviderCredentialService::new(store.clone(), endpoint.clone());
+
+        assert!(matches!(
+            credentials.google_access_token(account_id).await,
+            Err(Error::AuthRequired(_))
+        ));
+        // Later syncs fail fast without hitting the token endpoint again.
+        assert!(matches!(
+            credentials.google_access_token(account_id).await,
+            Err(Error::AuthRequired(_))
+        ));
+        assert_eq!(endpoint.refresh_calls(), 1);
+
+        // Signing in again stores fresh tokens and lifts the latch.
+        crate::oauth::clear_reauth_required(account_id);
+        store.store(account_id, &refreshed_tokens()).unwrap();
+        assert_eq!(
+            credentials.google_access_token(account_id).await.unwrap(),
+            "fresh-access"
+        );
+        crate::oauth::clear_reauth_required(account_id);
+    }
+
+    #[tokio::test]
+    async fn google_unrelated_refresh_error_stays_retryable() {
+        let account_id = "google-retry-after-503";
+        crate::oauth::clear_reauth_required(account_id);
+        let store = Arc::new(MemoryTokenStore::default());
+        store.store(account_id, &expired_tokens()).unwrap();
+        let endpoint = Arc::new(ScriptedTokenEndpoint::new(vec![
+            Err(Error::Other("Token refresh failed: 503".into())),
+            Ok(refreshed_tokens()),
+        ]));
+        let credentials = ProviderCredentialService::new(store.clone(), endpoint.clone());
+
+        assert!(matches!(
+            credentials.google_access_token(account_id).await,
+            Err(Error::Other(_))
+        ));
+        crate::oauth::ensure_not_reauth_required(account_id).unwrap();
+
+        assert_eq!(
+            credentials.google_access_token(account_id).await.unwrap(),
+            "fresh-access"
+        );
+        assert_eq!(endpoint.refresh_calls(), 2);
     }
 
     #[tokio::test]
