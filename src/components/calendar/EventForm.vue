@@ -26,8 +26,30 @@ const calendarStore = useCalendarStore();
 const accountsStore = useAccountsStore();
 const uiStore = useUiStore();
 
+// A local-only calendar on an account whose provider publishes calendars
+// cannot take new events (the backend rejects it), so it is not offered.
+const writableCalendars = computed(() => {
+  const providerAccounts = new Set(
+    calendarStore.calendars.filter((cal) => cal.remote_id).map((cal) => cal.account_id),
+  );
+  return calendarStore.calendars.filter(
+    (cal) => cal.remote_id || !providerAccounts.has(cal.account_id),
+  );
+});
+
+function preferredCalendarId(): string {
+  const candidates = writableCalendars.value;
+  const active = accountsStore.activeAccountId;
+  const pick =
+    candidates.find((cal) => cal.is_default && cal.account_id === active) ??
+    candidates.find((cal) => cal.is_default) ??
+    candidates.find((cal) => cal.account_id === active) ??
+    candidates[0];
+  return pick?.id ?? "";
+}
+
 const calendarOptions = computed(() =>
-  calendarStore.calendars.map((cal) => ({
+  writableCalendars.value.map((cal) => ({
     value: cal.id,
     label: `${cal.name} (${accountsStore.accounts.find((a) => a.id === cal.account_id)?.display_name || cal.account_id})`,
   })),
@@ -166,7 +188,7 @@ watch([startDate, startTime], () => {
 const allDay = ref(false);
 const location = ref("");
 const description = ref("");
-const calendarId = ref(calendarStore.calendars[0]?.id ?? "");
+const calendarId = ref(preferredCalendarId());
 
 // Drives account-scoped attendee and room lookup.
 const selectedCalendarAccountId = computed(() => {

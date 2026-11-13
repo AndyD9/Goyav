@@ -2760,7 +2760,22 @@ pub async fn sync_calendars(
     // Per-provider sync (incl. Google's internal CalDAV fallback) lives
     // in the backend impls; see backend/calendar/.
     let sync_result: Result<()> = match crate::backend::calendar::for_account(&account) {
-        Some(backend) => backend.sync(&calendar_backend_ctx(&state), &account).await,
+        Some(backend) => {
+            let result = backend.sync(&calendar_backend_ctx(&state), &account).await;
+            if result.is_ok() {
+                let conn = state.db.writer().await;
+                match db::calendar::prune_empty_local_calendars(&conn, &account_id) {
+                    Ok(0) => {}
+                    Ok(removed) => log::info!(
+                        "sync_calendars: removed {removed} empty local calendar(s) superseded by provider calendars (account={account_id})"
+                    ),
+                    Err(error) => log::warn!(
+                        "sync_calendars: could not prune local calendars (account={account_id}): {error}"
+                    ),
+                }
+            }
+            result
+        }
         None => {
             log::debug!(
                 "sync_calendars: skipping account {} (no calendar backend configured)",

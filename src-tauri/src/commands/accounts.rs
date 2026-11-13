@@ -349,7 +349,13 @@ pub async fn add_account(
     let has_calendar_binding = bindings
         .iter()
         .any(|b| b.service == "calendar" && b.enabled);
-    if has_calendar_binding {
+    // Provider-backed accounts get their calendars from the first sync; a
+    // local placeholder there can never accept events and would be
+    // preselected in the event form ahead of the real calendars.
+    let provider_backed =
+        crate::backend::calendar::for_account(&db::accounts::get_account_full(&conn, &id)?)
+            .is_some();
+    if has_calendar_binding && !provider_backed {
         let cal_id = uuid::Uuid::new_v4().to_string();
         let default_calendar = NewCalendar {
             account_id: id.clone(),
@@ -365,7 +371,7 @@ pub async fn add_account(
         );
     } else {
         log::info!(
-            "No calendar binding for account {}; skipping default calendar",
+            "No local default calendar needed for account {} (no binding or provider-backed)",
             id
         );
     }

@@ -215,6 +215,31 @@ pub fn delete_calendar_row(conn: &Connection, id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Remove empty local-only calendars from an account whose provider has
+/// published at least one calendar. Account creation used to add a local
+/// "Calendar" placeholder marked default; once the provider's calendars
+/// arrive that row cannot accept events (writes need a provider calendar)
+/// but still sorted first and was preselected for new events. Calendars that
+/// hold events, or that the user picked as the mail import target, are kept.
+///
+/// Returns how many calendars were removed.
+pub fn prune_empty_local_calendars(conn: &Connection, account_id: &str) -> Result<usize> {
+    let import_target = crate::db::service_bindings::get_default_import_calendar(conn, account_id)?;
+    let removed = conn.execute(
+        "DELETE FROM calendars
+         WHERE account_id = ?1
+           AND COALESCE(remote_id, '') = ''
+           AND id IS NOT ?2
+           AND NOT EXISTS (SELECT 1 FROM calendar_events e WHERE e.calendar_id = calendars.id)
+           AND EXISTS (
+               SELECT 1 FROM calendars remote
+               WHERE remote.account_id = ?1 AND COALESCE(remote.remote_id, '') <> ''
+           )",
+        params![account_id, import_target],
+    )?;
+    Ok(removed)
+}
+
 /// Upsert a calendar by remote_id. If a calendar with the same
 /// (account_id, remote_id) already exists, update its name and
 /// is_default flag — but **preserve the user-customized color**.
@@ -3209,6 +3234,33 @@ mod tests {
         assert!(get_event(&conn, "e1").is_ok());
         assert!(get_event(&conn, "e2").is_ok());
         assert!(get_event(&conn, "e3").is_err(), "C should be deleted");
+    }
+
+    #[test]
+    fn prune_removes_only_empty_local_calendars_once_provider_calendars_exist() {
+        let conn = setup_archived_graph_db();
+        conn.execute_batch(
+            "INSERT INTO accounts (id, display_name, email, username)
+             VALUES ('acc2', 'Local', 'local@example.com', 'local');
+             INSERT INTO calendars (id, account_id, name, is_default) VALUES
+               ('placeholder', 'acc1', 'Calendar', 1),
+               ('used-local', 'acc1', 'Notes', 0),
+               ('local-only', 'acc2', 'Calendar', 1);",
+        )
+        .unwrap();
+        let mut event = make_event("e1", "Kept", None);
+        event.account_id = "acc1".into();
+        event.calendar_id = "used-local".into();
+        insert_event(&conn, &event).unwrap();
+
+        assert_eq!(prune_empty_local_calendars(&conn, "acc1").unwrap(), 1);
+        assert!(get_calendar(&conn, "placeholder").is_err());
+        assert!(get_calendar(&conn, "used-local").is_ok());
+        assert!(get_calendar(&conn, "cal1").is_ok());
+
+        // An account with no provider calendar keeps its local calendar.
+        assert_eq!(prune_empty_local_calendars(&conn, "acc2").unwrap(), 0);
+        assert!(get_calendar(&conn, "local-only").is_ok());
     }
 
     fn make_cal(account_id: &str, name: &str, is_default: bool) -> NewCalendar {
